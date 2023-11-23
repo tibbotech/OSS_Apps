@@ -1,0 +1,328 @@
+include "global.tbh"
+
+'CONSTANTS-----------------------------------------------------------
+
+const CELL__SIMCARD_PIN = CELL__QUESTMARK	'<-- CHANGE THIS AS NEEDED
+
+dim DNS_socket as byte
+dim comm_mode as byte
+dim enable_sending as no_yes=NO
+dim min_rec_num_to_send as word
+dim config_mode as no_yes=NO
+dim config_bt_name as string(16)
+dim CELL__AT_APN as string(24) = "internet.iot"			'<-- CHANGE THIS AS NEEDED
+dim CELL__MYUSERNAME as string(16)  = "myusername@realm"	'<-- CHANGE THIS AS NEEDED
+dim CELL__MYPASSWORD as string(16)  = ""					'<-- CHANGE THIS AS NEEDED
+dim sensor_type as byte
+dim operation_mode as byte
+
+declare sub check_firmware_version()
+declare sub upgrade_init()
+declare sub sensor_init()
+
+sub boot()
+    'sys.debugmode = PL_SYS_DBG_SERIAL
+	'sys.debugmode = PL_SYS_DBG_NET
+	
+    'Setting Library Initialization
+    '================================================================
+    dim stg_init_code as en_stg_status_codes
+    dim stg_name as string(STG_MAX_SETTING_NAME_LEN)
+	
+    if stg_start()<>EN_STG_STATUS_OK then 
+        pat.play("R-R-~",PL_PAT_CANINT)
+        sys.halt
+    end if
+
+    stg_init_code=stg_check_all(stg_name)
+    select case stg_init_code
+    case EN_STG_STATUS_OK:
+    '--- all good ---
+    case EN_STG_STATUS_INVALID, EN_STG_STATUS_FAILURE:
+        if stg_restore_multiple(EN_STG_INIT_MODE_NORMAL)<>EN_STG_STATUS_OK then
+            pat.play("R-R-~",PL_PAT_CANINT)
+            sys.halt
+        end if
+    case else:
+        'some other trouble
+        pat.play("R-R-~",PL_PAT_CANINT)
+        sys.halt
+    end select
+
+	CELL__AT_APN = stg_get("GAN",0)
+	CELL__MYUSERNAME = stg_get("GUR",0)
+	CELL__MYPASSWORD = stg_get("GPW",0)
+	operation_mode = stg_get("OPMD",0)
+    '-----------------------------------------------------------------
+	
+    dim f as byte
+    for f=0 to MAX_NUM_INTERFACES-1
+        interface_ready(f)=NO
+    next f
+
+    'Fd(flash disk) setup
+    '================================================================
+    if fd.mount<>PL_FD_STATUS_OK then
+        if fd.formatj(fd.availableflashspace/2,32,100)<>PL_FD_STATUS_OK then
+            sys.halt
+        end if
+    
+        if fd.mount<>PL_FD_STATUS_OK then
+            sys.halt
+        end if
+    end if
+    '-----------------------------------------------------------------
+	
+	read_ntag()
+	pic_write(&hA0,"\x77")
+	dim bl as string(1) = pic_read("&h02",1)
+	battery_level = asc(bl)
+	if battery_level > 100 then battery_level=0
+	
+	sensor_type = val(stg_get("STPY",0))
+	sensor_init()	
+	
+	if config_mode = YES then
+		'Bluetooth setup
+		'================================================================
+		bt.name=config_bt_name
+		bt.emulation=PL_WLN_BT_EMULATION_MODE_MICROCHIP
+		bt.txbuffrq(1)
+		bt.rxbuffrq(1)
+		sys.buffalloc()
+		'enable the BLE interface and wait for it to become enabled
+		'(blocking version)
+		bt.enable
+		while bt.enabled=NO
+		wend
+		bt.advertise=YES 'allow the device to be discoverable
+		'-----------------------------------------------------------------
+		'luis_start(LUIS_BT_DEVICE_NAME)
+		luis_start(config_bt_name)
+		luis_bt_enabled = true
+		exit sub
+	end if
+	
+    'Tables setup
+    '================================================================
+    if tbl_start()<>EN_TBL_STATUS_OK then
+        sys.halt
+    end if
+	 
+	dim daycounts, mincounts as word
+	dim seconds as byte	
+	rtc.getdata(daycounts,mincounts,seconds)
+	if sending_record = YES or daycounts = 0 or operation_mode = 0 then
+		enable_sending=YES
+	else
+		enable_sending=NO
+	end if
+	
+	check_firmware_version()
+	'-----------------------------------------------------------------
+	
+    'WM2000 Wi-Fi setup
+    '================================================================               
+	
+	comm_mode=val(stg_get("MODE",0))
+	if enable_sending=YES then
+		'DNS setup
+		'================================================================
+		DNS_socket=sock_get("DNS")
+		dns_start(DNS_socket)
+		'Making a DNS query:
+		'dns_connect(PL_SOCK_INTERFACE_NET, "8.8.4.4",0)
+		'dns_query("google.com")
+		'get the response in callback_dns_answer_acquired
+		'-----------------------------------------------------------------
+	
+		http_start()
+
+		if comm_mode=0 then
+			current_interface = PL_SOCK_INTERFACE_WLN
+			dim ssid as string=stg_get("WAP",0)
+			dim pwd as string=stg_get("WPW",0)
+
+			if wln.enabled=NO then
+				wln.boot(0)
+			end if
+			
+			if ssid <> "" and pwd <> "" then
+				if ssid<>wln.autoconnectssid or wln.autoconnectpassword<>pwd or wln.autoconnect<>YES or wln.autodhcp<>YES then	
+					wln.autodhcp=YES
+					wln.autoconnectssid=ssid
+					wln.autoconnectpassword=pwd
+					wln.autoconnect=YES
+					sys.reboot
+				end if					
+			end if	
+		else
+			current_interface = PL_SOCK_INTERFACE_PPP
+			'for power saving, making sure autoconnect is turned off when in cell mode
+			if sys.runmode=PL_SYS_MODE_RELEASE then
+				if wln.autoconnect=YES then
+					wln.autoconnect=NO
+					sys.reboot
+				end if	
+			end if
+
+			'mcp23017 setup on socket 5
+			'================================================================
+			select case mcp23017_init("TBT00_3_S5", YES, TBT00_3_S5_CLK, TBT00_3_S5_DATA, TBT00_3_S5_CHANNEL)
+			case MCP23017_SELF_TEST_FAIL:
+				sys.debugprint("mcp23017 self test failed!\r\n")
+				sys.halt()
+
+			case MCP23017_NO_SSI_AVAILABLE:
+				sys.debugprint("SSI channel could not be allocated, using bit banging instead.\r\n")
+			end select
+
+			'-----------------------------------------------------------------
+
+			mcp23017_line_out_enable(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,yes,TBT00_3_S5_CHANNEL)
+			mcp23017_line_set(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,HIGH,TBT00_3_S5_CHANNEL)
+
+			init_pic_supervisor()
+			enable_pic_supervisor()
+
+			cell__start(CELL__SIMCARD_PIN, CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD)
+		end if
+	
+	end if
+	
+		
+	
+	#if SOCK_DEBUGPRINT
+		if sys.runmode = PL_SYS_MODE_DEBUG then
+			if wln.enabled=NO then
+				wln.boot(0)
+			end if
+			
+			if wln.autoconnect<>YES or wln.autodhcp<>YES then	
+				wln.autodhcp=YES
+				wln.autoconnect=YES
+				sys.reboot
+			end if		
+		
+			sock.num=10
+			sock.txbuffrq(10)
+
+			sock.protocol=PL_SOCK_PROTOCOL_TCP
+			sock.targetip="192.168.1.65"  'changes as see fit
+			sock.targetport=1001
+			sys.buffalloc()
+			sock.connect()
+		end if	
+	#endif
+
+
+	device_awake_timer=val(stg_get("AWT",0))*120
+	'minimum 1 minute of awaking time
+	if device_awake_timer=0 then 
+		device_awake_timer=120 
+	end if
+	
+	sleep_time=val(stg_get("SPT",0))
+
+'	if sys.resettype=PL_SYS_RESET_TYPE_EXTERNAL then
+'		device_add_event("reset due to power loss")		
+'	end if
+	
+    pat.play("B-B-B-",PL_PAT_CANINT)
+	
+	upgrade_init()
+	
+end sub
+
+sub check_firmware_version()
+	dim s as string
+	s=stg_get("FWV",0)
+	if FIRMWARE_VERSION<>s then
+		stg_set("FWV",0,FIRMWARE_VERSION)
+		device_add_event("Upgrage done! "+FIRMWARE_VERSION)
+	end if
+
+end sub
+
+#if SOCK_DEBUGPRINT
+sub debugprint(byref s as string)
+	dim b as byte=sock.num
+	sock.num=10
+	sock.setdata(s)
+	sock.send()
+	sock.num=b
+end sub
+#endif
+
+sub sensor_init()
+	dim data1, data2, data3, data4, data5, data6, data7 as byte
+	
+	select case sensor_type
+	case 0: 'hum-temp
+		sample_timer = 4
+	case 1:	'hum_temp-co2
+		sample_timer = 10
+	case else:
+	
+	end select
+	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
+	if sensor_channel<4 then
+        ssi.channel=sensor_channel
+        ssi.enabled=NO
+        ssi.baudrate=PL_SSI_BAUD_100kHz
+
+        io.num=SENSOR_DAT_PIN
+        io.state=HIGH
+        io.num=SENSOR_CLK_PIN
+        io.state=HIGH
+        ssi.zmode = PL_SSI_ZMODE_ENABLED_ON_ZERO
+
+        ssi.direction=PL_SSI_DIRECTION_LEFT
+        ssi.domap = SENSOR_DAT_PIN
+        ssi.dimap = SENSOR_DAT_PIN
+        ssi.clkmap = SENSOR_CLK_PIN
+        ssi.mode = PL_SSI_MODE_0
+
+        ssi.enabled=YES
+    end if
+
+	si2c_get(sensor_channel)
+	
+	si2c_start()
+	si2c_write(TBT30_WRITE_ADDR)
+	si2c_stop()
+
+'	delay_ms(50)
+
+'	si2c_start()
+'	si2c_write(TBT30_READ_ADDR)
+'	data1=si2c_read(true)
+'	data2=si2c_read(true)
+'	data3=si2c_read(true)
+'	data4=si2c_read(false)
+'	si2c_stop()
+	
+end sub
+
+sub read_ntag()
+	dim ntag as string(3)
+	dim command as string(1)
+	dim parameter as string(2)
+	
+	pic_channel = si2c_register("PIC", PIC_DAT_PIN, PIC_CLK_PIN, NO)
+	ntag=pic_read(&h90,3)	
+	command = left(ntag,1)
+	parameter = right(ntag,2)
+	
+	select case command
+	case "\xB6","\xB3":
+		if parameter <> "\x00\x00" then
+			config_mode = YES
+			config_bt_name=parameter+"-OSS-Tower1"
+		end if
+
+	case else:
+		
+	end select
+
+end sub

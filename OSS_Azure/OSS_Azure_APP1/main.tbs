@@ -1,0 +1,114 @@
+include "global.tbh"
+
+dim interface_ready(MAX_NUM_INTERFACES) as no_yes
+dim current_interface as pl_sock_interfaces
+dim luis_bt_enabled as boolean
+dim TBT00_3_S5_CHANNEL as byte
+
+declare sub device_store_firmware(data as string)
+
+sub on_sys_init()
+
+   boot()
+end sub
+
+sub on_sock_data_arrival()
+	dns_proc_data()
+    http_proc_data()
+	mqtt_proc_data()
+end sub
+
+sub on_sys_timer()
+
+	if config_mode = YES then
+		exit sub
+	end if
+	if enable_sending=YES then	
+		if comm_mode=1 then
+			cell__proc_sys_timer()
+		end if
+		dns_proc_timer()
+		http_proc_timer()
+		if upgrade_state = 255 then
+			mqtt_proc_timer()
+			azure_proc_timer()		
+		end if
+	end if
+	device_proc_timer()
+end sub
+
+sub on_sock_event(newstate as pl_sock_state,newstatesimple as pl_sock_state_simple)
+
+    http_sock_state_update(newstatesimple)
+	mqtt_sock_event(newstate, newstatesimple)
+
+end sub
+
+sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as string(16), gateway_ip as string(16), netmask as string(16), lease_time as dword)
+
+	if renew=YES and wln.ip<>ip then
+		'this is a lease renewal and the DHCP server has issues new IP
+		'it is better to reboot than deal with the implications of the changed IP
+		sys.reboot
+	end if
+
+	#if DEV_DEBUG_PRINT
+		dev_debugprint("WLN DHCP OK ("+ip+")")
+	#endif
+
+	if wln.ip<>ip then
+		sock.inconenabledmaster=NO
+		close_interface_sockets(PL_SOCK_INTERFACE_WLN)
+		wln.ip=ip
+		if gateway_ip<>"" then wln.gatewayip=gateway_ip
+		if netmask<>"" then wln.netmask=netmask
+		sock.inconenabledmaster=YES 
+	end if
+ 
+	if comm_mode=0 then
+	
+		if upgrade_state <255 then
+			connect_to_upgrade_server()
+		else
+			connect_to_azure_server()
+		end if
+	end if
+end sub
+
+sub on_sock_data_sent()
+
+    azure_on_telemetry_sent()
+
+end sub
+
+sub on_bt_event(bt_event as pl_bt_events)
+ 
+    luis_on_bt_event(bt_event)
+
+end sub
+
+sub on_bt_data_sent()
+
+    luis_on_bt_data_sent()
+
+end sub
+
+sub on_bt_data_arrival()
+
+    if luis_bt_enabled = true then
+        luis_on_bt_data_arrival()
+    end if
+
+end sub
+
+sub on_ser_data_arrival()
+	cell__proc_on_ser_data_arrival()
+end sub
+
+function mcp23017_line_get2(num as ext_line_name, port as ext_port_name, channel as byte) as enum low_high
+
+	dim state as low_high = LOW
+	mcp23017_line_get(num, port, state, channel)
+
+	mcp23017_line_get2=state
+end function

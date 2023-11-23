@@ -1,0 +1,28 @@
+'DEFINES-------------------------------------------------------------
+#define LUIS_CONFIG_FILE "luis.xtxt"
+#define LUIS_DEBUG_PRINT 1
+#define DHCP_DEBUG_PRINT 1
+#define WLN_AVAILABLE 1
+#define SIGNAL_STRENGTH_INDICATION 1
+const MAX_NUM_INTERFACES=4
+const DEVICE_NET_IP = "192.168.1.101"
+const DEVICE_NET_MASK = "255.255.255.0"
+const DEVICE_NET_GATEWAY = "192.168.1.1"
+const BT_NAME="WM2000 Companion"
+const LUIS_BT_DEVICE_NAME="WM2000 Companion"
+#define WLN_CLK PL_IO_NUM_53
+#define WLN_CS PL_IO_NUM_49
+#define WLN_DI PL_IO_NUM_52
+#define WLN_DO PL_IO_NUM_50
+#define WLN_RST PL_IO_NUM_51
+'INCLUDES------------------------------------------------------------
+includepp "settings.xtxt"
+include "settings\settings.tbh"
+include "filenum\filenum.tbh"
+include "libraries\luis.tbh"
+includepp "luis.xtxt"
+include "libraries\ssi.tbh"
+include "libraries\super_i2c.tbh"
+'DECLARATIONS--------------------------------------------------------
+declare interface_ready(MAX_NUM_INTERFACES) as no_yes
+declare sub init_stg_ble_luis()

@@ -1,0 +1,492 @@
+'***********************************************************************************************************
+'			MCP23017 (based on code for Tibbit#41)
+'***********************************************************************************************************
+
+include "global.tbh"
+
+const MCP23017_INIT_SIGNATURE=&h1003
+const MCP23017_STAMP="MCP23017> "
+const MCP23017_CR_LF=chr(13)+chr(10)
+
+const MCP23017_WRITE_ADDR=&h40
+const MCP23017_READ_CODE=&h41
+
+enum mcp23017_regs
+	MCP23017_ADDR_IODIRA=&h00,
+	MCP23017_ADDR_IPOLA=&h01,
+	MCP23017_ADDR_GPINTENA=&h02,
+	MCP23017_ADDR_DEFVALA=&h03,
+	MCP23017_ADDR_INTCONA=&h04,
+	MCP23017_ADDR_GPPUA=&h06,
+	MCP23017_ADDR_INTFA=&h07,
+	MCP23017_ADDR_INTCAPA=&h08,
+	MCP23017_ADDR_GPIOA=&h09,
+	MCP23017_ADDR_OLATA=&h0A,
+	
+	MCP23017_ADDR_IODIRB=&h10,
+	MCP23017_ADDR_IPOLB=&h11,
+	MCP23017_ADDR_GPINTENB=&h12,
+	MCP23017_ADDR_DEFVALB=&h13,
+	MCP23017_ADDR_INTCONB=&h14,
+	MCP23017_ADDR_GPPUB=&h16,
+	MCP23017_ADDR_INTFB=&h17,
+	MCP23017_ADDR_INTCAPB=&h18,
+	MCP23017_ADDR_GPIOB=&h19,
+	MCP23017_ADDR_OLATB=&h1A
+end enum
+
+enum mcp23017_clr_set
+	MCP23017_BIT_CLEAR,
+	MCP23017_BIT_SET
+end enum
+
+declare sub mcp23017_reg_write(reg as mcp23017_regs, data as byte)
+declare function mcp23017_reg_read(addr as mcp23017_regs)as byte
+
+declare sub mcp23017_bit_access(byref data as byte, bit as byte, act as mcp23017_clr_set)
+
+#if MCP23017_DEBUG_PRINT=1
+declare sub mcp23017_debug_print(data as string)
+#endif
+
+'--------------------------------------------------------------------
+dim mcp23017_init_flag as word
+dim MCP23017_ADDR_IOCON as byte = &h0A
+function mcp23017_init(byref signature as string, use_ssi as no_yes, pin_clk as byte, pin_data as byte, byref channel as byte) as mcp23017_errcheck
+'Call this function to initialize the Tibbit.
+'Use_ssi argument specifies whether you want to communicate with this Tibbit using the SSI channel running in the I2C mode (YES), or
+'go for direct I/O manipulation a.k.a. bit-banging (NO).
+'Note that there is a limited number of SSI channels so if you set use_ssi=YES this function may return MCP23017_NO_SSI_AVAILABLE, meaning that
+'there are no free SSI channels left. This doesn't mean failure. Rather, it means that comms will proceed in bit banging mood.
+
+	mcp23017_init=MCP23017_OK
+	mcp23017_init_flag=MCP23017_INIT_SIGNATURE
+
+	#if MCP23017_DEBUG_PRINT=1
+		mcp23017_debug_print("++++++++++")
+	#endif
+
+	channel=si2c_register(signature,pin_data,pin_clk,use_ssi)
+
+	#if MCP23017_DEBUG_PRINT=1
+		mcp23017_debug_print("i2c num:"+str(channel))
+	#endif
+
+	if channel < 4 then
+		ssi.channel=channel
+		ssi.enabled=NO
+		#IF PLATFORM_ID=TPP2WG2 or PLATFORM_ID=TPP3WG2
+			ssi.baudrate=5
+		#elif PLATFORM_ID=TPP2W or PLATFORM_ID=TPP3W
+			ssi.baudrate=1
+		#endif
+		ssi.baudrate=1
+		ssi.clkmap=pin_clk
+		ssi.dimap=pin_data
+		ssi.domap=pin_data
+		ssi.zmode=PL_SSI_ZMODE_ENABLED_ON_ZERO
+		ssi.direction=PL_SSI_DIRECTION_LEFT
+		ssi.mode=PL_SSI_MODE_2
+		ssi.enabled=YES
+		io.num=pin_clk
+		io.enabled=YES
+		io.state=HIGH
+	else
+		if use_ssi=YES then
+			mcp23017_init=MCP23017_NO_SSI_AVAILABLE
+		end if
+	end if
+
+#if MCP23017_DEBUG_PRINT=1
+	mcp23017_debug_print("----------")
+#endif
+
+	dim value as byte
+	si2c_get(channel)
+
+	' reset all registers -- iodir as input, all others 0h00
+	mcp23017_reg_write(&h0A,&h0)
+	mcp23017_reg_write(&h05,&h0)
+	mcp23017_reg_write(&h00,&hff)
+	mcp23017_reg_write(&h01,&hff)
+	dim r as mcp23017_regs
+	for r=&h02 to &h15
+		mcp23017_reg_write(r,&h0)
+	next r
+
+	'set IOCON first, IOCON.BANK=1 changes other addresses
+	mcp23017_reg_write(&h0A,&h80) 'expected address
+	MCP23017_ADDR_IOCON = &h05
+	if mcp23017_reg_read(MCP23017_ADDR_IOCON)<>&h80 then
+		mcp23017_init=MCP23017_SELF_TEST_FAIL
+	end if
+
+	'Pins are configured as an input.
+	'mcp23017_reg_write(MCP23017_ADDR_IODIR,&hFF)
+	if mcp23017_reg_read(MCP23017_ADDR_IODIRA)<>&hFF then
+		mcp23017_init=MCP23017_SELF_TEST_FAIL
+	end if
+
+
+	if mcp23017_reg_read(MCP23017_ADDR_IODIRB)<>&hFF then
+		mcp23017_init=MCP23017_SELF_TEST_FAIL
+	end if
+
+
+	'mcp23017_reg_write(MCP23017_ADDR_IPOL,&h0)
+	value=mcp23017_reg_read(MCP23017_ADDR_IPOLA)
+	if value<>&h0 then
+		mcp23017_init=MCP23017_SELF_TEST_FAIL
+	end if
+	
+	value=mcp23017_reg_read(MCP23017_ADDR_IPOLB)
+	if value<>&h0 then
+		mcp23017_init=MCP23017_SELF_TEST_FAIL
+	end if
+	
+	value=mcp23017_reg_read(MCP23017_ADDR_OLATA)
+	if value<>&h0 then
+		mcp23017_init=MCP23017_SELF_TEST_FAIL
+	end if
+	
+	value=mcp23017_reg_read(MCP23017_ADDR_OLATB)
+	if value<>&h0 then
+		mcp23017_init=MCP23017_SELF_TEST_FAIL
+	end if
+	
+end function
+
+function mcp23017_line_out_enable(num as ext_line_name, port as ext_port_name, en as no_yes, channel as byte) as ok_ng
+'Configures the specified line (num) to be an input (en=NO) or outpur (en=YES).
+'The function will return NG if the execution fails.
+	
+	dim value as byte
+	dim address as byte
+	mcp23017_line_out_enable=NG
+	if mcp23017_init_flag<>MCP23017_INIT_SIGNATURE then
+	#if MCP23017_DEBUG_PRINT=1
+		mcp23017_debug_print("The lib is not initialized, call mcp23017_init() first")
+	#endif
+		exit function
+	end if
+	si2c_get(channel)
+	if (port<>EXT_PORT_A) then
+		address=MCP23017_ADDR_IODIRB
+	else
+		address=MCP23017_ADDR_IODIRA
+	end if
+	value=mcp23017_reg_read(address)
+	mcp23017_bit_access(value,num,en)
+	mcp23017_reg_write(address,value)
+	mcp23017_line_out_enable=OK
+end function
+
+function mcp23017_line_pup_enable(num as ext_line_name, port as ext_port_name, en as no_yes, channel as byte)as ok_ng
+'If en=YES and the corresponding line (num) is configured for input, then this line will be pulled up with a 100 KOhm resistor.
+'The function will return NG if the execution fails.
+
+	dim value as byte
+	dim address as byte
+	mcp23017_line_pup_enable=NG
+	if en = yes then
+		en = no
+	else
+		en = yes
+	end if	
+	if mcp23017_init_flag<>MCP23017_INIT_SIGNATURE then
+	#if MCP23017_DEBUG_PRINT=1
+		mcp23017_debug_print("The lib is not initialized, call mcp23017_init() first")
+	#endif
+		exit function
+	end if
+	si2c_get(channel)
+	if (port<>EXT_PORT_A) then
+		address=MCP23017_ADDR_GPPUB
+	else
+		address=MCP23017_ADDR_GPPUA
+	end if
+	value=mcp23017_reg_read(address)
+	mcp23017_bit_access(value,num,en)
+	mcp23017_reg_write(address,value)
+	mcp23017_line_pup_enable=OK
+end function
+
+function mcp23017_line_set(num as ext_line_name, port as ext_port_name, state as low_high, channel as byte)as ok_ng
+'Sets the output state of the specified line (num). For this to work the line has to be configured as output.
+'The function will return NG if the execution fails.
+
+	dim value as byte
+	dim address as byte
+	mcp23017_line_set=NG
+	if mcp23017_init_flag<>MCP23017_INIT_SIGNATURE then
+	#if MCP23017_DEBUG_PRINT=1
+		mcp23017_debug_print("The lib is not initialized, call mcp23017_init() first")
+	#endif
+		exit function
+	end if
+	si2c_get(channel)
+	if (port<>EXT_PORT_A) then
+		address=MCP23017_ADDR_GPIOB
+	else
+		address=MCP23017_ADDR_GPIOA
+	end if
+	value=mcp23017_reg_read(address)
+	if state=LOW then
+		mcp23017_bit_access(value,num,YES)
+	else
+		mcp23017_bit_access(value,num,NO)
+	end if
+	mcp23017_reg_write(address,value)
+	mcp23017_line_set=OK
+end function
+
+function mcp23017_line_get(num as ext_line_name, port as ext_port_name, byref state as low_high, channel as byte)as ok_ng
+'Reads the state of the specified line (num). The value will be returned in the state variable.
+'The function will return NG if the execution fails.
+
+	dim value as byte
+	dim address as byte
+	mcp23017_line_get=NG
+	if mcp23017_init_flag<>MCP23017_INIT_SIGNATURE then
+	#if MCP23017_DEBUG_PRINT=1
+		mcp23017_debug_print("The lib is not initialized, call mcp23017_init() first")
+	#endif
+		exit function
+	end if
+	si2c_get(channel)
+	if (port<>EXT_PORT_A) then
+		address=MCP23017_ADDR_GPIOB
+	else
+		address=MCP23017_ADDR_GPIOA
+	end if
+	value=mcp23017_reg_read(address)
+	dim tmp as byte
+	select case num
+	case 7:
+		tmp=&h80
+
+	case 6:
+		tmp=&h40
+
+	case 5:
+		tmp=&h20
+
+	case 4:
+		tmp=&h10
+
+	case 3:
+		tmp=&h08
+
+	case 2:
+		tmp=&h04
+
+	case 1:
+		tmp=&h02
+
+	case 0:
+		tmp=&h01
+
+	end select
+
+	if value and tmp then
+		state=HIGH
+	else
+		state=LOW
+	end if
+	mcp23017_line_get=OK
+end function
+
+function mcp23017_port_config_set(dir as byte, port as ext_port_name, pullup as byte, channel as byte)as ok_ng
+'Sets the direction and pull-up status for all port lines simultaneously.
+'Each bit of dir argument  is responsible for the direction of one line. The line will act as an input when the bit is 1, and output when the bit is 0.
+'Each bit of pullup argument is responsible for enabling the pull-up resistor for the corresponding line. The pull-up resistor is enabled when the corresponding bit is at 1.
+'The function will return NG if the execution fails.
+
+	dim addr_iodir as byte
+	dim addr_gppu as byte
+	mcp23017_port_config_set=NG
+	if mcp23017_init_flag<>MCP23017_INIT_SIGNATURE then
+	#if MCP23017_DEBUG_PRINT=1
+		mcp23017_debug_print("The lib is not initialized, call mcp23017_init() first")
+	#endif
+		exit function
+	end if
+	si2c_get(channel)
+	if (port<>EXT_PORT_A) then
+		addr_iodir=MCP23017_ADDR_IODIRB
+		addr_gppu=MCP23017_ADDR_GPPUB
+	else
+		addr_iodir=MCP23017_ADDR_IODIRA
+		addr_gppu=MCP23017_ADDR_GPPUA
+	end if
+	mcp23017_reg_write(addr_iodir,dir)
+	mcp23017_reg_write(addr_gppu,pullup)
+	mcp23017_port_config_set=OK
+end function
+
+function mcp23017_port_config_get(byref dir as byte, port as ext_port_name, byref pullup as byte, channel as byte)as ok_ng
+'Reads the direction (input/output) and pull-up resistor configuration data.
+'Each bit of dir and pullup reflects the programming of the corresponding line. Current configuration will be returned through dir and pullup arguments.
+'Dir argument: a line is configured as an output when its corresponding bit is at 1, input -- when the bit is at 0.
+'Pullup argument: a line has its pull-up resistor enabled when the corresponding bit is at 1.
+'The function will return NG if the execution fails.
+
+	dim addr_iodir as byte
+	dim addr_gppu as byte
+	mcp23017_port_config_get=NG
+	if mcp23017_init_flag<>MCP23017_INIT_SIGNATURE then
+	#if MCP23017_DEBUG_PRINT=1
+		mcp23017_debug_print("The lib is not initialized, call mcp23017_init() first")
+	#endif
+		exit function
+	end if
+	si2c_get(channel)
+	if (port<>EXT_PORT_A) then
+		addr_iodir=MCP23017_ADDR_IODIRB
+		addr_gppu=MCP23017_ADDR_GPPUB
+	else
+		addr_iodir=MCP23017_ADDR_IODIRA
+		addr_gppu=MCP23017_ADDR_GPPUA
+	end if
+	pullup=mcp23017_reg_read(addr_gppu)
+	dir=mcp23017_reg_read(addr_iodir)
+	mcp23017_port_config_get=OK
+end function
+
+function mcp23017_port_set(data as byte, port as ext_port_name, channel as byte) as ok_ng
+'Sets the output states of all port lines. Only lines configured as outputs will be affected.
+'The function will return NG if the execution fails.
+
+	dim address as byte
+	mcp23017_port_set=NG
+	if mcp23017_init_flag<>MCP23017_INIT_SIGNATURE then
+	#if MCP23017_DEBUG_PRINT=1
+		mcp23017_debug_print("The lib is not initialized, call mcp23017_init() first")
+	#endif
+		exit function
+	end if
+	si2c_get(channel)
+	if (port<>EXT_PORT_A) then
+		address=MCP23017_ADDR_GPIOB
+	else
+		address=MCP23017_ADDR_GPIOA
+	end if
+	mcp23017_reg_write(address,data)
+	mcp23017_port_set=OK
+end function
+
+function mcp23017_port_get(byref data as byte, port as ext_port_name, channel as byte)as ok_ng
+'Reads the current state of all port lines. Port state is returned through the data argument.
+'The function will return NG if the execution fails.	
+
+	dim address as byte
+	mcp23017_port_get=NG
+	if mcp23017_init_flag<>MCP23017_INIT_SIGNATURE then
+	#if MCP23017_DEBUG_PRINT=1
+		mcp23017_debug_print("The lib is not initialized, call mcp23017_init() first")
+	#endif
+		exit function
+	end if
+	si2c_get(channel)
+	if (port<>EXT_PORT_A) then
+		address=MCP23017_ADDR_GPIOB
+	else
+		address=MCP23017_ADDR_GPIOA
+	end if
+	data=mcp23017_reg_read(address)
+	mcp23017_port_get=OK
+end function
+
+sub mcp23017_reg_write(reg as mcp23017_regs,data as byte)
+	si2c_start()
+	si2c_write(MCP23017_WRITE_ADDR)
+	si2c_write(reg)
+	si2c_write(data)
+	si2c_stop()
+end sub
+
+function mcp23017_reg_read(addr as mcp23017_regs)as byte
+	si2c_start()
+	si2c_write(MCP23017_WRITE_ADDR)
+	si2c_write(addr)
+	si2c_start()
+	si2c_write(MCP23017_READ_CODE)
+	mcp23017_reg_read=si2c_read(false)
+	si2c_stop()
+end function
+
+sub mcp23017_bit_access(byref data as byte, bit as byte, act as mcp23017_clr_set)
+	select case bit
+	case 7:
+		if act=MCP23017_BIT_CLEAR then
+			data=data or &h80
+		else
+			data=data and &h7F
+		end if
+
+	case 6:
+		if act=MCP23017_BIT_CLEAR then
+			data=data or &h40
+		else
+			data=data and &hBF
+		end if
+
+	case 5:
+		if act=MCP23017_BIT_CLEAR then
+			data=data or &h20
+		else
+			data=data and &hDF
+		end if
+
+	case 4:
+		if act=MCP23017_BIT_CLEAR then
+			data=data or &h10
+		else
+			data=data and &hEF
+		end if
+
+	case 3:
+		if act=MCP23017_BIT_CLEAR then
+			data=data or &h08
+		else
+			data=data and &hF7
+		end if
+
+	case 2:
+		if act=MCP23017_BIT_CLEAR then
+			data=data or &h04
+		else
+			data=data and &hFB
+		end if
+
+	case 1:
+		if act=MCP23017_BIT_CLEAR then
+			data=data or &h02
+		else
+			data=data and &hFD
+		end if
+
+	case 0:
+		if act=MCP23017_BIT_CLEAR then
+			data=data or &h01
+		else
+			data=data and &hFE
+		end if	
+	end select
+end sub
+
+#if MCP23017_DEBUG_PRINT=1
+sub mcp23017_debug_print(data as string)
+	sys.debugprint(MCP23017_STAMP+data+MCP23017_CR_LF)
+end sub
+#endif
+
+sub pic_set_reset(rv as low_high)
+	mcp23017_line_set(EXT_MCLR_LINE,EXT_MCLR_PORT,rv,TBT00_3_S5_CHANNEL)
+end sub
+
+sub pic_do_reset()
+	pic_set_reset(true)
+	delay_ms(1)
+	pic_set_reset(false)
+end sub

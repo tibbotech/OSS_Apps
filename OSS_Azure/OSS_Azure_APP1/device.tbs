@@ -1,0 +1,985 @@
+include "global.tbh"
+
+const CELL__SIMCARD_PIN = CELL__QUESTMARK	'<-- CHANGE THIS AS NEEDED
+const UPGRADE_TIMEOUT = 30
+
+dim azure_current_url as string
+dim sample_timer as word
+dim sensor_channel as byte
+dim pic_channel as byte
+dim device_awake_timer as word
+dim sleep_time as word
+dim upgrade_state as byte = 255  
+dim fimrware_size as dword=4294836225
+dim firmware_filenum as byte
+dim firmware_checksum as dword
+dim part_size as dword=4294836225
+dim part_filenum as byte
+dim part_checksum as dword
+dim upgrade_timer as byte = 0
+dim total_chuncks as byte = 0
+dim part_num as byte = 255
+dim battery_level as byte = 0
+dim property_modified as no_yes = YES
+
+declare sub time_to_str(byref ts_str as string(20),	
+	byref time_daycount as word,
+	byref time_mincount as word,
+	byref time_second_byte as byte)
+
+declare sub device_sleep()
+declare sub device_upgrade_start()
+declare sub device_store_firmware(data as string)
+declare sub read_hum_temp()
+declare sub read_new_sensor_board()
+declare function add_telemetry(byref telemetry_name as string, byref telemetry_value as string, byref ts as string) as en_tbl_status_codes
+declare sub update_stg_ts_and_send_azure(byref stg_name as string)
+declare sub update_server_properties()
+
+sub device_proc_timer()	
+	'deduct device_awake_timer only when device is not doing upgrade and in Low power mode
+	if upgrade_state = 255 then
+		if operation_mode > 0 then
+			if device_awake_timer>0 then
+				device_awake_timer=device_awake_timer-1
+			else
+				device_sleep()
+			end if
+		end if
+	else
+		upgrade_timer = upgrade_timer + 1
+		if upgrade_timer > UPGRADE_TIMEOUT then
+			connect_to_azure_server()
+		end if
+	end if
+
+	if sample_timer>0 then
+		sample_timer=sample_timer-1
+		if sample_timer = 0 then
+			select case sensor_type
+			case 0:
+				read_hum_temp()
+			case 1:
+				read_new_sensor_board()				
+			case else:
+			end select
+			if enable_sending = NO and sample_timer = 0 and operation_mode > 0 then
+				device_sleep()
+			else
+				'when no in Low power mode, sample time is same as sleep time
+				sample_timer = sleep_time*120
+			end if			
+		end if
+		if comm_mode=0 then
+			if enable_sending = YES and wln.autoconnect=NO  then
+				wln.autoconnect=YES
+			end if
+		end if		
+		
+		azure_send_telemetry()
+	end if 
+
+end sub
+
+sub callback_stg_error(byref stg_name_or_num as string,index as byte,status as en_stg_status_codes)
+    
+end sub
+
+sub callback_stg_pre_get(byref stg_name_or_num as string,index as byte,byref stg_value as string)
+    
+end sub    
+
+sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref stg_value as string)
+    select case stg_name_or_num
+	case "SPT":
+		sleep_time=val(stg_value)
+	case "RCN":
+		min_rec_num_to_send=val(stg_value)
+	case "MODE":
+		if stg_value="1" then
+			if sys.runmode=PL_SYS_MODE_RELEASE then
+				wln.autoconnect=NO
+			end if
+		else
+			wln.autoconnect=YES
+		end if	
+    end select
+end sub
+        
+sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref stg_value as string)
+	
+	'use stg_timestamp.ts_milsec as a flag to detect if the setting has been changed
+	'set it to 0 after change occured
+	stg_timestamp.ts_milsec = 0
+	stg_set_ts(stg_name_or_num)
+	property_modified = YES
+end sub
+
+function callback_stg_vm_read(address as word) as byte
+    
+end function
+        
+sub callback_stg_vm_write(data_to_write as byte, address as word)
+    
+end sub
+
+sub close_interface_sockets(interface as pl_sock_interfaces)
+    dim f,sock_num_bup as byte
+    dim i as word
+
+    sock_num_bup=sock.num
+
+    for f=0 to sock.numofsock-1
+        sock.num=f
+        if sock.targetinterface=interface then
+            sock.discard
+        end if
+    next f
+
+    i=sys.timercount
+
+    wait_close_interface_sockets:
+    for f=0 to sock.numofsock-1
+        sock.num=f
+        if sock.targetinterface=interface and sock.statesimple<>PL_SSTS_CLOSED and sys.timercount-i<3 and sys.timercount>=i then
+            goto wait_close_interface_sockets
+        end if
+    next f
+
+    sock.num=sock_num_bup
+
+end sub
+
+sub callback_dns_failure(status as en_dns_status_codes)
+    
+end sub
+
+sub callback_dns_answer_acquired(return_type as en_dns_return_type, byref return_string as string)
+    
+    http_dns_answer_acquired(return_type, return_string)
+
+    mqtt_dns_answer_acquired(return_type, return_string)
+
+    'if return_type=EN_DNS_RET_IP then
+    '    sys.debugprint("DNS:" + ddstr(return_string) + "\r\n")
+    'end if
+end sub
+
+sub callback_dns_ok()
+    
+end sub
+
+sub callback_dns_pre_buffrq(num_of_pages_required as byte)
+    
+end sub
+
+sub callback_dns_buff_released()
+    
+end sub
+        
+sub callback_http_request_failed(error_message as string)
+
+end sub
+
+
+sub callback_http_header_arrival(header_type as string, header_value as string)
+	if upgrade_state = 255 then
+		iot_header_arrival(header_type, header_value)
+	else
+		select case header_type
+		case "Content-Length":
+			part_size=lval(header_value)
+			
+		case "Total-Length":
+			fimrware_size=lval(header_value)
+			
+		case "Full-Checksum":
+			firmware_checksum=lval(header_value)
+			
+		case "Total-Chuncks":
+			total_chuncks=lval(header_value)
+			
+		case "Part-Checksum":
+			part_checksum=lval(header_value)
+		
+		case "Part-Number":
+			part_num=lval(header_value)
+		case else:
+			
+		end select
+	end if
+
+end sub
+
+
+sub callback_http_headers_complete()
+    
+end sub
+
+
+sub callback_http_content_arrival(data as string)
+    if upgrade_state = 255 then
+		azure_content_arrival(data)
+	else
+		device_store_firmware(data)
+	end if
+end sub
+
+sub callback_http_post_data_sent_ok()
+    
+end sub
+
+sub callback_http_send_post_data(remaining_content_length as dword)
+    
+end sub
+
+sub callback_http_send_headers()
+    if upgrade_state = 255 then
+		iot_send_headers()
+	else
+		http_send_headers("Content-Type","application/json")
+		http_send_headers("Connection","keep-alive")
+		http_send_headers("Part", str(upgrade_state))
+	end if 
+   
+end sub
+
+
+sub callback_http_request_complete()
+    if upgrade_state = 255 then
+		azure_http_request_complete()
+	end if
+    
+end sub
+
+sub callback_http_response_code_arrival(http_response as string)
+    
+end sub
+
+function callback_http_open_romfile() as dword
+    #ifdef HTTP_CER_FILE
+		romfile.open(HTTP_CER_FILE)
+		callback_http_open_romfile=romfile.offset    
+	
+	#else 
+		callback_http_open_romfile=0
+	#endif    
+end function
+
+sub callback_mqtt_connect_ok()
+    pat.play("G~",PL_PAT_CANINT)
+    
+    azure_on_connected()
+end sub
+        
+sub callback_mqtt_connect_lost()
+	azure_on_disconnected()
+end sub
+        
+sub callback_mqtt_notif(byref topic as string,byref data as string,remaining_bytes as dword)
+    azure_proc_mqtt_msg(topic,data)	
+end sub
+
+sub callback_mqtt_sub_ok()
+	'azure_request_property()
+end sub      
+
+sub callback_tbl_error(status as en_tbl_status_codes)
+    
+end sub    
+
+function callback_tbl_fail_to_open(byref filename as string, status as pl_fd_status_codes, filenum as byte) as no_yes
+    
+end function
+
+sub callback_tbl_field_error(byref file_name as string,byref field_name as string,tbl_result as en_tbl_status_codes)
+    
+end sub
+        
+
+sub callback_tbl_modified(byref file_name as string, modified_operation as en_tbl_modified_operation)
+    
+end sub
+
+sub callback_azure_command_triggered(byref command as string, byref param as string, rid as string)
+
+	azure_command_respond(command,"{}",rid,EN_AZURE_OK)
+	
+    select case command
+    case "upgrade":
+		device_upgrade_start()
+    case else:
+    end select
+
+    
+end sub     
+
+sub callback_azure_device_assigned(byref assigned_hub as string)
+
+end sub
+        
+sub callback_azure_conn_timeout()
+    if comm_mode=1 then
+		cell__start(CELL__SIMCARD_PIN, CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD)
+	end if
+end sub
+
+
+sub callback_azure_on_telemetry_sent()
+	dim active_rec_num as word
+	
+	update_server_properties()
+	
+	tbl_select("Azure","Azure")
+	tbl_get_num_records(active_rec_num,NO)
+	if active_rec_num>0 then
+		azure_send_telemetry()
+	else
+		if operation_mode > 0 then device_awake_timer = 1 'go to sleep
+	end if
+'<<<<<<<<<<<<<<<<<<<<<<
+'	if comm_mode=0 and sleep_time>0 then
+'		active_rec_num=active_rec_num/2
+'		if active_rec_num <=min_rec_num_to_send and wln.autoconnect=YES then
+'			wln.disable()
+'		end if		
+'	end if
+end sub        
+
+sub callback_azure_on_connected()
+	azure_send_telemetry()
+	
+
+	
+end sub
+
+sub callback_azure_on_disconnected()
+
+end sub
+
+sub callback_luis_bt_connected()
+    
+end sub
+
+sub callback_luis_bt_disconnected()
+    
+end sub
+
+sub callback_luis_bt_enabled()
+    
+end sub
+
+sub callback_luis_bt_disabled()
+    
+end sub
+
+sub callback_luis_buzz_command()
+    
+end sub
+'XXXXXXXXXXXXXXXXXXX USING IO EXTENDER FOR CELL        
+sub cell_callback_io_extender_setup()
+	mcp23017_port_config_set(&hFF,0,EXT_PORT_A,TBT00_3_S5_CHANNEL)
+
+	'SHDN line
+	mcp23017_line_out_enable(CELL__SHDN_LINENUM,CELL__SHDN_PORT,yes,TBT00_3_S5_CHANNEL)
+
+	'Initial SHDN state should be Active
+	'If False, then set to Active
+	if CELL__SHDN_STATE = cell__shdn_setto_off then
+		CELL__SET_SHDN_ON	'then set SHDN line to Active (by default)
+	end if
+
+	'PWRKEY line
+	mcp23017_line_out_enable(CELL__PWRKEY_LINENUM,CELL__PWRKEY_PORT,yes,TBT00_3_S5_CHANNEL)
+
+	'RESET line
+	mcp23017_line_out_enable(CELL__RESET_LINENUM,CELL__RESET_PORT,yes,TBT00_3_S5_CHANNEL)
+	CELL__SET_RESET_OFF
+
+	'STATUS line
+	mcp23017_line_out_enable(CELL__STATUS_LINENUM,CELL__STATUS_PORT,NO,TBT00_3_S5_CHANNEL)
+
+	'TX_BUF line
+	mcp23017_line_out_enable(TX_BUF_LINENUM,TX_BUF_PORT,yes,TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(TX_BUF_LINENUM,TX_BUF_PORT, LOW, TBT00_3_S5_CHANNEL)
+end sub
+
+sub cell__callback_modem_restart_failed()
+end sub
+        
+
+sub cell__callback_modem_on()
+end sub
+        
+
+sub cell__callback_modem_off()
+end sub
+        
+
+sub cell__callback_insufficient_buffer_pages()
+end sub
+        
+
+sub cell__callback_at_reply()
+end sub
+        
+
+sub cell__callback_at_reply_contains_error()
+end sub
+
+sub cell__callback_ppp_fcs_is_bad()
+end sub
+                
+
+sub cell__callback_ppp_missing_address_field()
+end sub
+                
+
+sub cell__callback_ppp_missing_control_field()
+end sub
+                
+
+sub cell__callback_ppp_lcp_msg_length_not_matching()
+end sub
+                
+
+sub cell__callback_ppp_lcp_successful()
+end sub
+                
+
+sub cell__callback_ppp_lcp_disreq_from_peer()
+end sub
+                
+
+sub cell__callback_ppp_lcp_disreq_from_sender()
+end sub
+                
+
+sub cell__callback_ppp_retry_exceeded()
+end sub
+                
+
+sub cell__callback_ppp_pap_successful()
+end sub
+                
+
+sub cell__callback_ppp_pap_nego_failed()
+end sub
+                
+
+sub cell__callback_ppp_ipcp_successful()
+end sub
+                
+                
+sub cell__callback_ppp_ipcp_disreq_from_peer()
+end sub
+                
+
+sub cell__callback_ppp_ipcp_disreq_from_sender()
+end sub
+                
+
+sub cell__callback_ppp_ping_successful()
+end sub
+                
+
+sub cell__callback_ppp_ping_failed()
+end sub
+
+sub cell__callback_ppp_link_established()
+	
+	if upgrade_state <255 then
+		connect_to_upgrade_server()
+	else
+		connect_to_azure_server()
+	end if
+end sub
+                
+
+sub cell__callback_after_switching_from_DATA_to_CMD()
+end sub
+                
+
+sub cell__callback_after_switching_from_CMD_to_DATA()
+end sub
+                
+sub init_pic_supervisor()
+	'Init MCLR IO and Enables pic supervisor
+    mcp23017_line_out_enable(EXT_MCLR_LINE,EXT_MCLR_PORT,YES,TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(EXT_MCLR_LINE, EXT_MCLR_PORT,  HIGH, TBT00_3_S5_CHANNEL)
+end sub
+
+sub enable_pic_supervisor()
+	'Keeps pic running
+	mcp23017_line_set(EXT_MCLR_LINE, EXT_MCLR_PORT,  HIGH, TBT00_3_S5_CHANNEL)
+end sub
+
+sub disable_pic_supervisor()
+	'Keeps pic reset
+	mcp23017_line_set(EXT_MCLR_LINE, EXT_MCLR_PORT,  LOW, TBT00_3_S5_CHANNEL)
+end sub
+
+sub device_sleep()
+	dim daycounts, mincounts as word
+	dim seconds as byte	
+
+	if sleep_time=0 then
+		exit sub
+	end if
+	
+	rtc.getdata(daycounts,mincounts,seconds)
+	if sleep_time>1440 then
+		sleep_time=sleep_time-1440
+		daycounts=daycounts+1
+	end if
+	mincounts=mincounts+sleep_time
+	daycounts=daycounts+(mincounts/1440)
+	mincounts=mincounts mod 1440
+	sys.sleep(daycounts, mincounts, seconds)  
+end sub
+
+sub device_add_event(byref event_msg as string)
+	dim daycounts, mincounts as word
+	dim seconds as byte
+	dim tbl_result as en_tbl_status_codes	
+	dim ts as string(36) 
+		
+	rtc.getdata(daycounts,mincounts,seconds)
+	time_to_str(ts,daycounts,mincounts,seconds)
+	ts=ts+".000Z"		
+	tbl_result=tbl_select("Azure","Azure")
+	tbl_result=tbl_field_sg("time",ts,EN_TBL_SET)
+	tbl_result=tbl_field_sg("type","event",EN_TBL_SET)
+	tbl_result=tbl_field_sg("value",event_msg,EN_TBL_SET)
+	tbl_result=tbl_record_add("")		
+	
+	sys.debugprint("Event: "+event_msg+"\x0a")
+end sub
+
+sub device_upgrade_start()
+
+	stg_set("UPD",0,"0")
+	device_add_event("Upgrage start!")
+end sub
+
+sub device_store_firmware(data as string)
+	
+	if part_size = 4294836225 then exit sub
+	
+	fd.filenum=part_filenum
+	if fd.fileopened=NO then
+		fd.open(PART_FILE)
+	end if	
+	
+	fd.setdata(data)
+	
+	if fd.filesize = part_size then
+		dim data as string
+		dim checksum as dword=0
+		
+		fd.setpointer(1)		
+		do
+			data=fd.getdata(255)
+			checksum=checksum+(strsum(data))
+		loop while fd.pointer <= fd.filesize
+		
+		if checksum = part_checksum then
+
+			fd.filenum=firmware_filenum
+			fd.open(FIRMWARE_FILE)
+			fd.setpointer(fd.filesize+1)
+
+			fd.filenum=part_filenum
+			fd.setpointer(1)
+
+			do
+				data=fd.getdata(255)
+				fd.filenum=firmware_filenum
+				if fd.setdata(data) <>PL_FD_STATUS_OK then
+					exit do
+				end if
+				fd.filenum=part_filenum
+			loop while fd.pointer < fd.filesize and fd.laststatus=PL_FD_STATUS_OK
+			
+			fd.filenum = firmware_filenum
+			if fd.laststatus = PL_FD_STATUS_OK then
+				fd.flush()
+				upgrade_state = upgrade_state+1
+				if upgrade_state = total_chuncks then
+					checksum=0
+					fd.setpointer(1)		
+					do
+						data=fd.getdata(255)
+						checksum=checksum+(strsum(data))
+					loop while fd.pointer <= fd.filesize
+					if checksum = firmware_checksum then
+						stg_set("UPD",0,"254") 'all parts downloaded
+					else
+						stg_set("UPD",0,"0") 'start over
+					end if
+				else
+					stg_set("UPD",0,str(upgrade_state))
+				end if
+				
+				fd.close()
+				device_add_event(+str(part_num+1)+"/"+str(total_chuncks)+" downloaded")
+			else
+				device_add_event("Upgrade failed, retry..")
+				device_upgrade_start()
+			end if
+		end if
+		connect_to_azure_server()
+	end if 	
+	
+	upgrade_timer=0
+end sub
+
+public sub upgrade_init()
+	firmware_filenum = filenum_get("FMW")
+	part_filenum = filenum_get("PAR")
+	upgrade_state = val(stg_get("UPD",0))
+
+	fd.filenum=part_filenum
+	fd.delete(PART_FILE)
+	fd.create(PART_FILE)
+
+	if upgrade_state = 0 then
+		fd.filenum=firmware_filenum
+		fd.delete(FIRMWARE_FILE)
+		fd.create(FIRMWARE_FILE)		
+	end if
+	
+	if upgrade_state = 254 then
+		stg_set("UPD",0,"255")
+		fd.filenum = firmware_filenum
+		if fd.open(FIRMWARE_FILE) = PL_FD_STATUS_OK then
+			fd.copyfirmwarefromfilelzo()
+		end if
+	end if
+	
+end sub
+
+public sub connect_to_upgrade_server()
+	dim url as string
+
+	http_stop()
+	dns_disconnect()
+	if sock.tlscurrentnum<>255 then
+		sock.num=sock.tlscurrentnum
+		sock.tlsdeinit()	
+		if sock.statesimple = PL_SSTS_EST then
+			sock.discard()
+		end if
+	end if	
+	url=stg_get("DLPT",0)
+	http_request(HTTP_GET, url, current_interface,"")		
+end sub
+
+public sub connect_to_azure_server()		
+	dim AZURE_DEVICE_ID as string=stg_get("DVID",0)
+	dim AZURE_SCOPE_ID as string=stg_get("SCID",0)
+	dim AZURE_DPS_SERVER as string=stg_get("DPSS",0)
+	dim AZURE_PRIMARY_KEY as string=stg_get("PKEY",0)
+	
+	'when switching between server making sure all previous connection is closed
+	http_stop()
+	dns_disconnect()
+	 
+	if sock.tlscurrentnum<>255 then
+		sock.num=sock.tlscurrentnum
+		sock.tlsdeinit()	
+		if sock.statesimple = PL_SSTS_EST then
+			sock.discard()
+		end if
+	end if
+	upgrade_state=255
+	azure_start(AZURE_DEVICE_ID,AZURE_SCOPE_ID,AZURE_DPS_SERVER,AZURE_PRIMARY_KEY,current_interface)
+end sub
+
+sub read_new_sensor_board()
+	dim data0, data1, data2, data3, data4, data5, data6, data7 as byte
+	dim tmp1,hi,lo,temp2 as byte
+	dim co2, humidity, temperature as float
+	dim humd,temp,str_co2,error,ts as string(36)
+	dim daycounts, mincounts as word
+	dim seconds as byte
+	
+	'fetch temperature and humidity data
+
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_WR)
+	si2c_write(&h80)
+
+	delay_ms(5)
+	
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_RD)
+	data0=si2c_read(true)
+	data1=si2c_read(true)
+	data2=si2c_read(true)
+	data3=si2c_read(true)
+	data4=si2c_read(false)
+	si2c_stop()
+	
+	'fetch CO2 data
+
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_WR)
+	si2c_write(&h90)
+
+	delay_ms(5)
+	
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_RD)
+	data5=si2c_read(true)
+	data6=si2c_read(true)
+	data7=si2c_read(false)
+	
+	si2c_stop()
+
+' Calculation
+	tmp1=data1*4
+	humidity=tmp1*64+data2
+
+	tmp1=data3*4
+	tmp1=tmp1/16
+	hi=data3/64*16
+	hi=hi+tmp1
+
+	tmp1=data3 and &h03
+	tmp1=tmp1*64
+
+	temp2=data4 and &hC0
+	temp2=temp2/4
+	lo=tmp1+temp2
+
+	tmp1=data4 and &h3C
+	tmp1=tmp1/4
+	lo=lo+tmp1
+
+	temperature=hi*256+lo
+	humidity=(humidity*100)/16383
+
+	temperature=temperature/16383
+	temperature=temperature*165
+	'temperature=temperature-40
+	
+	co2=data5
+	co2=co2*256+data6
+	humd=ftostr(humidity,FTOSTR_MODE_AUTO,5)
+	temp=ftostr(temperature,FTOSTR_MODE_AUTO,5)
+	str_co2=ftostr(co2,FTOSTR_MODE_AUTO,5)
+	
+	error=hex(data7)
+	error=right(error,len(error)-2)
+
+	'check the timestampe, if it's invalid, don't sample, but sample again in 2 sec
+	rtc.getdata(daycounts,mincounts,seconds)
+	if daycounts>0 then
+		time_to_str(ts,daycounts,mincounts,seconds)
+		ts=ts+".000Z"
+		
+		add_telemetry("temperature",temp,ts)
+		add_telemetry("humidity",humd,ts)
+		add_telemetry("co2",str_co2,ts)
+		add_telemetry("BAT_LVL",str(battery_level),ts)
+		
+'		tbl_result=tbl_field_sg("time",ts,EN_TBL_SET)
+'		tbl_result=tbl_field_sg("type","error",EN_TBL_SET)
+'		tbl_result=tbl_field_sg("value",error,EN_TBL_SET)
+'		tbl_result=tbl_record_add("")
+		sys.debugprint(temp+"C "+humd+"% "+str_co2+chr(10)+chr(13))
+	else
+		sample_timer=4
+	end if	
+end sub
+
+sub read_hum_temp()
+	dim data1, data2, data3, data4 as byte
+	dim tmp1,hi,lo,temp2 as byte
+	dim humidity, temperature as float
+	dim daycounts, mincounts as word
+	dim seconds as byte
+	dim ts, humd, temp as string(36)
+	
+	si2c_start()
+	si2c_write(TBT30_WRITE_ADDR)
+	si2c_stop()
+
+	delay_ms(50)
+
+	'fetch humidity data
+	si2c_start()
+	si2c_write(TBT30_READ_ADDR)
+	data1=si2c_read(true)
+	data2=si2c_read(true)
+	data3=si2c_read(true)
+	data4=si2c_read(false)
+	si2c_stop()
+
+	'humidity:   Data1 [13:6] + Data2 [7:0]
+	'temerature: Data3 [13:6] + Data4 [5:0]
+	tmp1=data1*4
+	humidity=tmp1*64+data2
+
+	tmp1=data3*4
+	tmp1=tmp1/16
+	hi=data3/64*16
+	hi=hi+tmp1
+
+	tmp1=data3 and &h03
+	tmp1=tmp1*64
+
+	temp2=data4 and &hC0
+	temp2=temp2/4
+	lo=tmp1+temp2
+
+	tmp1=data4 and &h3C
+	tmp1=tmp1/4
+	lo=lo+tmp1
+
+	temperature=hi*256+lo
+	humidity=(humidity*100)/16383
+
+	temperature=temperature/16383
+	temperature=temperature*165
+	temperature=temperature-40
+	
+	humd=ftostr(humidity,FTOSTR_MODE_AUTO,5)
+	temp=ftostr(temperature,FTOSTR_MODE_AUTO,5)
+	
+	'check the timestampe, if it's invalid, don't sample, but sample again in 2 sec
+	rtc.getdata(daycounts,mincounts,seconds)
+	if daycounts>0 then
+		time_to_str(ts,daycounts,mincounts,seconds)
+		ts=ts+".000Z"
+
+		add_telemetry("temperature",temp,ts)
+		add_telemetry("humidity",humd,ts)
+		add_telemetry("BAT_LVL",str(battery_level),ts)
+		
+		sys.debugprint(temp+"C "+humd+"% "+chr(10)+chr(13))
+	else
+		sample_timer=4
+	end if
+end sub
+
+sub pic_write(addr as byte, byref data as string)
+	dim i as byte
+	
+	si2c_get(pic_channel)
+	si2c_start()
+	si2c_write(PIC_ADDR OR PIC_WR)
+	si2c_write(addr)
+	for i = 1 to len(data)
+		delay_ms(10)
+		si2c_write(asc(mid(data,i,1)))
+	next i
+	delay_ms(10)
+	si2c_stop()
+end sub
+
+function pic_read(addr as byte, length as byte) as string
+	dim i as byte
+	
+	pic_read=""
+	si2c_get(pic_channel)
+	si2c_start()
+	si2c_write(PIC_ADDR OR PIC_WR)	
+	si2c_write(addr)		'Set reg num
+	si2c_start()
+	si2c_write(PIC_ADDR OR PIC_RD)
+	for i = 1 to length
+		delay_ms(10)
+		pic_read = pic_read + chr(si2c_read(true))
+	next i
+	delay_ms(10)
+	si2c_stop()
+end function
+
+function add_telemetry(byref telemetry_name as string, byref telemetry_value as string, byref ts as string) as en_tbl_status_codes
+	
+	add_telemetry=tbl_select("Azure","Azure")
+	if add_telemetry<>EN_TBL_STATUS_OK then exit function
+	add_telemetry=tbl_field_sg("time",ts,EN_TBL_SET)
+	if add_telemetry<>EN_TBL_STATUS_OK then exit function
+	add_telemetry=tbl_field_sg("type",telemetry_name,EN_TBL_SET)
+	if add_telemetry<>EN_TBL_STATUS_OK then exit function	
+	add_telemetry=tbl_field_sg("value",telemetry_value,EN_TBL_SET)
+	if add_telemetry<>EN_TBL_STATUS_OK then exit function	
+	add_telemetry=tbl_record_add("")	
+end function
+
+function sending_record() as no_yes
+	dim active_rec_num as word
+	dim number_of_fld as byte
+	
+	sending_record = NO
+	select case sensor_type
+	case 0: number_of_fld = 3
+	case 1: number_of_fld = 4
+	case else:
+	end select
+	
+    tbl_select("Azure","Azure")
+	tbl_get_num_records(active_rec_num,NO)
+	active_rec_num=active_rec_num/number_of_fld
+	min_rec_num_to_send=val(stg_get("RCN",0))
+	if active_rec_num >= min_rec_num_to_send-1 then
+		sending_record = YES
+	end if
+end function
+
+sub update_stg_ts_and_send_azure(byref stg_name as string)
+	dim stg_val as string
+	
+	'use stg_timestamp.ts_milsec as a flag to detect if the setting has been changed
+	'push to server if it is 0, and set it to 999 after push
+	stg_val=stg_get(stg_name,0)
+	if stg_timestamp.ts_milsec = 0 then
+		azure_send_property(stg_name, stg_val)
+		stg_timestamp.ts_milsec = 999
+		stg_set_ts(stg_name)
+	end if	
+end sub
+
+function modbus_callback_ReadCoilStatus(address as word) as boolean
+	
+end function
+
+function modbus_callback_ReadInputStatus(address as word) as boolean
+	
+end function
+
+function modbus_callback_WriteSingleCoil(address as word, value as low_high) as boolean
+	
+end function
+
+function modbus_callback_ReadHoldingRegister(address as word) as word
+	
+end function
+
+function modbus_callback_ReadInputRegister(address as word) as word
+	
+end function
+
+function modbus_set_holding_register(address as word, data as string) as boolean
+	
+end function
+
+sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref reply as string)
+	
+end sub
+
+sub update_server_properties()
+
+	if property_modified = YES then
+		update_stg_ts_and_send_azure("FWV")
+		update_stg_ts_and_send_azure("DLPT")
+		update_stg_ts_and_send_azure("SPT")
+		update_stg_ts_and_send_azure("RCN")
+	'	update_stg_ts_and_send_azure("AWT")
+	'	update_stg_ts_and_send_azure("EPT")
+		property_modified = NO
+	end if
+end sub

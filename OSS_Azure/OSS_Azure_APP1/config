@@ -1,0 +1,13 @@
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = true
+	symlinks = false
+	ignorecase = true
+	sharedrepository = 2
+[receive]
+	denyNonFastforwards = true
+[remote "OSS-temp-hum-Azure"]
+	url = git@github.com:tibbotech/OSS-temp-hum-Azure.git
+	fetch = +refs/heads/*:refs/remotes/OSS-temp-hum-Azure/*
+	puttykeyfile = E:\\repo\\key\\private.ppk

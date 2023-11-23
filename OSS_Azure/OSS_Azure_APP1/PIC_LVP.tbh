@@ -1,0 +1,34 @@
+
+' these are not useful for my pic, they're spread into different registers
+' plus the TIDE code doesn't use these
+' CONFIG1
+'#define FOSC	 	&b00000000000111
+'#define WDTE	 	&b00000000011000
+'#define PWRTE	 	&b00000000100000
+'#define MCLRE	 	&b00000001000000
+'#define CP		 	&b00000010000000
+'#define CPD		&b00000100000000
+'#define BOREN	 	&b00011000000000
+'#define CLKOUTEN 	&b00100000000000
+'#define IESO	 	&b01000000000000
+'#define FCMEN	 	&b10000000000000
+#define MAX_DATA_LEN        8192
+#define MAX_EEPROM_LEN      256
+#define MAX_CFG_LEN         16
+#define MAX_USER_ID_LEN	    4
+#define MAX_TRY_FLASHING	4
+#define PIC_TRACE
+
+declare function pic_upload_firmware() as boolean
+declare sub choose_iolines(SCL as byte, SDA as byte)
+declare sub delay_ms(ms as dword)
+
+type firmware
+	datalen as word 
+	data(MAX_DATA_LEN) as word
+	eepromlen as word
+	eeprom(MAX_EEPROM_LEN) as byte
+	config(MAX_CFG_LEN) as word
+end type
+
+declare fw as firmware

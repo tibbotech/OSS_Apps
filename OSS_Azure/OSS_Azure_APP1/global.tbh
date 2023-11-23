@@ -1,0 +1,186 @@
+'DEFINES-------------------------------------------------------------
+const FIRMWARE_VERSION="V2.0.5"
+
+#define MQTT_DEBUG_PRINT 1
+#define LUIS_CONFIG_FILE "luis.xtxt"
+#define LUIS_DEBUG_PRINT 0
+#define WLN_AVAILABLE 1
+#define DNS_DEBUG_PRINT 0
+#define HTTP_DEBUG_PRINT 1
+#define CELL__DEBUG_PRINT 1
+#define SOCK_DEBUGPRINT 0
+#define TBL_ADJUST_LIST_WHEN_FULL 0  'adjust table size as soon as record is deleted
+#define TBL_SECTOR_SIZE 512
+#define MQTT_CER_FILE "DigiCert.cer"
+#define HTTP_CER_FILE "DigiCert.cer"
+'#define HTTP_CER_FILE "azurewebsites.cer"
+
+
+
+
+#define MQTT_LARGE_PACKETS 1
+#define HTTP_TX_BUFF 6
+#define HTTP_RX_BUFF 10
+#define CELL__PAYLOAD_SIZE 8
+#define DNS_REPLY_TIMEOUT 15
+#define FILENUM_MAX_SIGNATURE_LEN 3
+#define FILENUM_MAX_FILES 3
+
+const MAX_NUM_INTERFACES=4
+const FIRMWARE_FILE="firmware"
+const PART_FILE="part"
+const SENSOR_CLK_PIN=PL_IO_NUM_7_RX1
+const SENSOR_DAT_PIN=PL_IO_NUM_6
+const SENSOR_ADDR=16
+const PIC_RD=1
+const PIC_WR=0
+const PIC_CLK_PIN=PL_IO_NUM_9
+const PIC_DAT_PIN=PL_IO_NUM_4
+const PIC_ADDR=16
+
+const TBT30_WRITE_ADDR=&h4E
+const TBT30_READ_ADDR=&h4F
+
+'SET DESIRED CELL-MODE-----------------------------------------------
+#define CELL_IO_EXTENDER 1
+#define CELL__PPP_MODE_ISENABLED	1
+#define CELL__AT_USERMODE_ISENABLED	0
+#define CELL__GPS_MODE_ISENABLED	0
+#define CELL_BANDTYPE "2"
+#define CELL__DATA_SER_PORT 0
+
+const TBT00_3_S5_CLK = PL_IO_NUM_9
+const TBT00_3_S5_DATA = PL_IO_NUM_4
+#define CELL__RTS_LINENUM PL_IO_NUM_2_INT0
+#define CELL__CTS_LINENUM PL_INT_NUM_0
+
+#define CELL__RESET_LINENUM		EXT_LINE_2
+#define CELL__RESET_PORT		EXT_PORT_A
+#define CELL__SHDN_LINENUM		EXT_LINE_4
+#define CELL__SHDN_PORT			EXT_PORT_A
+#define CELL__PWRKEY_LINENUM	EXT_LINE_5
+#define CELL__PWRKEY_PORT		EXT_PORT_A
+#define CELL__STATUS_LINENUM	EXT_LINE_7
+#define CELL__STATUS_PORT		EXT_PORT_A
+
+' this sns gate is now controlled by PIC, no longer exists
+'#define SNS_GATE_LINENUM		EXT_LINE_1
+'#define SNS_GATE_PORT			EXT_PORT_A
+' 
+
+#define SC_DTR_LINENUM			EXT_LINE_6
+#define SC_DTR_PORT				EXT_PORT_A
+#define VMOD_SHDN_LINENUM		EXT_LINE_6
+#define VMOD_SHDN_PORT			EXT_PORT_B
+#define TX_BUF_LINENUM			EXT_LINE_7
+#define TX_BUF_PORT				EXT_PORT_B
+#define EXT_MCLR_LINE			EXT_LINE_4
+#define EXT_MCLR_PORT			EXT_PORT_B
+#define PMU_INHIBIT_LINE		EXT_LINE_5
+#define PMU_INHIBIT_PORT		EXT_PORT_B
+
+'MACROS--------------------------------------------------------------
+declare cell__shdn_setto_off as low_high
+declare cell__shdn_setto_on as low_high
+declare cell__reset_setto_off as low_high
+
+#ifndef CELL__MODEM_STATUS	
+	#define CELL__MODEM_STATUS mcp23017_line_get2(CELL__STATUS_LINENUM, CELL__STATUS_PORT, TBT00_3_S5_CHANNEL)  'get STATUS current line state
+#endif
+
+#ifndef CELL__SET_RESET_ON
+	#define CELL__SET_RESET_ON  mcp23017_line_set(CELL__RESET_LINENUM, CELL__RESET_PORT, cell__reset_setto_on, TBT00_3_S5_CHANNEL)	'set RESET line to Active
+#endif
+#ifndef CELL__SET_RESET_OFF
+	#define CELL__SET_RESET_OFF mcp23017_line_set(CELL__RESET_LINENUM, CELL__RESET_PORT, cell__reset_setto_off, TBT00_3_S5_CHANNEL)	'set RESET line to Inactive
+#endif
+
+#ifndef CELL__SET_SHDN_ON
+	#define CELL__SET_SHDN_ON   mcp23017_line_set(CELL__SHDN_LINENUM, CELL__SHDN_PORT, cell__shdn_setto_on, TBT00_3_S5_CHANNEL)		'set SHDN line to Active
+#endif
+#ifndef CELL__SET_SHDN_OFF
+	#define CELL__SET_SHDN_OFF  mcp23017_line_set(CELL__SHDN_LINENUM, CELL__SHDN_PORT, cell__shdn_setto_off, TBT00_3_S5_CHANNEL)	'set SHDN line to Inactiveh
+#endif
+
+#ifndef CELL__SET_PWRKEY_ON
+	#define CELL__SET_PWRKEY_ON		mcp23017_line_set(CELL__PWRKEY_LINENUM, CELL__PWRKEY_PORT, cell__pwrkey_setto_on, TBT00_3_S5_CHANNEL)	'set PWRKEY line to Inactive
+#endif
+#ifndef CELL__SET_PWRKEY_OFF
+	#define CELL__SET_PWRKEY_OFF	mcp23017_line_set(CELL__PWRKEY_LINENUM, CELL__PWRKEY_PORT, cell__pwrkey_setto_off, TBT00_3_S5_CHANNEL)	'set PWRKEY line to Inactive
+#endif
+
+#ifndef CELL__PWRKEY_STATE
+	#define CELL__PWRKEY_STATE		mcp23017_line_get2(CELL__PWRKEY_LINENUM, CELL__PWRKEY_PORT, TBT00_3_S5_CHANNEL)	'get STATUS current line state
+#endif
+#ifndef CELL__RESET_STATE
+	#define CELL__RESET_STATE		mcp23017_line_get2(CELL__RESET_LINENUM, CELL__RESET_PORT, TBT00_3_S5_CHANNEL)	'get STATUS current line state
+#endif
+#ifndef CELL__SHDN_STATE
+	#define CELL__SHDN_STATE		mcp23017_line_get2(CELL__SHDN_LINENUM, CELL__SHDN_PORT, TBT00_3_S5_CHANNEL)		'get STATUS current line state
+#endif
+
+'INCLUDES------------------------------------------------------------
+includepp "settings.xtxt"
+includepp "filenum.xtxt"
+includepp "tables.xtxt"
+includepp "luis.xtxt"
+include "settings\settings.tbh"
+include "sock\sock.tbh"
+include "dns\dns.tbh"
+include "time\time.tbh"
+include "filenum\filenum.tbh"
+include "libraries\http.tbh"
+include "mqtt\mqtt.tbh"
+include "tables\tables.tbh"
+include "libraries\azure.tbh"
+include "libraries\utils.tbh"
+include "luis\luis.tbh"
+include "libraries\mcp23017.tbh"
+include "ssi\ssi.tbh"
+include "libraries\super_i2c.tbh"
+include "libraries\cell.tbh"
+include "libraries\modbus.tbh"
+include "PIC_LVP.tbh"
+'DECLARATIONS--------------------------------------------------------
+declare interface_ready(MAX_NUM_INTERFACES) as no_yes
+declare current_interface as pl_sock_interfaces
+declare DNS_socket as byte
+declare luis_bt_enabled as boolean
+declare comm_mode as byte
+declare TBT00_3_S5_CHANNEL as byte
+declare sensor_channel as byte
+declare pic_channel as byte
+declare device_awake_timer as word
+declare sleep_time as word
+declare enable_sending as no_yes
+declare min_rec_num_to_send as word
+declare upgrade_state as byte 'upgrade over air state, 0~7 indicate the parts that is being downloading, 255: no upgrade in progress, 254: whole file completed
+declare config_mode as no_yes
+declare config_bt_name as string(16)
+declare CELL__AT_APN as string(24)
+declare CELL__MYUSERNAME as string(16)
+declare CELL__MYPASSWORD as string(16)
+declare sensor_type as byte
+declare sample_timer as word
+declare battery_level as byte
+declare operation_mode as byte
+
+declare sub device_add_event(byref event_msg as string)
+declare sub connect_to_upgrade_server()
+declare sub connect_to_azure_server()
+declare function mcp23017_line_get2(num as ext_line_name, port as ext_port_name, channel as byte) as enum low_high
+declare sub close_interface_sockets(interface as pl_sock_interfaces)
+declare sub boot()
+
+declare sub init_pic_supervisor()
+declare sub enable_pic_supervisor()
+declare sub disable_pic_supervisor()
+declare sub device_proc_timer()
+declare sub pic_write(addr as byte, byref data as string)
+declare function pic_read(addr as byte, length as byte) as string
+declare sub read_ntag()
+declare function sending_record() as no_yes
+
+#if SOCK_DEBUGPRINT
+declare sub debugprint(byref s as string)
+#endif
