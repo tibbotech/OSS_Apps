@@ -9,7 +9,7 @@ dim comm_mode as byte
 dim enable_sending as no_yes=NO
 dim min_rec_num_to_send as word
 dim config_mode as no_yes=NO
-dim config_bt_name as string(16)
+dim config_bt_name as string(16) = "BT-OSS-Tower1"
 dim CELL__AT_APN as string(24) = "internet.iot"			'<-- CHANGE THIS AS NEEDED
 dim CELL__MYUSERNAME as string(16)  = "myusername@realm"	'<-- CHANGE THIS AS NEEDED
 dim CELL__MYPASSWORD as string(16)  = ""					'<-- CHANGE THIS AS NEEDED
@@ -81,6 +81,12 @@ sub boot()
 	
 	sensor_type = val(stg_get("STPY",0))
 	sensor_init()	
+	
+	dim scid as string(2) = pic_read(&h03,2)
+	dim msb as word = asc(left(scid,1))
+	dim lsb as word = asc(right(scid,1))
+	dim cid as word = msb*256+lsb
+	stg_set("CID",0,str(cid))
 	
 	if config_mode = YES then
 		'Bluetooth setup

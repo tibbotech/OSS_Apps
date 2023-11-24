@@ -889,10 +889,11 @@ function pic_read(addr as byte, length as byte) as string
 	si2c_write(addr)		'Set reg num
 	si2c_start()
 	si2c_write(PIC_ADDR OR PIC_RD)
-	for i = 1 to length
+	for i = 1 to length-1
 		delay_ms(10)
 		pic_read = pic_read + chr(si2c_read(true))
 	next i
+	pic_read = pic_read + chr(si2c_read(false))
 	delay_ms(10)
 	si2c_stop()
 end function
@@ -978,6 +979,9 @@ sub update_server_properties()
 		update_stg_ts_and_send_azure("DLPT")
 		update_stg_ts_and_send_azure("SPT")
 		update_stg_ts_and_send_azure("RCN")
+		update_stg_ts_and_send_azure("TZ")
+		update_stg_ts_and_send_azure("DVNT")
+		update_stg_ts_and_send_azure("CID")		
 	'	update_stg_ts_and_send_azure("AWT")
 	'	update_stg_ts_and_send_azure("EPT")
 		property_modified = NO

@@ -10,7 +10,7 @@ const PIC_DAT_PIN=PL_IO_NUM_4
 const PIC_ADDR=16
 
 dim pic_channel as byte
-dim config_bt_name as string(16)
+dim config_bt_name as string(16) = "BT-OSS-Tower1"
 
 sub on_sys_init()
 

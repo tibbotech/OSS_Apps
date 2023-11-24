@@ -4,9 +4,9 @@ platform=WM2000
 src_lib_ver=0_00
 name=OSS_Azure_APP1
 output=OSS_Azure_APP1.tpc
-debug=on
+debug=off
 defines= 
-transport=serial
+transport=udp_winpcap
 [address1]
 platform=WM2000
 transport=udp_winpcap
@@ -317,13 +317,11 @@ location=project
 path=luis.xtxt
 type=xtext
 format=LUIS_configurator
-condition=
 locked=no
 location=project
 [file44]
 path=Cloud_Cetificates\DigiCert.cer
 type=binary
 format=
-condition=
 locked=no
 location=project
