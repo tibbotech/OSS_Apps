@@ -10,7 +10,7 @@ const PIC_DAT_PIN=PL_IO_NUM_4
 const PIC_ADDR=16
 
 dim pic_channel as byte
-dim config_bt_name as string(16) = "BT-OSS-Tower1"
+dim config_bt_name as string(16) = "BT-OSS"
 
 sub on_sys_init()
 
@@ -163,7 +163,7 @@ sub read_ntag()
 	select case command
 	case "\xB6","\xB3":
 		if parameter <> "\x00\x00" then
-			config_bt_name=parameter+"-OSS-Tower1"
+			config_bt_name=parameter+"-"+stg_get("DVNM",0)
 		end if
 
 	case else:
@@ -182,12 +182,15 @@ function pic_read(addr as byte, length as byte) as string
 	si2c_write(addr)		'Set reg num
 	si2c_start()
 	si2c_write(PIC_ADDR OR PIC_RD)
-	for i = 1 to length
+	for i = 1 to length-1
 		delay_ms(10)
 		pic_read = pic_read + chr(si2c_read(true))
 	next i
 	delay_ms(10)
+	pic_read = pic_read + chr(si2c_read(false))
+	delay_ms(10)
 	si2c_stop()
+	
 end function
 
 sub delay_ms(ms as dword)

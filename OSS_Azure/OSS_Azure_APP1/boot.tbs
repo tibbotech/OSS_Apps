@@ -9,7 +9,7 @@ dim comm_mode as byte
 dim enable_sending as no_yes=NO
 dim min_rec_num_to_send as word
 dim config_mode as no_yes=NO
-dim config_bt_name as string(16) = "BT-OSS-Tower1"
+dim config_bt_name as string(16) = "BT-OSS"
 dim CELL__AT_APN as string(24) = "internet.iot"			'<-- CHANGE THIS AS NEEDED
 dim CELL__MYUSERNAME as string(16)  = "myusername@realm"	'<-- CHANGE THIS AS NEEDED
 dim CELL__MYPASSWORD as string(16)  = ""					'<-- CHANGE THIS AS NEEDED
@@ -19,6 +19,9 @@ dim operation_mode as byte
 declare sub check_firmware_version()
 declare sub upgrade_init()
 declare sub sensor_init()
+declare function turn_sensor3v3_on() as boolean
+declare function turn_sensor3v3_off() as boolean
+
 
 sub boot()
     'sys.debugmode = PL_SYS_DBG_SERIAL
@@ -74,7 +77,7 @@ sub boot()
     '-----------------------------------------------------------------
 	
 	read_ntag()
-	pic_write(&hA0,"\x77")
+	turn_sensor3v3_on()
 	dim bl as string(1) = pic_read("&h02",1)
 	battery_level = asc(bl)
 	if battery_level > 100 then battery_level=0
@@ -264,9 +267,9 @@ sub sensor_init()
 	dim data1, data2, data3, data4, data5, data6, data7 as byte
 	
 	select case sensor_type
-	case 0: 'hum-temp
+	case 0: 'temp_hum_legacy
 		sample_timer = 4
-	case 1:	'hum_temp-co2
+	case 1:	'temp_hum_co2
 		sample_timer = 10
 	case else:
 	
@@ -310,7 +313,7 @@ sub read_ntag()
 	case "\xB6","\xB3":
 		if parameter <> "\x00\x00" then
 			config_mode = YES
-			config_bt_name=parameter+"-OSS-Tower1"
+			config_bt_name=parameter+"-"+stg_get("DVNM",0)
 		end if
 
 	case else:
