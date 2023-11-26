@@ -294,20 +294,6 @@ sub sensor_init()
 
 	si2c_get(sensor_channel)
 	
-	si2c_start()
-	si2c_write(TBT30_WRITE_ADDR)
-	si2c_stop()
-
-'	delay_ms(50)
-
-'	si2c_start()
-'	si2c_write(TBT30_READ_ADDR)
-'	data1=si2c_read(true)
-'	data2=si2c_read(true)
-'	data3=si2c_read(true)
-'	data4=si2c_read(false)
-'	si2c_stop()
-	
 end sub
 
 sub read_ntag()

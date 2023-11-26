@@ -37,9 +37,9 @@ const PIC_WR=0
 const PIC_CLK_PIN=PL_IO_NUM_9
 const PIC_DAT_PIN=PL_IO_NUM_4
 const PIC_ADDR=16
-
-const TBT30_WRITE_ADDR=&h4E
-const TBT30_READ_ADDR=&h4F
+ 
+const HIH6130_WRITE_ADDR=&h4E
+const HIH6130_READ_ADDR=&h4F
 
 'SET DESIRED CELL-MODE-----------------------------------------------
 #define CELL_IO_EXTENDER 1
