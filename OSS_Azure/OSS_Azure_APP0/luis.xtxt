@@ -1,5 +1,5 @@
 I=GEN;D=General;T=GROUP;
-I=DVNM;T=STRING;D=Device Name;C=EDIT;xIndex=1;
+I=DVNM;T=STRING;D=Device Name;C=EDIT;V=none;S=none;xIndex=1;
 I=AUTO;T=INT;C=STATIC;D=Autoconnect;O=No/0/Yes/1;xIndex=2;
 I=WAP;T=STRING;D=Wi-Fi SSID;C=EDIT;S=AUTO==0?"i":"e";xIndex=3;
 I=WPW;T=STRING;D=Wi-Fi Password;C=EDIT;S=AUTO==0?"i":"e";xIndex=4;

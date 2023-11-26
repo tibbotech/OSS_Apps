@@ -1,8 +1,8 @@
 >>CID	R	W	1	0	65535	A	0	Customer ID
 >>FWV	E	S	1	0	20	I	^	F-ware version
 >>MODE	E	B	1	0	1	A	0	Comm mode
->>WAP	E	S	1	0	32	A	Tibbo9F	Wi-Fi SSID
->>WPW	E	S	1	0	64	A	tibbo168	Wi-Fi Password
+>>WAP	E	S	1	0	32	A	^	Wi-Fi SSID
+>>WPW	E	S	1	0	64	A	^	Wi-Fi Password
 >>DHCP	E	B	1	0	1	A	0	DHCP
 >>DLPT	E	S	1	0	64	A	^	Download point
 >>DPSS	E	S	1	0	63	A	g2-cert-dps.azure-devices-provisioning.net	DPS server

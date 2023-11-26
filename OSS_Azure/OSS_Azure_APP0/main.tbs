@@ -30,7 +30,7 @@ sub init_stg_ble_luis()
 	
 	wln.boot(0)
 	bt.name=config_bt_name
-    bt.emulation=PL_WLN_BT_EMULATION_MODE_NORDIC
+    bt.emulation=PL_WLN_BT_EMULATION_MODE_MICROCHIP
     bt.txbuffrq(1)
     bt.rxbuffrq(1)
     sys.buffalloc()
@@ -66,7 +66,7 @@ sub callback_stg_pre_get(byref stg_name_or_num as string,index as byte,byref stg
 			sys.debugprint("Domain: " + stg_value + "\r\n")		
 		case "DHCP":
 			stg_value=wln.autodhcp
-			sys.debugprint("Auto DHCP: " + stg_value + "\r\n")		
+			sys.debugprint("Auto DHCP: " + stg_value + "\r\n")				
 		case else:
 	end select
     
@@ -95,7 +95,7 @@ sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref s
 			sys.debugprint("Domain: " + stg_value + "\r\n")		
 		case "DHCP":
 			wln.autodhcp=stg_value
-			sys.debugprint("Auto DHCP: " + stg_value + "\r\n")		
+			sys.debugprint("Auto DHCP: " + stg_value + "\r\n")
 		case else:
 	end select
 end sub
@@ -162,8 +162,10 @@ sub read_ntag()
 	
 	select case command
 	case "\xB6","\xB3":
-		if parameter <> "\x00\x00" then
+		if (parameter <> "\x00\x00" and parameter <> "\xFF\xFF") then
 			config_bt_name=parameter+"-"+stg_get("DVNM",0)
+		else
+			config_bt_name="BT"+"-"+stg_get("DVNM",0)
 		end if
 
 	case else:

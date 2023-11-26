@@ -294,8 +294,6 @@ sub sensor_init()
 
         ssi.enabled=YES
     end if
-
-	si2c_get(sensor_channel)
 	
 end sub
 
@@ -305,6 +303,7 @@ sub read_ntag()
 	dim parameter as string(2)
 	
 	pic_channel = si2c_register("PIC", PIC_DAT_PIN, PIC_CLK_PIN, NO)
+	
 	ntag=pic_read(&h90,3)	
 	command = left(ntag,1)
 	parameter = right(ntag,2)
