@@ -163,9 +163,9 @@ sub read_ntag()
 	select case command
 	case "\xB6","\xB3":
 		if (parameter <> "\x00\x00" and parameter <> "\xFF\xFF") then
-			config_bt_name=parameter+"-"+stg_get("DVNM",0)
+			config_bt_name=parameter+"-OSS-APP0"
 		else
-			config_bt_name="BT"+"-"+stg_get("DVNM",0)
+			config_bt_name="BT-OSS-APP0"
 		end if
 
 	case else:

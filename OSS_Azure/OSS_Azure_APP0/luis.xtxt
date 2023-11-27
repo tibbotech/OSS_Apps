@@ -1,10 +1,9 @@
 I=GEN;D=General;T=GROUP;
-I=DVNM;T=STRING;D=Device Name;C=EDIT;V=none;S=none;xIndex=1;
-I=AUTO;T=INT;C=STATIC;D=Autoconnect;O=No/0/Yes/1;xIndex=2;
-I=WAP;T=STRING;D=Wi-Fi SSID;C=EDIT;S=AUTO==0?"i":"e";xIndex=3;
-I=WPW;T=STRING;D=Wi-Fi Password;C=EDIT;S=AUTO==0?"i":"e";xIndex=4;
-I=DOM;T=BYTE;D=Domain;C=STATIC;O=Antigua and Barbuda/3/Argentina/4/Aruba/5/Australia/6/Austria/7/Bahamas/8/Barbados/9/Bermuda/10/Brazil/11/Belgium/12/Bulgaria/13/Canada/14/Cayman Islands/15/Chile/16/China/17/Colombia/18/Costa Rica/19/Cyprus/20/Czech Republic/21/Denmark/22/Dominican Republic/23/Ecuador/24/El Salvador/25/Finland/26/France/27/Germany/28/Greece/29/Guam/30/Guatemala/31/Haiti/32/Honduras/33/Hong Kong/34/Hungary/35/Iceland/36/India/37/Indonesia/38/Ireland/39/Israel/40/Italy/41/Japan/42/Jordan/43/Latvia/44/Liechtenstein/45/Lithuania/46/Luxembourg/47/Malaysia/48/Malta/49/Morocco/50/Mexico/51/Netherlands/52/New Zealand/53/Norway/54/Peru/55/Portugal/56/Poland/57/Romania/58/Russia/59/Saudi Arabia/60/Serbia and Montenegro/61/Singapore/62/Slovakia/63/Slovenia/64/South Africa/65/South Korea/66/Spain/67/Sweden/68/Switzerland/69/Taiwan/70/Turkey/71/United Kingdom/72/Ukraine/73/United Arab Emirates/74/United States/75/Venezuela/76;xIndex=5;
-I=DBM;T=BYTE;D=Debug Mode;C=STATIC;O=Serial/0/Wi-Fi/1;xIndex=6;
-I=DA;T=BYTE;C=STATIC;D=Default App;O=APP0/0/APP1/1;xIndex=7;
-I=DHCP;T=INT;C=STATIC;D=DHCP;O=No/0/Yes/1;xIndex=8;
+I=AUTO;T=INT;C=STATIC;D=Autoconnect;O=No/0/Yes/1;xIndex=1;
+I=WAP;T=STRING;D=Wi-Fi SSID;C=EDIT;S=AUTO==0?"i":"e";xIndex=2;
+I=WPW;T=STRING;D=Wi-Fi Password;C=EDIT;S=AUTO==0?"i":"e";xIndex=3;
+I=DOM;T=BYTE;D=Domain;C=STATIC;O=Antigua and Barbuda/3/Argentina/4/Aruba/5/Australia/6/Austria/7/Bahamas/8/Barbados/9/Bermuda/10/Brazil/11/Belgium/12/Bulgaria/13/Canada/14/Cayman Islands/15/Chile/16/China/17/Colombia/18/Costa Rica/19/Cyprus/20/Czech Republic/21/Denmark/22/Dominican Republic/23/Ecuador/24/El Salvador/25/Finland/26/France/27/Germany/28/Greece/29/Guam/30/Guatemala/31/Haiti/32/Honduras/33/Hong Kong/34/Hungary/35/Iceland/36/India/37/Indonesia/38/Ireland/39/Israel/40/Italy/41/Japan/42/Jordan/43/Latvia/44/Liechtenstein/45/Lithuania/46/Luxembourg/47/Malaysia/48/Malta/49/Morocco/50/Mexico/51/Netherlands/52/New Zealand/53/Norway/54/Peru/55/Portugal/56/Poland/57/Romania/58/Russia/59/Saudi Arabia/60/Serbia and Montenegro/61/Singapore/62/Slovakia/63/Slovenia/64/South Africa/65/South Korea/66/Spain/67/Sweden/68/Switzerland/69/Taiwan/70/Turkey/71/United Kingdom/72/Ukraine/73/United Arab Emirates/74/United States/75/Venezuela/76;xIndex=4;
+I=DBM;T=BYTE;D=Debug Mode;C=STATIC;O=Serial/0/Wi-Fi/1;xIndex=5;
+I=DA;T=BYTE;C=STATIC;D=Default App;O=APP0/0/APP1/1;xIndex=6;
+I=DHCP;T=INT;C=STATIC;D=DHCP;O=No/0/Yes/1;xIndex=7;
 @@STG_RefPath=settings.xtxt
