@@ -1,8 +1,8 @@
 [project]
 watch=stg_name_or_num_copy, parameter
 [file1]
-line=144
-cursor=4149
+line=0
+cursor=309
 opened=active
 breakpoints=164
 [file2]

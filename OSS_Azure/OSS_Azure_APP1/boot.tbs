@@ -9,7 +9,7 @@ dim comm_mode as byte
 dim enable_sending as no_yes=NO
 dim min_rec_num_to_send as word
 dim config_mode as no_yes=NO
-dim config_bt_name as string(16) = "BT-OSS"
+dim config_bt_name as string(16) = "BT-OSS-APP1"
 dim CELL__AT_APN as string(24) = "internet.iot"			'<-- CHANGE THIS AS NEEDED
 dim CELL__MYUSERNAME as string(16)  = "myusername@realm"	'<-- CHANGE THIS AS NEEDED
 dim CELL__MYPASSWORD as string(16)  = ""					'<-- CHANGE THIS AS NEEDED
@@ -32,7 +32,7 @@ sub boot()
     dim stg_init_code as en_stg_status_codes
     dim stg_name as string(STG_MAX_SETTING_NAME_LEN)
 	
-    if stg_start()<>EN_STG_STATUS_OK then 
+    if stg_start_no_init()<>EN_STG_STATUS_OK then 
         pat.play("R-R-~",PL_PAT_CANINT)
         sys.halt
     end if
@@ -149,22 +149,13 @@ sub boot()
 
 		if comm_mode=0 then
 			current_interface = PL_SOCK_INTERFACE_WLN
-			dim ssid as string=stg_get("WAP",0)
-			dim pwd as string=stg_get("WPW",0)
-
 			if wln.enabled=NO then
 				wln.boot(0)
 			end if
-			
-			if ssid <> "" and pwd <> "" then
-				if ssid<>wln.autoconnectssid or wln.autoconnectpassword<>pwd or wln.autoconnect<>YES or wln.autodhcp<>YES then	
-					wln.autodhcp=YES
-					wln.autoconnectssid=ssid
-					wln.autoconnectpassword=pwd
-					wln.autoconnect=YES
-					sys.reboot
-				end if					
-			end if	
+			if wln.autoconnect=NO then
+				wln.autoconnect=YES
+				sys.reboot
+			end if				
 		else
 			current_interface = PL_SOCK_INTERFACE_PPP
 			'for power saving, making sure autoconnect is turned off when in cell mode
@@ -196,10 +187,7 @@ sub boot()
 
 			cell__start(CELL__SIMCARD_PIN, CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD)
 		end if
-	
 	end if
-	
-		
 	
 	#if SOCK_DEBUGPRINT
 		if sys.runmode = PL_SYS_MODE_DEBUG then

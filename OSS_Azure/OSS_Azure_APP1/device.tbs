@@ -90,11 +90,33 @@ sub callback_stg_error(byref stg_name_or_num as string,index as byte,status as e
 end sub
 
 sub callback_stg_pre_get(byref stg_name_or_num as string,index as byte,byref stg_value as string)
-    
+	select case stg_name_or_num
+		case "WAP":
+			stg_value=wln.autoconnectssid
+			sys.debugprint("WiFi Access Point: " + stg_value + "\r\n")		
+		case "WPW":
+			stg_value=wln.autoconnectpassword
+			sys.debugprint("WiFi Password: " + stg_value + "\r\n")		
+		case "DHCP":
+			stg_value=wln.autodhcp
+			sys.debugprint("Auto DHCP: " + stg_value + "\r\n")				
+		case else:
+	end select
+        
 end sub    
 
 sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref stg_value as string)
     select case stg_name_or_num
+		
+	case "WAP":
+		wln.autoconnectssid=stg_value
+		sys.debugprint("WiFi Access Point: " + stg_value + "\r\n")		
+	case "WPW":
+		wln.autoconnectpassword=stg_value
+		sys.debugprint("WiFi Password: " + stg_value + "\r\n")		
+	case "DHCP":
+		wln.autodhcp=stg_value
+		sys.debugprint("Auto DHCP: " + stg_value + "\r\n")
 	case "SPT":
 		sleep_time=val(stg_value)
 	case "RCN":
