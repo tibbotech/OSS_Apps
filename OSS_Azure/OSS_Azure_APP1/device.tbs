@@ -64,7 +64,9 @@ sub device_proc_timer()
 			case 0:
 				read_onboard_hum_temp_legacy()
 			case 1:
-				read_onboard_t_h_co2_sensor()				
+				read_onboard_t_h_sensor()	
+			case 2:
+				read_onboard_t_h_co2_sensor()
 			case else:
 			end select
 			if enable_sending = NO and sample_timer = 0 and operation_mode > 0 then

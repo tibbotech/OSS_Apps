@@ -257,8 +257,11 @@ sub sensor_init()
 	select case sensor_type
 	case 0: 'temp_hum_legacy
 		sample_timer = 4
-	case 1:	'temp_hum_co2
+	case 1:	'temp_hum
+		sample_timer = 4
+	case 2:	'temp_hum_co2
 		sample_timer = 40
+
 	case else:
 	
 	end select
