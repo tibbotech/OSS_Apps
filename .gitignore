@@ -2,3 +2,4 @@ tide
 OSS_Azure/OSS_Azure_APP0/tmp
 OSS_Azure/OSS_Azure_APP1/tmp
 *.obj
+*.tbs.obj
