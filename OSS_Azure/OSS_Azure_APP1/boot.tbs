@@ -26,7 +26,6 @@ declare function turn_sensor3v3_off() as boolean
 sub boot()
     'sys.debugmode = PL_SYS_DBG_SERIAL
 	'sys.debugmode = PL_SYS_DBG_NET
-	
     'Setting Library Initialization
     '================================================================
     dim stg_init_code as en_stg_status_codes
@@ -151,11 +150,10 @@ sub boot()
 			current_interface = PL_SOCK_INTERFACE_WLN
 			if wln.enabled=NO then
 				wln.boot(0)
-			end if
-			if wln.autoconnect=NO then
+				wln.autodhcp = YES
 				wln.autoconnect=YES
-				sys.reboot
-			end if				
+				sys.reboot()
+			end if			
 		else
 			current_interface = PL_SOCK_INTERFACE_PPP
 			'for power saving, making sure autoconnect is turned off when in cell mode

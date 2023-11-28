@@ -73,13 +73,7 @@ sub device_proc_timer()
 				'when no in Low power mode, sample time is same as sleep time
 				sample_timer = sleep_time*120
 			end if			
-		end if
-		if comm_mode=0 then
-			if enable_sending = YES and wln.autoconnect=NO  then
-				wln.autoconnect=YES
-			end if
-		end if		
-		
+		end if	
 		azure_send_telemetry()
 	end if 
 
@@ -96,10 +90,7 @@ sub callback_stg_pre_get(byref stg_name_or_num as string,index as byte,byref stg
 			sys.debugprint("WiFi Access Point: " + stg_value + "\r\n")		
 		case "WPW":
 			stg_value=wln.autoconnectpassword
-			sys.debugprint("WiFi Password: " + stg_value + "\r\n")		
-		case "DHCP":
-			stg_value=wln.autodhcp
-			sys.debugprint("Auto DHCP: " + stg_value + "\r\n")				
+			sys.debugprint("WiFi Password: " + stg_value + "\r\n")					
 		case else:
 	end select
         
@@ -114,21 +105,10 @@ sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref s
 	case "WPW":
 		wln.autoconnectpassword=stg_value
 		sys.debugprint("WiFi Password: " + stg_value + "\r\n")		
-	case "DHCP":
-		wln.autodhcp=stg_value
-		sys.debugprint("Auto DHCP: " + stg_value + "\r\n")
 	case "SPT":
 		sleep_time=val(stg_value)
 	case "RCN":
 		min_rec_num_to_send=val(stg_value)
-	case "MODE":
-		if stg_value="1" then
-			if sys.runmode=PL_SYS_MODE_RELEASE then
-				wln.autoconnect=NO
-			end if
-		else
-			wln.autoconnect=YES
-		end if	
     end select
 end sub
         
@@ -363,19 +343,11 @@ sub callback_azure_on_telemetry_sent()
 	else
 		if operation_mode > 0 then device_awake_timer = 1 'go to sleep
 	end if
-'<<<<<<<<<<<<<<<<<<<<<<
-'	if comm_mode=0 and sleep_time>0 then
-'		active_rec_num=active_rec_num/2
-'		if active_rec_num <=min_rec_num_to_send and wln.autoconnect=YES then
-'			wln.disable()
-'		end if		
-'	end if
+
 end sub        
 
 sub callback_azure_on_connected()
 	azure_send_telemetry()
-	
-
 	
 end sub
 
@@ -562,6 +534,7 @@ sub device_sleep()
 	daycounts=daycounts+(mincounts/1440)
 	mincounts=mincounts mod 1440
 	turn_sensor3v3_off()
+'	wln.autoconnect = NO
 	sys.sleep(daycounts, mincounts, seconds)  
 end sub
 

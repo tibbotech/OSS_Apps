@@ -8,8 +8,15 @@ dim TBT00_3_S5_CHANNEL as byte
 declare sub device_store_firmware(data as string)
 
 sub on_sys_init()
-
-   boot()
+'	if sys.runmode = PL_SYS_MODE_DEBUG and sys.debugmode = PL_SYS_DBG_NET then
+'		if wln.enabled=NO then
+'			if wln.dhcp = 0 then wln.dhcp = 1
+'			wln.boot(0)
+'			wln.autodhcp = YES
+'			wln.autoconnect=YES
+'		end if	
+'	end if
+	boot()
 end sub
 
 sub on_sock_data_arrival()
@@ -112,3 +119,7 @@ function mcp23017_line_get2(num as ext_line_name, port as ext_port_name, channel
 
 	mcp23017_line_get2=state
 end function
+
+sub on_wln_event(wln_event as enum pl_wln_events)
+	' TODO: place "on_wln_event" event handler code here...
+end sub
