@@ -1,10 +1,10 @@
 [project]
 watch=stg_name_or_num_copy, parameter
 [file1]
-line=0
-cursor=309
+line=16
+cursor=643
 opened=active
-breakpoints=164
+breakpoints=17,32,164
 [file2]
 line=0
 cursor=752

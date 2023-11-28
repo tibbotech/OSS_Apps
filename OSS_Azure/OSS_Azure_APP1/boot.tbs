@@ -5,7 +5,7 @@ include "global.tbh"
 const CELL__SIMCARD_PIN = CELL__QUESTMARK	'<-- CHANGE THIS AS NEEDED
 
 dim DNS_socket as byte
-dim comm_mode as byte
+dim comm_mode as byte '0: WIFI, 1: LTE
 dim enable_sending as no_yes=NO
 dim min_rec_num_to_send as word
 dim config_mode as no_yes=NO
@@ -14,14 +14,13 @@ dim CELL__AT_APN as string(24) = "internet.iot"			'<-- CHANGE THIS AS NEEDED
 dim CELL__MYUSERNAME as string(16)  = "myusername@realm"	'<-- CHANGE THIS AS NEEDED
 dim CELL__MYPASSWORD as string(16)  = ""					'<-- CHANGE THIS AS NEEDED
 dim sensor_type as byte
-dim operation_mode as byte
+dim operation_mode as byte '0: always on, 1: low power mode
 
 declare sub check_firmware_version()
 declare sub upgrade_init()
 declare sub sensor_init()
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
-
 
 sub boot()
     'sys.debugmode = PL_SYS_DBG_SERIAL
@@ -88,6 +87,7 @@ sub boot()
 	dim msb as word = asc(left(scid,1))
 	dim lsb as word = asc(right(scid,1))
 	dim cid as word = msb*256+lsb
+	
 	stg_set("CID",0,str(cid))
 	
 	if config_mode = YES then
@@ -108,6 +108,7 @@ sub boot()
 		'luis_start(LUIS_BT_DEVICE_NAME)
 		luis_start(config_bt_name)
 		luis_bt_enabled = true
+		device_awake_timer=1200
 		exit sub
 	end if
 	
@@ -116,11 +117,12 @@ sub boot()
     if tbl_start()<>EN_TBL_STATUS_OK then
         sys.halt
     end if
-	 
+
 	dim daycounts, mincounts as word
 	dim seconds as byte	
 	rtc.getdata(daycounts,mincounts,seconds)
-	if sending_record = YES or daycounts = 0 or operation_mode = 0 then
+
+	if sending_record = YES or operation_mode = 0 or daycounts = 0 then
 		enable_sending=YES
 	else
 		enable_sending=NO
@@ -133,6 +135,12 @@ sub boot()
     '================================================================               
 	
 	comm_mode=val(stg_get("MODE",0))
+	
+	if comm_mode = 0 and daycounts = 0 and wln.autoconnect = NO then
+		wln.autoconnect = YES
+		sys.reboot()
+	end if
+	
 	if enable_sending=YES then
 		'DNS setup
 		'================================================================
@@ -147,13 +155,7 @@ sub boot()
 		http_start()
 
 		if comm_mode=0 then
-			current_interface = PL_SOCK_INTERFACE_WLN
-			if wln.enabled=NO then
-				wln.boot(0)
-				wln.autodhcp = YES
-				wln.autoconnect=YES
-				sys.reboot()
-			end if			
+			current_interface = PL_SOCK_INTERFACE_WLN		
 		else
 			current_interface = PL_SOCK_INTERFACE_PPP
 			'for power saving, making sure autoconnect is turned off when in cell mode
@@ -300,9 +302,6 @@ sub read_ntag()
 			config_mode = YES
 			config_bt_name=parameter+"-"+stg_get("DVNM",0)
 		end if
-
-	case else:
-		
+	case else:		
 	end select
-
 end sub

@@ -8,14 +8,6 @@ dim TBT00_3_S5_CHANNEL as byte
 declare sub device_store_firmware(data as string)
 
 sub on_sys_init()
-'	if sys.runmode = PL_SYS_MODE_DEBUG and sys.debugmode = PL_SYS_DBG_NET then
-'		if wln.enabled=NO then
-'			if wln.dhcp = 0 then wln.dhcp = 1
-'			wln.boot(0)
-'			wln.autodhcp = YES
-'			wln.autoconnect=YES
-'		end if	
-'	end if
 	boot()
 end sub
 
@@ -28,6 +20,11 @@ end sub
 sub on_sys_timer()
 
 	if config_mode = YES then
+		if device_awake_timer>0 then
+			device_awake_timer=device_awake_timer-1
+		else
+			device_sleep()
+		end if	
 		exit sub
 	end if
 	if enable_sending=YES then	

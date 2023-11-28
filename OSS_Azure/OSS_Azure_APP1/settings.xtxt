@@ -1,4 +1,4 @@
->>CID	R	W	1	0	65535	A	0	Customer ID
+>>CID	E	W	1	0	65535	A	0	Customer ID
 >>FWV	E	S	1	0	20	I	^	F-ware version
 >>MODE	E	B	1	0	1	A	0	Comm mode
 >>WAP	R	S	1	0	32	A	^	Wi-Fi SSID
@@ -10,7 +10,7 @@
 >>PKEY	E	S	1	0	243	A	^	Primary key
 >>EPT	E	W	1	0	65535	A	0	Sampling period (sec)
 >>SPT	E	W	1	1	65535	A	1	Sleep time (min)
->>AWT	E	W	1	1	65535	A	10	Awake time (min)
+>>AWT	E	W	1	1	65535	A	2	Awake time (min)
 >>RCN	E	W	1	1	65535	A	1	Number of Records start to send
 >>UPD	E	B	1	0	255	A	255	Update step
 >>BTAG	E	S	1	2	2	A	~~	BLE nTag ID
@@ -27,6 +27,6 @@
 #define STG_DEBUG_PRINT 1
 #define STG_TIMESTAMP 1
 #define STG_MAX_NUM_SETTINGS 25
-#define STG_RAM_ARRAY_SIZE 124
+#define STG_RAM_ARRAY_SIZE 114
 #define STG_MAX_SETTING_NAME_LEN 4
 #define STG_MAX_SETTING_VALUE_LEN 243

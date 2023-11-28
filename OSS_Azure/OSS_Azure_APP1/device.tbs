@@ -534,7 +534,10 @@ sub device_sleep()
 	daycounts=daycounts+(mincounts/1440)
 	mincounts=mincounts mod 1440
 	turn_sensor3v3_off()
-'	wln.autoconnect = NO
+	'in wln mode, we decide next cycle should connect or not before go to sleep
+	if comm_mode = 0 then
+		wln.autoconnect = sending_record()
+	end if
 	sys.sleep(daycounts, mincounts, seconds)  
 end sub
 

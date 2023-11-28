@@ -4,7 +4,7 @@ platform=WM2000
 src_lib_ver=0_00
 name=OSS_Azure_APP0.tpr
 output=OSS_Azure_APP0.tpc
-debug=on
+debug=off
 defines= /dSTG_DEBUG_PRINT=1
 transport=udp_winpcap
 [address1]

@@ -13,7 +13,6 @@ const FIRMWARE_VERSION="V2.0.5"
 #define TBL_SECTOR_SIZE 512
 #define MQTT_CER_FILE "DigiCert.cer"
 #define HTTP_CER_FILE "DigiCert.cer"
-'#define HTTP_CER_FILE "azurewebsites.cer"
 
 #define MQTT_LARGE_PACKETS 1
 #define HTTP_TX_BUFF 6
@@ -143,7 +142,7 @@ declare interface_ready(MAX_NUM_INTERFACES) as no_yes
 declare current_interface as pl_sock_interfaces
 declare DNS_socket as byte
 declare luis_bt_enabled as boolean
-declare comm_mode as byte
+declare comm_mode as byte '0: WIFI, 1: LTE
 declare TBT00_3_S5_CHANNEL as byte
 declare sensor_channel as byte
 declare pic_channel as byte
@@ -160,7 +159,7 @@ declare CELL__MYPASSWORD as string(16)
 declare sensor_type as byte
 declare sample_timer as word
 declare battery_level as byte
-declare operation_mode as byte
+declare operation_mode as byte '0: always on, 1: low power mode
 
 declare sub device_add_event(byref event_msg as string)
 declare sub connect_to_upgrade_server()
@@ -168,7 +167,7 @@ declare sub connect_to_azure_server()
 declare function mcp23017_line_get2(num as ext_line_name, port as ext_port_name, channel as byte) as enum low_high
 declare sub close_interface_sockets(interface as pl_sock_interfaces)
 declare sub boot()
-
+declare sub device_sleep()
 declare sub init_pic_supervisor()
 declare sub enable_pic_supervisor()
 declare sub disable_pic_supervisor()
