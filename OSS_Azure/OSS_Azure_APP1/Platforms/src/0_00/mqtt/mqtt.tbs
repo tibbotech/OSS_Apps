@@ -539,6 +539,7 @@ sub mqtt_proc_data()
 								#if MQTT_DEBUG_PRINT=1
 									mqtt_debug_print("Notification: topic="+mqtt_proc_data_variables.topic+", NO DATA SENT")
 								#endif
+								callback_mqtt_notif(mqtt_proc_data_variables.topic,"",mqtt_proc_data_variables.remaining_length)
 								mqtt_publish_reply()
 							else	
 								proc_data_state=EN_MQTT_PD_STATES_READING_PAYLOAD_DATA

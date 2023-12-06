@@ -6,7 +6,7 @@ const CELL__SIMCARD_PIN = CELL__QUESTMARK	'<-- CHANGE THIS AS NEEDED
 
 dim DNS_socket as byte
 dim comm_mode as byte '0: WIFI, 1: LTE
-dim enable_sending as no_yes=NO
+dim connect_to_network as no_yes=NO
 dim min_rec_num_to_send as word
 dim config_mode as no_yes=NO
 dim config_bt_name as string(16) = "BT-OSS-APP1"
@@ -64,7 +64,7 @@ sub boot()
     'Fd(flash disk) setup
     '================================================================
     if fd.mount<>PL_FD_STATUS_OK then
-        if fd.formatj(fd.availableflashspace/2,32,100)<>PL_FD_STATUS_OK then
+        if fd.formatj(fd.availableflashspace,32,100)<>PL_FD_STATUS_OK then
             sys.halt
         end if
     
@@ -118,30 +118,17 @@ sub boot()
         sys.halt
     end if
 
-	dim daycounts, mincounts as word
-	dim seconds as byte	
-	rtc.getdata(daycounts,mincounts,seconds)
+	upgrade_init()
+	connect_to_network = need_to_connect()
 
-	if sending_record = YES or operation_mode = 0 or daycounts = 0 then
-		enable_sending=YES
-	else
-		enable_sending=NO
-	end if
-	
 	check_firmware_version()
 	'-----------------------------------------------------------------
 	
     'WM2000 Wi-Fi setup
     '================================================================               
-	
 	comm_mode=val(stg_get("MODE",0))
 	
-	if comm_mode = 0 and daycounts = 0 and wln.autoconnect = NO then
-		wln.autoconnect = YES
-		sys.reboot()
-	end if
-	
-	if enable_sending=YES then
+	if connect_to_network=YES then
 		'DNS setup
 		'================================================================
 		DNS_socket=sock_get("DNS")
@@ -224,11 +211,7 @@ sub boot()
 '	if sys.resettype=PL_SYS_RESET_TYPE_EXTERNAL then
 '		device_add_event("reset due to power loss")		
 '	end if
-	
-    pat.play("B-B-B-",PL_PAT_CANINT)
-	
-	upgrade_init()
-	
+    pat.play("B-B-B-",PL_PAT_CANINT)	
 end sub
 
 sub check_firmware_version()
@@ -261,9 +244,8 @@ sub sensor_init()
 		sample_timer = 4
 	case 2:	'temp_hum_co2
 		sample_timer = 40
-
 	case else:
-	
+		exit sub
 	end select
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	if sensor_channel<4 then

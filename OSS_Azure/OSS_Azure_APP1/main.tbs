@@ -27,7 +27,7 @@ sub on_sys_timer()
 		end if	
 		exit sub
 	end if
-	if enable_sending=YES then	
+	if connect_to_network=YES then	
 		if comm_mode=1 then
 			cell__proc_sys_timer()
 		end if
