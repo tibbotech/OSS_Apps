@@ -53,7 +53,12 @@ sub device_proc_timer()
 			if device_awake_timer>0 then
 				device_awake_timer=device_awake_timer-1
 			else
-				device_sleep()
+				'check if sensor sample has been taken before go to sleep
+				if sample_timer > 0 then
+					device_awake_timer = 1
+				else
+					device_sleep()
+				end if
 			end if
 		end if
 	else
@@ -76,10 +81,13 @@ sub device_proc_timer()
 			case else:
 			end select
 			
-			if connect_to_network = NO and sample_timer = 0 and operation_mode > 0 then
-				device_sleep()
+			'in Low power mode, and not sending cycle, go to sleep after taking sample
+			if operation_mode > 0 then
+				if connect_to_network = NO and sample_timer = 0 then
+					device_sleep()
+				end if
 			else
-				'when no in Low power mode, sample time is same as sleep time
+				'when in Always on mode, sample time is same as sleep time
 				sample_timer = sleep_time*120
 			end if			
 		end if	
