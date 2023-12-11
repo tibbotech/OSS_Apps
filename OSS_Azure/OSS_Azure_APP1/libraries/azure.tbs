@@ -59,7 +59,7 @@ public sub azure_start(byref device_id as string, byref scope_id as string, byre
 	server_bound_message_topic="devices/"+azure_current_device_id+"/messages/events/"
 	device_bound_message_topic="devices/"+azure_current_device_id+"/messages/devicebound/"
 	azure_state=EN_AZURE_NOT_CONNECTED
-	
+	azure_telemetry_ts=""
 	azure_init_flag=AZURE_INIT_SIGNATURE
 	azure_timer=AZURE_CONNECTION_TOUT
 	azure_interface=interface

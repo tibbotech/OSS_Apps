@@ -1199,7 +1199,7 @@ end sub
 		
         START_HANDLER:
 		'Set Socket for UDP connection
-        cell__udp_tx_socknum = sock_get("UDP_TX")
+        cell__udp_tx_socknum = sock_get("UTX")
         sock.num = cell__udp_tx_socknum
         sock.protocol = PL_SOCK_PROTOCOL_UDP
         sock.inconmode = PL_SOCK_INCONMODE_NONE

@@ -524,7 +524,7 @@ end sub
 sub cell__callback_ppp_link_established()
 	
 	if upgrade_state <255 then
-		connect_to_upgrade_server()
+		connect_to_firmware_server()
 	else
 		connect_to_azure_server()
 	end if
@@ -599,10 +599,22 @@ end sub
 sub device_upgrade_start()
 	stg_set("UPD",0,"0")
 	device_add_event("Upgrage start!")
+	azure_send_telemetry()
+	
 	'if running always on mode, start upgarde right away, otherwise start upgrade on next cycle
 	if operation_mode = 0 then
+		'when in Always on mode, send the event before switch to firmware server.
+		dim d as dword = sys.timercountms
+		while sock.txlen > 0 
+			if sys.timercountms < d or sys.timercountms > d+1000 then
+				exit while
+			end if
+		wend
+		if sock.txlen = 0 then
+			azure_on_telemetry_sent()
+		end if
 		upgrade_init()
-		connect_to_upgrade_server()
+		connect_to_firmware_server()
 	end if
 end sub
 
@@ -740,7 +752,7 @@ public sub upgrade_init()
 	
 end sub
 
-public sub connect_to_upgrade_server()
+public sub connect_to_firmware_server()
 	dim url as string
 	
 	mqtt_disconnect()
@@ -906,7 +918,6 @@ sub read_onboard_t_h_sensor()
 	data4=si2c_read(false)
 	si2c_stop()
 	
-
 ' Calculation
 	tmp1=data1*4
 	humidity=tmp1*64+data2

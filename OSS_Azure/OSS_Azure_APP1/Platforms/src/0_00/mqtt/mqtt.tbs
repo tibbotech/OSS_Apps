@@ -100,7 +100,7 @@ sub mqtt_start(target_interface as pl_sock_interfaces, byref server as string, d
 	mqtt_init_flag=MQTT_INIT_SIGNATURE
 	mqtt_state=EN_MQTT_STATES_NOT_CONNECTED
 	mqtt_packet_identifier=0
-	mqtt_sock_num=sock_get("MQTT")
+	mqtt_sock_num=sock_get("MQT")
     mqtt_target_interface=target_interface
 	mqtt_server_port=dst_port
 	mqtt_server_address=server
@@ -286,7 +286,8 @@ sub mqtt_disconnect()
 	dim buf as string = chr(DISCONNECT)+chr(0)
 	mqtt_state=EN_MQTT_STATES_IDLE
 	mqtt_send_data(buf)
-	
+	mqtt_init_flag=0
+	sock_release(mqtt_sock_num)
 end sub
 
 sub mqtt_sub(byref topic as string,qos as en_qos_choices)

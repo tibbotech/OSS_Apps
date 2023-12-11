@@ -72,7 +72,7 @@ sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as strin
 	if comm_mode=0 then
 	
 		if upgrade_state <255 then
-			connect_to_upgrade_server()
+			connect_to_firmware_server()
 		else
 			connect_to_azure_server()
 		end if
