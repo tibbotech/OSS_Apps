@@ -21,6 +21,7 @@ declare sub upgrade_init()
 declare sub sensor_init()
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
+declare modbus_device_id as byte
 
 sub boot()
     'sys.debugmode = PL_SYS_DBG_SERIAL
@@ -73,14 +74,28 @@ sub boot()
         end if
     end if
     '-----------------------------------------------------------------
-	
+	'mcp23017 setup on socket 5
+	'================================================================
+	select case mcp23017_init("TBT00_3_S5", YES, TBT00_3_S5_CLK, TBT00_3_S5_DATA, TBT00_3_S5_CHANNEL)
+	case MCP23017_SELF_TEST_FAIL:
+		sys.debugprint("mcp23017 self test failed!\r\n")
+		sys.halt()
+
+	case MCP23017_NO_SSI_AVAILABLE:
+		sys.debugprint("SSI channel could not be allocated, using bit banging instead.\r\n")
+	end select
+
+	mcp23017_line_out_enable(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,YES,TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
+
 	read_ntag()
 	turn_sensor3v3_on()
+	'-----------------------------------------------------------------	
+	
 	dim bl as string(1) = pic_read("&h02",1)
 	battery_level = asc(bl)
 	if battery_level > 100 then battery_level=0
-	
-	sensor_type = val(stg_get("STPY",0))
+
 	sensor_init()	
 	
 	dim scid as string(2) = pic_read(&h03,2)
@@ -137,10 +152,6 @@ sub boot()
 		'================================================================
 		DNS_socket=sock_get("DNS")
 		dns_start(DNS_socket)
-		'Making a DNS query:
-		'dns_connect(PL_SOCK_INTERFACE_NET, "8.8.4.4",0)
-		'dns_query("google.com")
-		'get the response in callback_dns_answer_acquired
 		'-----------------------------------------------------------------
 	
 		http_start()
@@ -156,26 +167,10 @@ sub boot()
 					sys.reboot
 				end if	
 			end if
-
-			'mcp23017 setup on socket 5
-			'================================================================
-			select case mcp23017_init("TBT00_3_S5", YES, TBT00_3_S5_CLK, TBT00_3_S5_DATA, TBT00_3_S5_CHANNEL)
-			case MCP23017_SELF_TEST_FAIL:
-				sys.debugprint("mcp23017 self test failed!\r\n")
-				sys.halt()
-
-			case MCP23017_NO_SSI_AVAILABLE:
-				sys.debugprint("SSI channel could not be allocated, using bit banging instead.\r\n")
-			end select
-
-			'-----------------------------------------------------------------
-
 			mcp23017_line_out_enable(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,yes,TBT00_3_S5_CHANNEL)
-			mcp23017_line_set(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,HIGH,TBT00_3_S5_CHANNEL)
-
+			mcp23017_line_set(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,HIGH,TBT00_3_S5_CHANNEL)	
 			init_pic_supervisor()
-			enable_pic_supervisor()
-
+			enable_pic_supervisor()	
 			cell__start(CELL__SIMCARD_PIN, CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD)
 		end if
 	end if
@@ -189,7 +184,7 @@ sub boot()
 			if wln.autoconnect<>YES or wln.autodhcp<>YES then	
 				wln.autodhcp=YES
 				wln.autoconnect=YES
-				sys.reboot
+				sys.reboot 
 			end if		
 		
 			sock.num=10
@@ -202,7 +197,6 @@ sub boot()
 			sock.connect()
 		end if	
 	#endif
-
 
 	device_awake_timer=val(stg_get("AWT",0))*120
 	'minimum 1 minute of awaking time
@@ -228,6 +222,12 @@ sub check_firmware_version()
 
 end sub
 
+sub sensor_level_shift_on()
+	io.num=SENSOR_CONTROL_PIN
+    io.enabled = YES
+    io.state = HIGH
+end sub
+
 #if SOCK_DEBUGPRINT
 sub debugprint(byref s as string)
 	dim b as byte=sock.num
@@ -238,19 +238,8 @@ sub debugprint(byref s as string)
 end sub
 #endif
 
-sub sensor_init()
-	dim data1, data2, data3, data4, data5, data6, data7 as byte
-	
-	select case sensor_type
-	case 0: 'temp_hum_legacy
-		sample_timer = 4
-	case 1:	'temp_hum
-		sample_timer = 4
-	case 2:	'temp_hum_co2
-		sample_timer = 40
-	case else:
-		exit sub
-	end select
+sub init_i2c_sensor()
+
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	if sensor_channel<4 then
         ssi.channel=sensor_channel
@@ -272,6 +261,66 @@ sub sensor_init()
         ssi.enabled=YES
     end if
 	
+end sub
+
+sub init_modbus_sensor()
+	'enable modbus voltage
+	mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,HIGH,TBT00_3_S5_CHANNEL)
+
+	sensor_level_shift_on()
+
+	'Modbus RS485 setup on UART 1
+    '================================================================
+	ser.num = MODBUS_UART
+    ser.enabled = NO
+
+	io.num = MODBUS_RTS
+    io.enabled = YES
+    io.state = LOW
+	ser.rtsmap = MODBUS_RTS
+	ser.dircontrol = PL_SER_DCP_LOWFORINPUT
+
+    ser.bits=PL_SER_BB_8
+    ser.flowcontrol=PL_SER_FC_DISABLED
+    ser.baudrate=PL_SER_BAUD_38400 '38400 for the BP02
+    ser.interface=PL_SER_SI_HALFDUPLEX
+    ser.esctype=PL_SER_ET_DISABLED
+    ser.interchardelay=0
+    ser.txbuffrq(1)
+    ser.rxbuffrq(1)
+    sys.buffalloc()
+    ser.enabled = YES
+
+    'Modbus Setup
+    '==================================
+    modbus_initialize()
+    'set these to the interface number you want to use
+	
+	modbus_device_id = val(stg_get("MBID",0))
+end sub
+
+sub sensor_init()
+	sensor_type = val(stg_get("STPY",0))
+	select case sensor_type
+	case 0: 'temp_hum_legacy
+		sample_timer = 4
+		init_i2c_sensor()
+		
+	case 1:	'temp_hum
+		sample_timer = 4
+		init_i2c_sensor()
+		
+	case 2:	'temp_hum_co2
+		sample_timer = 40
+		init_i2c_sensor()
+		
+	case 128,129: 'modbus sensor
+		sample_timer = 4
+		init_modbus_sensor()
+		
+	case else:
+		exit sub
+	end select
 end sub
 
 sub read_ntag()

@@ -1,5 +1,5 @@
 'DEFINES-------------------------------------------------------------
-const FIRMWARE_VERSION="V2.0.5"
+const FIRMWARE_VERSION="V2.0.6"
 
 #define MQTT_DEBUG_PRINT 1
 #define LUIS_CONFIG_FILE "luis.xtxt"
@@ -22,18 +22,27 @@ const FIRMWARE_VERSION="V2.0.5"
 #define FILENUM_MAX_SIGNATURE_LEN 3
 #define FILENUM_MAX_FILES 3
 
+#define MODBUS_TIMEOUT 3000
+
 const MAX_NUM_INTERFACES=4
+
 const FIRMWARE_FILE="firmware"
 const PART_FILE="part"
+
 const SENSOR_CLK_PIN=PL_IO_NUM_7_RX1
 const SENSOR_DAT_PIN=PL_IO_NUM_6
 const SENSOR_ADDR=16
+
 const PIC_RD=1
 const PIC_WR=0
 const PIC_CLK_PIN=PL_IO_NUM_9
 const PIC_DAT_PIN=PL_IO_NUM_4
 const PIC_ADDR=16
- 
+
+const MODBUS_UART = 1
+const MODBUS_RTS = PL_IO_NUM_6
+const SENSOR_CONTROL_PIN = PL_IO_NUM_5 ' this one selects i2c (low) or RS485 (high) functions
+
 const HIH6130_WRITE_ADDR=&h4E
 const HIH6130_READ_ADDR=&h4F
 
@@ -59,10 +68,6 @@ const TBT00_3_S5_DATA = PL_IO_NUM_4
 #define CELL__STATUS_LINENUM	EXT_LINE_7
 #define CELL__STATUS_PORT		EXT_PORT_A
 
-' this sns gate is now controlled by PIC, no longer exists
-'#define SNS_GATE_LINENUM		EXT_LINE_1
-'#define SNS_GATE_PORT			EXT_PORT_A
-' 
 
 #define SC_DTR_LINENUM			EXT_LINE_6
 #define SC_DTR_PORT				EXT_PORT_A

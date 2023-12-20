@@ -1,24 +1,24 @@
 >>CID	E	W	1	0	65535	A	0	Customer ID
 >>FWV	E	S	1	0	20	I	^	F-ware version
 >>MODE	E	B	1	0	1	A	0	Comm mode
->>WAP	R	S	1	0	32	A	^	Wi-Fi SSID
->>WPW	R	S	1	0	64	A	^	Wi-Fi Password
+>>WAP	R	S	1	0	32	I	^	Wi-Fi SSID
+>>WPW	R	S	1	0	64	I	^	Wi-Fi Password
 >>DLPT	E	S	1	0	64	A	^	Download point
->>DPSS	E	S	1	0	63	A	g2-cert-dps.azure-devices-provisioning.net	DPS server
->>SCID	E	S	1	0	16	A	^	Scope ID
->>DVID	E	S	1	0	16	A	^	Device ID
->>PKEY	E	S	1	0	243	A	^	Primary key
+>>DPSS	E	S	1	0	63	I	g2-cert-dps.azure-devices-provisioning.net	DPS server
+>>SCID	E	S	1	0	16	I	^	Scope ID
+>>DVID	E	S	1	0	16	I	^	Device ID
+>>PKEY	E	S	1	0	243	I	^	Primary key
 >>EPT	E	W	1	0	65535	A	0	Sampling period (sec)
 >>SPT	E	W	1	1	65535	A	1	Sleep time (min)
 >>AWT	E	W	1	1	65535	A	2	Awake time (min)
 >>RCN	E	W	1	1	65535	A	1	Number of Records start to send
 >>UPD	E	B	1	0	255	A	255	Update step
 >>BTAG	E	S	1	2	2	A	~~	BLE nTag ID
->>GAN	E	S	1	0	24	A	internet.iot	LTE, AP name
->>GUR	E	S	1	0	16	A	myusername@realm	LTE, User name
->>GPW	E	S	1	0	16	A	^	LTE, Password
+>>GAN	E	S	1	0	24	I	internet.iot	LTE, AP name
+>>GUR	E	S	1	0	16	I	myusername@realm	LTE, User name
+>>GPW	E	S	1	0	16	I	^	LTE, Password
 >>STPY	E	B	1	0	255	A	0	Sensor Type
->>SADR	E	B	1	0	255	A	0	Sensor Address
+>>MBID	E	B	1	0	255	A	0	Modbus device ID
 >>OPMD	E	B	1	0	1	A	^	Operation Mode
 >>TZ	E	S	1	0	64	A	^	Time Zone
 >>DVNT	E	S	1	0	64	A	^	Device Note

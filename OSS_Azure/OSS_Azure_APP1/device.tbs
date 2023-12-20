@@ -22,6 +22,8 @@ dim part_num as byte = 255
 dim battery_level as byte = 0
 dim property_modified as no_yes = YES
 dim upgrade_trigger as byte = 0
+dim sensor_telemetry_ts as string(36) = ""
+dim modbus_device_id as byte
 
 declare sub time_to_str(byref ts_str as string(20),	
 	byref time_daycount as word,
@@ -39,7 +41,7 @@ declare sub update_stg_ts_and_send_azure(byref stg_name as string)
 declare sub update_server_properties()
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
-
+declare sub read_modbus_bp02()
 
 sub device_proc_timer()	
 	'deduct device_awake_timer only when device is not doing upgrade and in Low power mode
@@ -78,6 +80,8 @@ sub device_proc_timer()
 				read_onboard_t_h_sensor()	
 			case 2:
 				read_onboard_t_h_co2_sensor()
+			case 128:
+				read_modbus_bp02()
 			case else:
 			end select
 			
@@ -333,6 +337,14 @@ sub callback_tbl_modified(byref file_name as string, modified_operation as en_tb
     
 end sub
 
+sub callback_azure_rtc_correction(daycounts as word, mincounts as word, seconds as byte)
+	'if rtc was reseted, take another sample with corrected timestample
+	if daycounts = 0 and sample_timer = 0 then
+		sample_timer = 1
+	end if
+end sub
+
+
 sub callback_azure_command_triggered(byref command as string, byref param as string, rid as string)
 
 '    select case command
@@ -441,74 +453,57 @@ end sub
 
 sub cell__callback_modem_restart_failed()
 end sub
-        
 
 sub cell__callback_modem_on()
 end sub
-        
 
 sub cell__callback_modem_off()
 end sub
-        
 
 sub cell__callback_insufficient_buffer_pages()
 end sub
-        
 
 sub cell__callback_at_reply()
 end sub
-        
 
 sub cell__callback_at_reply_contains_error()
 end sub
 
 sub cell__callback_ppp_fcs_is_bad()
 end sub
-                
 
 sub cell__callback_ppp_missing_address_field()
 end sub
-                
 
 sub cell__callback_ppp_missing_control_field()
 end sub
-                
 
 sub cell__callback_ppp_lcp_msg_length_not_matching()
 end sub
-                
 
 sub cell__callback_ppp_lcp_successful()
 end sub
-                
 
 sub cell__callback_ppp_lcp_disreq_from_peer()
 end sub
-                
 
 sub cell__callback_ppp_lcp_disreq_from_sender()
 end sub
-                
 
 sub cell__callback_ppp_retry_exceeded()
 end sub
-                
 
 sub cell__callback_ppp_pap_successful()
 end sub
-                
 
 sub cell__callback_ppp_pap_nego_failed()
 end sub
-                
 
 sub cell__callback_ppp_ipcp_successful()
-end sub
-                
-                
+end sub     
+
 sub cell__callback_ppp_ipcp_disreq_from_peer()
 end sub
-                
 
 sub cell__callback_ppp_ipcp_disreq_from_sender()
 end sub
@@ -529,11 +524,9 @@ sub cell__callback_ppp_link_established()
 		connect_to_azure_server()
 	end if
 end sub
-                
 
 sub cell__callback_after_switching_from_DATA_to_CMD()
 end sub
-                
 
 sub cell__callback_after_switching_from_CMD_to_DATA()
 end sub
@@ -798,6 +791,7 @@ sub read_onboard_t_h_co2_sensor()
 	dim humd,temp,str_co2,error,ts as string(36)
 	dim daycounts, mincounts as word
 	dim seconds as byte
+	
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	si2c_get(sensor_channel)
 	
@@ -859,7 +853,6 @@ sub read_onboard_t_h_co2_sensor()
 
 	temperature=temperature/16383
 	temperature=temperature*165
-	'temperature=temperature-40
 	
 	co2=data5
 	co2=co2*256+data6
@@ -879,12 +872,11 @@ sub read_onboard_t_h_co2_sensor()
 		add_telemetry("temperature",temp,ts)
 		add_telemetry("humidity",humd,ts)
 		add_telemetry("co2",str_co2,ts)
-		add_telemetry("BAT_LVL",str(battery_level),ts)
+		'in power saving mode log battery level
+		if operation_mode = 1 then
+			add_telemetry("BAT_LVL",str(battery_level),ts)
+		end if
 		
-'		tbl_result=tbl_field_sg("time",ts,EN_TBL_SET)
-'		tbl_result=tbl_field_sg("type","error",EN_TBL_SET)
-'		tbl_result=tbl_field_sg("value",error,EN_TBL_SET)
-'		tbl_result=tbl_record_add("")
 		sys.debugprint(temp+"C "+humd+"% "+str_co2+chr(10)+chr(13))
 	else
 		sample_timer=4
@@ -898,6 +890,7 @@ sub read_onboard_t_h_sensor()
 	dim humd,temp,ts as string(36)
 	dim daycounts, mincounts as word
 	dim seconds as byte
+	
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	si2c_get(sensor_channel)
 	
@@ -956,13 +949,28 @@ sub read_onboard_t_h_sensor()
 		
 		add_telemetry("temperature",temp,ts)
 		add_telemetry("humidity",humd,ts)
-		add_telemetry("BAT_LVL",str(battery_level),ts)
-		
+		'in power saving mode log battery level
+		if operation_mode = 1 then
+			add_telemetry("BAT_LVL",str(battery_level),ts)
+		end if
 		sys.debugprint(temp+"C "+humd+"% "+chr(10)+chr(13))
 	else
 		sample_timer=4
 	end if	
 end sub
+
+sub read_modbus_bp02()
+	dim daycounts, mincounts as word
+	dim seconds as byte
+	
+	rtc.getdata(daycounts,mincounts,seconds)
+	time_to_str(sensor_telemetry_ts,daycounts,mincounts,seconds)
+	sensor_telemetry_ts=sensor_telemetry_ts+".000Z"
+	modbus_master_request(modbus_device_id, ReadInputRegisters, 400, 1, "", MODBUS_UART, modbus_RTU) 'temperature
+	modbus_master_request(modbus_device_id, ReadInputRegisters, 404, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+
+end sub
+
 
 ' This function is to only read the onboard sensor directly connected to the ACSIP without an MCU/PIC in the middle
 ' This type of sensor board and thus this function is going to be depreciated soon.
@@ -1031,8 +1039,10 @@ sub read_onboard_hum_temp_legacy()
 
 		add_telemetry("temperature",temp,ts)
 		add_telemetry("humidity",humd,ts)
-		add_telemetry("BAT_LVL",str(battery_level),ts)
-		
+		'in power saving mode log battery level
+		if operation_mode = 1 then
+			add_telemetry("BAT_LVL",str(battery_level),ts)
+		end if
 		sys.debugprint(temp+"C "+humd+"% "+chr(10)+chr(13))
 	else
 		sample_timer=4
@@ -1102,9 +1112,17 @@ function need_to_connect() as no_yes
 	end if
 	
 	select case sensor_type
-	case 0,1: number_of_fld = 3
-	case 2: number_of_fld = 4
-	case else:
+	case 0,1: 
+		number_of_fld = 2
+		'in power saving mode log battery level
+		if operation_mode = 1 then number_of_fld = number_of_fld+1
+	case 2: 
+		number_of_fld = 3
+		'in power saving mode log battery level
+		if operation_mode = 1 then number_of_fld = number_of_fld+1
+	case 128:
+		number_of_fld = 2
+	case else:	
 	end select
 	
     tbl_select("Azure","Azure")
@@ -1153,8 +1171,40 @@ function modbus_set_holding_register(address as word, data as string) as boolean
 	
 end function
 
+sub callback_modubus_timeout(device_id as byte)
+	sample_timer = 4
+end sub
+
 sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref reply as string)
+	dim bytes as byte(255) = reply
+	dim light, temp as string(36)
+	dim tbl_result as en_tbl_status_codes	
 	
+	if request_item.device_id = modbus_device_id then
+		if request_item.start_register=400 then
+			dim BP_02_Temperature_val as word = modbus_read_word(bytes,0)
+			temp=str(BP_02_Temperature_val)
+			temp=left(temp,len(temp)-1)+"."+right(temp,1)
+			sys.debugprint(temp+" C\n")
+			tbl_result=tbl_select("Azure","Azure")
+			tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
+			tbl_result=tbl_field_sg("type","temperature",EN_TBL_SET)
+			tbl_result=tbl_field_sg("value",temp,EN_TBL_SET)				
+			tbl_result=tbl_record_add("")	
+		end if
+		
+		if request_item.start_register=404 then
+			dim BP_02_Humidity_val as word = modbus_read_word(bytes,0)
+			temp=str(BP_02_Humidity_val)
+			temp=left(temp,len(temp)-1)+"."+right(temp,1)
+			sys.debugprint(temp+" RH\n")
+			tbl_result=tbl_select("Azure","Azure")
+			tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
+			tbl_result=tbl_field_sg("type","humidity",EN_TBL_SET)
+			tbl_result=tbl_field_sg("value",temp,EN_TBL_SET)				
+			tbl_result=tbl_record_add("")	
+		end if
+	end if
 end sub
 
 sub update_server_properties()

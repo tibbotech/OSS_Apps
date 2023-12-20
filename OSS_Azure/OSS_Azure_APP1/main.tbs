@@ -38,6 +38,9 @@ sub on_sys_timer()
 			azure_proc_timer()		
 		end if
 	end if
+	if sensor_type>127 then
+		modbus_proc_timer()
+	end if
 	device_proc_timer()
 end sub
 
@@ -106,6 +109,11 @@ sub on_bt_data_arrival()
 end sub
 
 sub on_ser_data_arrival()
+    if ser.num=MODBUS_UART then
+        'modbus master data
+        modbus_master_receive(ser.getdata(255),modbus_RTU)
+    end if
+	
 	cell__proc_on_ser_data_arrival()
 end sub
 
