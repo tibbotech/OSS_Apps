@@ -564,6 +564,10 @@ sub device_sleep()
 	daycounts=daycounts+(mincounts/1440)
 	mincounts=mincounts mod 1440
 	turn_sensor3v3_off()
+	
+	if sensor_type > 127 then
+		mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
+	end if
 	'in wln mode, we decide next cycle should connect or not before go to sleep
 	if comm_mode = 0 then
 		wln.autoconnect = need_to_connect()
