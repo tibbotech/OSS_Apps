@@ -8,14 +8,15 @@ const AZURE_TOPIC_TWIN="$iothub/twin/"
 const AZURE_TOPIC_STREAMS="$iothub/streams/POST/"
 const AZURE_TOPIC_RESULT="$iothub/twin/res/"
 const AZURE_API_VERSION="?api-version=2019-03-31"
-const AZURE_MQTT_API_VERSION="?api-version=2018-06-30"
+'const AZURE_MQTT_API_VERSION="?api-version=2018-06-30"
+const AZURE_MQTT_API_VERSION="?api-version=2021-04-12"
 const TOPIC_TIMESTAMP="iothub-creation-time-utc="
 const AZURE_CONNECTION_TOUT=120
 
 dim azure_state as en_azure_states=EN_AZURE_NOT_INITIALIZED
 dim azure_rid as dword=0
 dim device_bound_message_topic as string(64)
-dim server_bound_message_topic as string
+dim server_bound_message_topic as string(64)
 dim azure_init_flag as word = 0
 dim azure_dps_sock as byte = 255
 dim azure_current_dps_server as string(64)=""
@@ -24,9 +25,9 @@ dim azure_current_scope_id as string(16)
 dim azure_current_device_id as string(32)
 dim azure_current_primary_key as string(64)
 dim azure_sas_token as string
-dim azure_dps_authorization as string
-dim azure_current_json_key as string
-dim azure_current_json_value as string
+dim azure_dps_authorization as string(64)
+dim azure_current_json_key as string(64)
+dim azure_current_json_value as string(64)
 dim azure_http_buf as string
 dim azure_assigned_status as boolean
 
@@ -41,6 +42,7 @@ declare function azure_generate_sas_token(byref resourceUri as string, byref sig
 declare sub azure_debugprint(byref print_data as string)
 declare sub azure_dps_device_provisioning()
 declare sub azure_http_reset()
+declare sub azure_mqtt_start()
 
 public sub azure_start(byref device_id as string, byref scope_id as string, byref dps_url as string, byref symmetricKey as string, interface as pl_sock_interfaces)
 
@@ -63,6 +65,7 @@ public sub azure_start(byref device_id as string, byref scope_id as string, byre
 	azure_init_flag=AZURE_INIT_SIGNATURE
 	azure_timer=AZURE_CONNECTION_TOUT
 	azure_interface=interface
+	
 end sub
 
 public sub azure_on_connected()
@@ -74,14 +77,14 @@ public sub azure_on_connected()
 		exit sub
 	end if
 	
-	mqtt_sub(device_bound_message_topic+"#",QOS_AT_MOST_ONCE)
-	mqtt_sub(AZURE_TOPIC_METHOD+"#",QOS_AT_MOST_ONCE)
-	mqtt_sub(AZURE_TOPIC_RESULT+"#",QOS_AT_MOST_ONCE)
-	mqtt_sub(AZURE_TOPIC_PROPERTY_DESIRED+"#",QOS_AT_MOST_ONCE)
-	mqtt_sub(AZURE_TOPIC_STREAMS+"#",QOS_AT_MOST_ONCE)
-	
+	mqtt_sub(device_bound_message_topic+"#",QOS_AT_LEAST_ONCE)
+	mqtt_sub(AZURE_TOPIC_METHOD+"#",QOS_AT_LEAST_ONCE)
+	mqtt_sub(AZURE_TOPIC_RESULT+"#",QOS_AT_LEAST_ONCE)
+	mqtt_sub(AZURE_TOPIC_PROPERTY_DESIRED+"#",QOS_AT_LEAST_ONCE)
+	mqtt_sub(AZURE_TOPIC_STREAMS+"#",QOS_AT_LEAST_ONCE)
+
 	azure_rid = azure_rid+1
-	mqtt_publish(AZURE_TOPIC_TWIN+"GET/?$rid="+str(azure_rid),"{}",QOS_AT_MOST_ONCE)  
+	mqtt_publish(AZURE_TOPIC_TWIN+"GET/?$rid="+str(azure_rid),"{}",QOS_AT_LEAST_ONCE)  
 	
 	#if AZURE_DEBUG_PRINT
 		azure_debugprint("Server connected.")
@@ -102,6 +105,7 @@ public sub azure_on_disconnected()
 		azure_debugprint("Disconnected from server.")
 	#endif
 	
+	azure_state=EN_AZURE_NOT_CONNECTED
 	azure_telemetry_ts=""
 	callback_azure_on_disconnected()
 end sub
@@ -115,19 +119,32 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string)
 		exit sub
 	end if
 	
-	dim topic_len as byte=len(AZURE_TOPIC_METHOD)
 	dim pos1, pos2, pos3 as byte=0
 	dim item_name as string
 	dim value as string
 	dim s as string
-	dim rid as string
+	dim rid as string = 0
 	dim c as byte=0
 	
+	'normal command
 	if instr(1,topic,AZURE_TOPIC_METHOD,1)>0 then
+		dim topic_len as byte=len(AZURE_TOPIC_METHOD)
 		pos1=instr(topic_len+1,topic,"/",1)
 		item_name=mid(topic,topic_len+1,pos1-topic_len-1)
 		pos1=instr(topic_len+1,topic,"$rid=",1)
 		rid=right(topic, len(topic)-pos1-4)
+		callback_azure_command_triggered(item_name,data,rid)
+		#if AZURE_DEBUG_PRINT
+			azure_debugprint("Command: "+item_name+" Data: "+data)
+		#endif				
+		exit sub
+	end if
+	
+	'offline command method-name=DEVMIG
+	if instr(1,topic,device_bound_message_topic,1) then
+		dim topic_len as byte=len(topic)
+		pos1=instr(1,topic,"method-name",1)
+		item_name=right(topic,topic_len-pos1-len("method-name"))
 		callback_azure_command_triggered(item_name,data,rid)
 		#if AZURE_DEBUG_PRINT
 			azure_debugprint("Command: "+item_name+" Data: "+data)
@@ -227,7 +244,15 @@ public sub azure_proc_timer()
 	case EN_AZURE_NOT_INITIALIZED:
 		exit sub
 	case EN_AZURE_NOT_CONNECTED:
-		azure_device_lookup()
+		dim w as word
+		rtc.getdata(w,0,0)	'check if rtc has been reset.
+		callback_azure_get_assigned_hub(azure_assigned_hub)
+		if azure_assigned_hub <>"" and w<>0 then
+			azure_mqtt_start()
+			azure_state = EN_AZURE_DEVICE_LOOKUP
+		else
+			azure_device_lookup()
+		end if
 	case EN_AZURE_DEVICE_LOOKUP:
 		if azure_timer >0 then
 			azure_timer=azure_timer-1
@@ -316,11 +341,10 @@ public sub azure_send_telemetry()
 	while same_ts = true
 		tbl_select("Azure","Azure")
 		if tbl_record_read_active(rec_num)=EN_TBL_STATUS_OK then
-			dim record_type, record_value as string(36)
+			dim record_type, record_value as string(64)
 			tbl_field_sg("time",ts,EN_TBL_GET)
 			tbl_field_sg("type", record_type,EN_TBL_GET)
 			tbl_field_sg("value",record_value ,EN_TBL_GET)	
-			'tbl_record_delete(1)	
 			json=azure_update_json(json,record_type,record_value)
 		
 			dim next_ts as string
@@ -483,6 +507,10 @@ sub azure_json_callback(byref key as string, byref value as string)
 		if key = "status" and value = "assigned" then
 			azure_assigned_status=true
 		end if
+		if key = "errorCode" then
+			callback_azure_provision_failed()
+			azure_assigned_status=false
+		end if
 	end select
 end sub
 
@@ -541,6 +569,7 @@ sub azure_http_request_complete()
 				azure_state=EN_AZURE_NOT_PROVISIONED
 			end if
 			'if device is already registered, skip provisioning
+			callback_azure_get_assigned_hub(azure_assigned_hub)
 			if azure_assigned_hub<>"" and azure_assigned_status<>false then
 				azure_mqtt_start()
 			end if	
@@ -590,7 +619,6 @@ function azure_generate_sas_token(byref resourceUri as string, byref signingKey 
 	hmac256(key,message,result)
 	sock.tlsdeinit()
 	
-
 	for i=0 to len(result)/2-1
 		ch=chr(val("&h"+mid(result,i*2+1,2)))
 		s=s+ch

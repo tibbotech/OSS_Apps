@@ -6,12 +6,17 @@
 	#define HTTP_TX_BUFF 2
 #endif
 
+#ifndef HTTP_TLS_BUFF_PAGES
+	#define HTTP_TLS_BUFF_PAGES 20
+#endif
+
+
 #ifndef HTTP_RX_BUFF
 	#define HTTP_RX_BUFF 2
 #endif
 
 #ifndef HTTP_TIMEOUT 'in half seconds
-	#define HTTP_TIMEOUT 60
+	#define HTTP_TIMEOUT 120
 #endif
 
 

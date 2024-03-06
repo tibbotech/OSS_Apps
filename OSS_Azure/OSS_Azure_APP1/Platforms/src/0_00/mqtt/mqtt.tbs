@@ -185,7 +185,7 @@ sub mqtt_send_login()
 		buf=chr(CONNECT)+mqtt_build_remaining_length(len(buf)) + buf
 		mqtt_send_data(buf)
 	else
-		buf=chr(&h0)+chr(len(MQTT_PROTOCOL))+MQTT_PROTOCOL+chr(MQTT_LEVEL)+chr(&hc2)+chr(0)+chr(&h3c)
+		buf=chr(&h0)+chr(len(MQTT_PROTOCOL))+MQTT_PROTOCOL+chr(MQTT_LEVEL)+chr(&hc0)+chr(0)+chr(&h3c)
 		size=size+len(buf)
 		client_id=chr(0)+chr(len(mqtt_client_id))+mqtt_client_id 
 		size=size+len(client_id)
@@ -224,7 +224,7 @@ sub mqtt_connect_socket()
 		#endif
 	end if
 	sock.num=mqtt_sock_num
-	sock.targetip=mqtt_server_ip	
+	sock.targetip=mqtt_server_ip
 	sock.connect()
 	mqtt_state=EN_MQTT_STATES_CONNECTING
 	mqtt_connection_counter=MQTT_CONNECTION_TIMER*2
@@ -284,9 +284,12 @@ sub mqtt_disconnect()
 	
 	dim current_sock as byte = sock.num
 	dim buf as string = chr(DISCONNECT)+chr(0)
-	mqtt_state=EN_MQTT_STATES_IDLE
 	mqtt_send_data(buf)
+	mqtt_state=EN_MQTT_STATES_IDLE
+	mqtt_user = ""
 	mqtt_init_flag=0
+	sock.num=mqtt_sock_num	
+	sock.close()	
 	sock_release(mqtt_sock_num)
 end sub
 
@@ -654,7 +657,7 @@ sub mqtt_send_data(data as string)
 				sock.setdata(left(data,tx_free))
 				data=right(data,len(data)-tx_free)
 				length=length-tx_free
-			end if		
+			end if
 		end if			
 		sock.send
 		tmr=sys.timercountms

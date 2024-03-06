@@ -72,7 +72,7 @@ sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as strin
 		sock.inconenabledmaster=YES 
 	end if
  
-	if comm_mode=0 then
+	if config_mode=NO and comm_mode=0 then
 	
 		if upgrade_state <255 then
 			connect_to_firmware_server()

@@ -149,8 +149,9 @@ sub si2c_start()
 	io.num = si2c_scl(si2c_num)
 	io.state = HIGH
 	io.enabled = NO
-
-	while (si2c_is_busy(si2c_num))
+	dim d as dword
+	d = sys.timercountms+1500
+	while (si2c_is_busy(si2c_num)) and sys.timercountms < d
 	wend
 	
 	io.num=si2c_scl(si2c_num)
