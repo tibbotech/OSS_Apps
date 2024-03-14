@@ -354,7 +354,10 @@ sub callback_azure_command_triggered(byref command as string, byref param as str
 		stg_set("DLPT",0,param)
 		upgrade_trigger = 1
 	case "RSTNTGPW":
-	
+		pic_write(&hA3,"\x77")
+		stg_set("NWPR",0,"1")
+		device_add_event("Password Recovery Requested.")
+		
 	case "DEVMIG":
 		new_pkey = get_json_value(param,"PKEY")
 		if right(new_pkey,1) = "=" then
@@ -835,7 +838,7 @@ sub read_onboard_t_h_co2_sensor()
 	data3=si2c_read(true)
 	data4=si2c_read(false)
 	si2c_stop()
-	
+	 
 	'fetch CO2 data
 
 	si2c_start()
@@ -984,7 +987,7 @@ sub read_onboard_t_h_sensor()
 end sub
 
 sub read_modbus_bp02()
-	dim daycounts, mincounts as word
+	dim daycounts, mincounts as word 
 	dim seconds as byte
 	
 	rtc.getdata(daycounts,mincounts,seconds)
@@ -1248,7 +1251,7 @@ end sub
 public function turn_sensor3v3_on() as boolean
 	pic_write(&hA0,"\x77")
 	delay_ms(5)
-	if (pic_read(&hA0,1)="\x77") then
+	if pic_read(&hA0,1)="\x77" then
 		turn_sensor3v3_on=true
 	else
 		turn_sensor3v3_on=false
@@ -1258,7 +1261,7 @@ end function
 public function turn_sensor3v3_off() as boolean
 	pic_write(&hA0,"\x00")
 	delay_ms(5)
-	if (pic_read(&hA0,1)="\x00") then
+	if pic_read(&hA0,1)="\x00" then
 		turn_sensor3v3_off=true
 	else
 		turn_sensor3v3_off=false

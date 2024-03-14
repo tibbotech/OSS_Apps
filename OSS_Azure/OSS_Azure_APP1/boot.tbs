@@ -209,7 +209,12 @@ sub boot()
 '	if sys.resettype=PL_SYS_RESET_TYPE_EXTERNAL then
 '		device_add_event("reset due to power loss")		
 '	end if
-    pat.play("B-B-B-",PL_PAT_CANINT)	
+    pat.play("B-B-B-",PL_PAT_CANINT)
+	
+	if pic_read(&hA3,1) = "\x00" and stg_get("NWPR",0) = "1" then
+		device_add_event("Password Recovery Success.")
+		stg_set("NWPR",0,"0")
+	end if
 end sub
 
 sub check_firmware_version()
