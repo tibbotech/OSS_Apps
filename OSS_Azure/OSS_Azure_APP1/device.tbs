@@ -355,8 +355,11 @@ sub callback_azure_command_triggered(byref command as string, byref param as str
 		upgrade_trigger = 1
 	case "RSTNTGPW":
 		pic_write(&hA3,"\x77")
-		stg_set("NWPR",0,"1")
-		device_add_event("Password Recovery Requested.")
+		delay_ms(5)
+		if pic_read(&hA3,1)="\x77" then
+			stg_set("NWPR",0,"1")
+			device_add_event("Password Recovery Requested.")
+		end if
 		
 	case "DEVMIG":
 		new_pkey = get_json_value(param,"PKEY")
