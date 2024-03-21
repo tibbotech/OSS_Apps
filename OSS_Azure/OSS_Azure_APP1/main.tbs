@@ -48,7 +48,6 @@ sub on_sock_event(newstate as pl_sock_state,newstatesimple as pl_sock_state_simp
 
     http_sock_state_update(newstatesimple)
 	mqtt_sock_event(newstate, newstatesimple)
-
 end sub
 
 sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as string(16), gateway_ip as string(16), netmask as string(16), lease_time as dword)
@@ -70,10 +69,13 @@ sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as strin
 		if gateway_ip<>"" then wln.gatewayip=gateway_ip
 		if netmask<>"" then wln.netmask=netmask
 		sock.inconenabledmaster=YES 
+		
+		stg_set("IP",0,ip)
+		stg_set("GI",0,gateway_ip)
+		stg_set("NM",0,netmask)
 	end if
  
 	if config_mode=NO and comm_mode=0 then
-	
 		if upgrade_state <255 then
 			connect_to_firmware_server()
 		else
@@ -126,5 +128,19 @@ function mcp23017_line_get2(num as ext_line_name, port as ext_port_name, channel
 end function
 
 sub on_wln_event(wln_event as enum pl_wln_events)
-	' TODO: place "on_wln_event" event handler code here...
+
+	'if dhcp is disabled, assign stored ip, and establish connection.
+	if wln_event = PL_WLN_EVENT_ASSOCIATED and wln.autodhcp = NO then
+		wln.ip = stg_get("IP",0)
+		wln.gatewayip = stg_get("GI",0)
+		wln.netmask = stg_get("NM",0)
+		
+		if config_mode=NO and comm_mode=0 then
+			if upgrade_state <255 then
+				connect_to_firmware_server()
+			else
+				connect_to_azure_server()
+			end if
+		end if	
+	end if
 end sub

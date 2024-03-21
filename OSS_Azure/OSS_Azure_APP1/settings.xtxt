@@ -3,6 +3,10 @@
 >>MODE	E	B	1	0	1	A	0	Comm mode
 >>WAP	R	S	1	0	32	I	^	Wi-Fi SSID
 >>WPW	R	S	1	0	64	I	^	Wi-Fi Password
+>>DH	R	B	1	0	1	A	^	Wi-Fi, DHCP
+>>IP	E	D	1	4	4	A	1.0.0.1	Wi-Fi, IP
+>>GI	E	D	1	4	4	A	127.0.0.1	Wi-Fi, gateway
+>>NM	E	D	1	4	4	A	0.0.0.0	Wi-Fi, netmask
 >>DLPT	E	S	1	0	128	A	^	Download point
 >>DPSS	E	S	1	0	63	I	g2-cert-dps.azure-devices-provisioning.net	DPS server
 >>SCID	E	S	1	0	16	I	^	Scope ID
@@ -29,7 +33,7 @@
 #define STG_DESCRIPTOR_FILE "settings.xtxt"
 #define STG_DEBUG_PRINT 1
 #define STG_TIMESTAMP 1
-#define STG_MAX_NUM_SETTINGS 28
-#define STG_RAM_ARRAY_SIZE 123
+#define STG_MAX_NUM_SETTINGS 32
+#define STG_RAM_ARRAY_SIZE 132
 #define STG_MAX_SETTING_NAME_LEN 4
 #define STG_MAX_SETTING_VALUE_LEN 128
