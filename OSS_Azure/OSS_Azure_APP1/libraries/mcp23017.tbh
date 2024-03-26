@@ -64,5 +64,7 @@ declare function mcp23017_port_get(byref data as byte, port as ext_port_name, ch
 'Reads the current state of all port lines. Port state is returned through the data argument.
 'The function will return NG if the execution fails.
 
-declare sub pic_set_reset(rv as low_high)
-declare sub pic_do_reset()
+
+'Handled by PIC_LVP library.
+'declare sub pic_set_reset(rv as low_high)
+'declare sub pic_do_reset()

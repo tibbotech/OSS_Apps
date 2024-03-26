@@ -1,6 +1,6 @@
 'DEFINES-------------------------------------------------------------
-const FIRMWARE_VERSION="V2.0.6"
-
+const FIRMWARE_VERSION="V2.0.7"
+const OSS_FW_VER = "011"
 #define MQTT_DEBUG_PRINT 1
 #define LUIS_CONFIG_FILE "luis.xtxt"
 #define LUIS_DEBUG_PRINT 0
@@ -13,6 +13,8 @@ const FIRMWARE_VERSION="V2.0.6"
 #define TBL_SECTOR_SIZE 512
 #define MQTT_CER_FILE "DigiCert.cer"
 #define HTTP_CER_FILE "DigiCert.cer"
+#define OSS_PIC_FILE "OSS_V011.hex"
+#define PIC_LVP_TARGET_TYPE PIC_16LF18345
 
 #define MQTT_LARGE_PACKETS 1
 #define HTTP_TX_BUFF 6
@@ -79,6 +81,9 @@ const TBT00_3_S5_DATA = PL_IO_NUM_4
 #define EXT_MCLR_PORT			EXT_PORT_B
 #define PMU_INHIBIT_LINE		EXT_LINE_5
 #define PMU_INHIBIT_PORT		EXT_PORT_B
+
+#define LVP_ENABLE_LINE			EXT_LINE_7
+#define LVP_ENABLE_PORT			EXT_PORT_B
 
 'MACROS--------------------------------------------------------------
 declare cell__shdn_setto_off as low_high
@@ -182,7 +187,10 @@ declare function pic_read(addr as byte, length as byte) as string
 declare sub read_ntag()
 declare function need_to_connect() as no_yes
 declare sub upgrade_init()
-
+declare sub delay_ms(ms as word)
+declare sub enter_LVP_mode()
+declare sub exit_LVP_mode()
+declare sub check_and_upgard_pic()
 #if SOCK_DEBUGPRINT
 declare sub debugprint(byref s as string)
 #endif

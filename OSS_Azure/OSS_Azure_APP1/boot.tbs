@@ -19,6 +19,8 @@ dim operation_mode as byte '0: always on, 1: low power mode
 declare sub check_firmware_version()
 declare sub upgrade_init()
 declare sub sensor_init()
+declare sub pic_init()
+
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
 declare modbus_device_id as byte
@@ -33,7 +35,7 @@ sub boot()
 	
     if stg_start_no_init()<>EN_STG_STATUS_OK then 
         pat.play("R-R-~",PL_PAT_CANINT)
-        sys.halt
+        if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
     end if
 
     stg_init_code=stg_check_all(stg_name)
@@ -66,33 +68,36 @@ sub boot()
     '================================================================
     if fd.mount<>PL_FD_STATUS_OK then
         if fd.formatj(fd.availableflashspace,32,100)<>PL_FD_STATUS_OK then
-            sys.halt
+            if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
         end if
     
         if fd.mount<>PL_FD_STATUS_OK then
-            sys.halt
+            if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
         end if
     end if
+	
     '-----------------------------------------------------------------
 	'mcp23017 setup on socket 5
 	'================================================================
 	select case mcp23017_init("TBT00_3_S5", YES, TBT00_3_S5_CLK, TBT00_3_S5_DATA, TBT00_3_S5_CHANNEL)
 	case MCP23017_SELF_TEST_FAIL:
 		sys.debugprint("mcp23017 self test failed!\r\n")
-		sys.halt()
+		if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
 
 	case MCP23017_NO_SSI_AVAILABLE:
 		sys.debugprint("SSI channel could not be allocated, using bit banging instead.\r\n")
 	end select
-
+	
+	pic_init()
+	check_and_upgard_pic()
+	
 	mcp23017_line_out_enable(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,YES,TBT00_3_S5_CHANNEL)
 	mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
-
 	read_ntag()
 	turn_sensor3v3_on()
 	'-----------------------------------------------------------------	
 	
-	dim bl as string(1) = pic_read("&h02",1)
+	dim bl as string(1) = pic_read(&h02,1)
 	battery_level = asc(bl)
 	if battery_level > 100 then battery_level=0
 
@@ -130,7 +135,7 @@ sub boot()
     'Tables setup
     '================================================================
     if tbl_start()<>EN_TBL_STATUS_OK then
-        sys.halt
+        if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
     end if
 
 	upgrade_init()
@@ -265,7 +270,7 @@ sub init_i2c_sensor()
 
         ssi.enabled=YES
     end if
-	
+	delay_ms(100)
 end sub
 
 sub init_modbus_sensor()
@@ -333,8 +338,6 @@ sub read_ntag()
 	dim command as string(1)
 	dim parameter as string(2)
 	
-	pic_channel = si2c_register("PIC", PIC_DAT_PIN, PIC_CLK_PIN, NO)
-	
 	ntag=pic_read(&h90,3)	
 	command = left(ntag,1)
 	parameter = right(ntag,2)
@@ -347,4 +350,100 @@ sub read_ntag()
 		end if
 	case else:		
 	end select
+end sub
+
+sub enter_LVP_mode()
+	io.num=PL_IO_NUM_1_TX0
+	io.enabled=YES
+	io.state=HIGH
+
+	'set LVP mode
+	mcp23017_line_out_enable(LVP_ENABLE_LINE, LVP_ENABLE_PORT, YES, TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(LVP_ENABLE_LINE, LVP_ENABLE_PORT, LOW, TBT00_3_S5_CHANNEL)
+
+	'keep ACSIP alive
+	mcp23017_line_out_enable(PMU_INHIBIT_LINE, PMU_INHIBIT_PORT, YES, TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(PMU_INHIBIT_LINE, PMU_INHIBIT_PORT, LOW, TBT00_3_S5_CHANNEL)
+
+	io.num=PL_IO_NUM_1_TX0
+	io.state=LOW
+	io.state=HIGH	
+	
+	pic_lvp_start(PL_IO_NUM_9, PL_IO_NUM_4, PL_IO_NUM_1_TX0)
+	
+end sub
+
+sub exit_LVP_mode()
+	io.num=PL_IO_NUM_1_TX0
+	io.enabled=YES
+	io.state=HIGH
+	
+	delay_ms(100)
+	
+	'set LVP mode
+	mcp23017_line_out_enable(LVP_ENABLE_LINE, LVP_ENABLE_PORT, YES, TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(LVP_ENABLE_LINE, LVP_ENABLE_PORT, HIGH, TBT00_3_S5_CHANNEL)
+
+	'keep ACSIP alive
+	mcp23017_line_out_enable(PMU_INHIBIT_LINE, PMU_INHIBIT_PORT, YES, TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(PMU_INHIBIT_LINE, PMU_INHIBIT_PORT, HIGH, TBT00_3_S5_CHANNEL)
+	
+end sub
+
+sub check_and_upgard_pic()	
+	dim ver as string(3) = pic_read(&h98,3)
+	dim upgrade_success as boolean
+	
+	if ver <> OSS_FW_VER then
+		enter_LVP_mode()
+		pic_write(&h30,"\x77")
+		upgrade_success = pic_lvp_upload_firmware(OSS_PIC_FILE)
+		
+		io.num=PL_IO_NUM_1_TX0
+		io.state=HIGH
+		delay_ms(100)
+		
+		' Set PIC to POST LVP mode 
+		pic_write(&h30,"\x88")
+		delay_ms(100)
+		
+		' RESET PIC
+		io.num=PL_IO_NUM_1_TX0
+		io.state=LOW
+		exit_LVP_mode()
+		
+		if upgrade_success = false then
+			device_add_event("PIC FW upgraded failed!")
+		else
+			device_add_event("PIC FW upgraded!")
+			sys.reboot()
+		end if
+	end if
+end sub
+
+sub pic_init()
+	
+	pic_channel = si2c_register("PIC", PIC_DAT_PIN, PIC_CLK_PIN, YES)
+	if pic_channel<4 then
+		ssi.channel=pic_channel
+		ssi.enabled=NO
+		ssi.baudrate=PL_SSI_BAUD_100kHz
+
+		io.num=PIC_DAT_PIN
+		io.enabled = YES
+		io.state=HIGH
+
+		io.num=PIC_CLK_PIN
+		io.enabled = YES
+		io.state=HIGH
+
+		ssi.zmode = PL_SSI_ZMODE_ENABLED_ON_ZERO
+		ssi.direction=PL_SSI_DIRECTION_LEFT
+		ssi.domap = PIC_DAT_PIN
+		ssi.dimap = PIC_DAT_PIN
+		ssi.clkmap = PIC_CLK_PIN
+		ssi.mode = PL_SSI_MODE_0
+
+		ssi.enabled=YES
+	end if
 end sub

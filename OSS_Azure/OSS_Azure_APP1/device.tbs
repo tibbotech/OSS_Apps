@@ -739,6 +739,7 @@ sub device_store_firmware(data as string)
 	if operation_mode = 0 then
 		stg_set("UPD",0,"255")
 		device_add_event("Download Completed, flashing firmware! ")
+		enter_LVP_mode()
 		fd.copyfirmwarefromfilelzo()
 	else
 		if copy_partfile_to_firmwarefile() = OK then
@@ -773,6 +774,7 @@ public sub upgrade_init()
 		fd.filenum = firmware_filenum
 		if fd.open(FIRMWARE_FILE) = PL_FD_STATUS_OK then
 			device_add_event("Download Completed, flashing firmware! ")
+			enter_LVP_mode()
 			fd.copyfirmwarefromfilelzo()
 		end if
 	end if
@@ -1342,3 +1344,5 @@ sub device_migrating()
 	end if		
 			
 end sub
+
+

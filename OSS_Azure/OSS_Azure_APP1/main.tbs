@@ -90,6 +90,7 @@ sub on_sock_data_sent()
 
 end sub
 
+
 sub on_bt_event(bt_event as pl_bt_events)
  
     luis_on_bt_event(bt_event)
@@ -143,4 +144,14 @@ sub on_wln_event(wln_event as enum pl_wln_events)
 			end if
 		end if	
 	end if
+end sub
+
+sub on_button_released()
+	' TODO: place "on_button_released" event handler code here...
+	pic_write(&hA3,"\x77")
+	delay_ms(5)
+	if pic_read(&hA3,1)="\x77" then
+		stg_set("NWPR",0,"1")
+		device_add_event("Password Recovery Requested.")
+	end if		
 end sub
