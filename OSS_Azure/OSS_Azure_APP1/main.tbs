@@ -5,7 +5,7 @@ dim current_interface as pl_sock_interfaces
 dim luis_bt_enabled as boolean
 dim TBT00_3_S5_CHANNEL as byte
 
-declare sub device_store_firmware(data as string)
+declare sub device_store_app_fw(data as string)
 
 sub on_sys_init()
 	boot()

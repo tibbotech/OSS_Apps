@@ -4,7 +4,7 @@ platform=WM2000
 src_lib_ver=0_00
 name=OSS_Azure_APP1
 output=OSS_Azure_APP1.tpc
-debug=off
+debug=on
 defines= 
 transport=serial
 [address1]
@@ -14,7 +14,7 @@ address=156.101.249.68.115.73
 [address2]
 platform=WM2000
 transport=serial
-address=COM5:921600
+address=COM4:921600
 [address3]
 platform=WM2000
 transport=udp_broadcast
@@ -326,7 +326,7 @@ format=STG_lib_configurator
 locked=no
 location=project
 [file45]
-path=OSS_V011.hex
+path=OSS_SUPR_PIC_FW_020.hex
 type=binary
 format=
 locked=no

@@ -1,6 +1,6 @@
 'DEFINES-------------------------------------------------------------
-const FIRMWARE_VERSION="V2.0.7"
-const OSS_FW_VER = "011"
+const OSS_APP_FW_VER="V2.01.00"
+const OSS_SUP_FW_VER = "020"
 #define MQTT_DEBUG_PRINT 1
 #define LUIS_CONFIG_FILE "luis.xtxt"
 #define LUIS_DEBUG_PRINT 0
@@ -13,7 +13,7 @@ const OSS_FW_VER = "011"
 #define TBL_SECTOR_SIZE 512
 #define MQTT_CER_FILE "DigiCert.cer"
 #define HTTP_CER_FILE "DigiCert.cer"
-#define OSS_PIC_FILE "OSS_V011.hex"
+#define OSS_SUP_PIC_FILE "OSS_SUPR_PIC_FW_020.hex"
 #define PIC_LVP_TARGET_TYPE PIC_16LF18345
 
 #define MQTT_LARGE_PACKETS 1
@@ -28,7 +28,7 @@ const OSS_FW_VER = "011"
 
 const MAX_NUM_INTERFACES=4
 
-const FIRMWARE_FILE="firmware"
+const APP_FW_FILE="APP_FW"
 const PART_FILE="part"
 
 const SENSOR_CLK_PIN=PL_IO_NUM_7_RX1
@@ -186,11 +186,11 @@ declare sub pic_write(addr as byte, byref data as string)
 declare function pic_read(addr as byte, length as byte) as string
 declare sub read_ntag()
 declare function need_to_connect() as no_yes
-declare sub upgrade_init()
+declare sub upgrade_app_fw_init()
 declare sub delay_ms(ms as word)
 declare sub enter_LVP_mode()
 declare sub exit_LVP_mode()
-declare sub check_and_upgard_pic()
+declare sub check_and_upgrade_sup_pic()
 #if SOCK_DEBUGPRINT
 declare sub debugprint(byref s as string)
 #endif

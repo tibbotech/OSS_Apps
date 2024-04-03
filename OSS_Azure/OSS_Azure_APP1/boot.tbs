@@ -16,8 +16,8 @@ dim CELL__MYPASSWORD as string(16)  = ""					'<-- CHANGE THIS AS NEEDED
 dim sensor_type as byte
 dim operation_mode as byte '0: always on, 1: low power mode
 
-declare sub check_firmware_version()
-declare sub upgrade_init()
+declare sub check_app_fw_version()
+declare sub upgrade_app_fw_init()
 declare sub sensor_init()
 declare sub pic_init()
 
@@ -89,10 +89,15 @@ sub boot()
 	end select
 	
 	pic_init()
-	check_and_upgard_pic()
+	check_and_upgrade_sup_pic()
 	
 	mcp23017_line_out_enable(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,YES,TBT00_3_S5_CHANNEL)
 	mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
+
+	'allow pic to put device into sleep
+	mcp23017_line_out_enable(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,yes,TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,HIGH,TBT00_3_S5_CHANNEL)
+	
 	read_ntag()
 	turn_sensor3v3_on()
 	'-----------------------------------------------------------------	
@@ -138,10 +143,10 @@ sub boot()
         if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
     end if
 
-	upgrade_init()
+	upgrade_app_fw_init()
 	connect_to_network = need_to_connect()
 
-	check_firmware_version()
+	check_app_fw_version()
 	'-----------------------------------------------------------------
 	
     'WM2000 Wi-Fi setup
@@ -171,9 +176,7 @@ sub boot()
 					wln.autoconnect=NO
 					sys.reboot
 				end if	
-			end if
-			mcp23017_line_out_enable(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,yes,TBT00_3_S5_CHANNEL)
-			mcp23017_line_set(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,HIGH,TBT00_3_S5_CHANNEL)	
+			end if	
 			init_pic_supervisor()
 			enable_pic_supervisor()	
 			cell__start(CELL__SIMCARD_PIN, CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD)
@@ -222,14 +225,25 @@ sub boot()
 	end if
 end sub
 
-sub check_firmware_version()
+sub check_app_fw_version()
 	dim s as string
 	s=stg_get("FWV",0)
-	if FIRMWARE_VERSION<>s then
-		stg_set("FWV",0,FIRMWARE_VERSION)
-		device_add_event("Upgrage done! "+FIRMWARE_VERSION)
-	end if
+	if OSS_APP_FW_VER<>s then
+		stg_set("FWV",0,OSS_APP_FW_VER)
+		device_add_event("Upgrage done! "+OSS_APP_FW_VER)
+		
+		dim pos1 as byte = instr(1,s,".",1)
+		dim pos2 as byte = instr(1,s,".",2)
+		dim w1 as word = val(mid(s,2,pos1-2))*100+val(mid(s,pos1+1,pos2-pos1-1))
+		
+'		if w1<200 then
+	
+'			goto fw201
+'		else if w1>=200 then
+'fw201:		
 
+'		end if
+	end if
 end sub
 
 sub sensor_level_shift_on()
@@ -390,14 +404,14 @@ sub exit_LVP_mode()
 	
 end sub
 
-sub check_and_upgard_pic()	
+sub check_and_upgrade_sup_pic()	
 	dim ver as string(3) = pic_read(&h98,3)
 	dim upgrade_success as boolean
 	
-	if ver <> OSS_FW_VER then
+	if ver <> OSS_SUP_FW_VER then
 		enter_LVP_mode()
 		pic_write(&h30,"\x77")
-		upgrade_success = pic_lvp_upload_firmware(OSS_PIC_FILE)
+		upgrade_success = pic_lvp_upload_firmware(OSS_SUP_PIC_FILE)
 		
 		io.num=PL_IO_NUM_1_TX0
 		io.state=HIGH
