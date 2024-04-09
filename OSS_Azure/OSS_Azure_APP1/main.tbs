@@ -4,9 +4,13 @@ dim interface_ready(MAX_NUM_INTERFACES) as no_yes
 dim current_interface as pl_sock_interfaces
 dim luis_bt_enabled as boolean
 dim TBT00_3_S5_CHANNEL as byte
+dim ntag_pw_reset_timer as byte = 0
+dim button_press_counter as byte = 0
+const NTAG_PW_WAIT_TIME = 10
+const NTAG_PW_RESET_TIME = 4
 
 declare sub device_store_app_fw(data as string)
-
+declare mqtt_state as en_mqtt_states
 sub on_sys_init()
 	boot()
 end sub
@@ -18,7 +22,16 @@ sub on_sock_data_arrival()
 end sub
 
 sub on_sys_timer()
-
+	
+	if ntag_pw_reset_timer > 0 then
+		ntag_pw_reset_timer = ntag_pw_reset_timer - 1
+		if ntag_pw_reset_timer = 0 and mqtt_state = EN_MQTT_STATES_LOGGED_IN then
+			pat.play("G~",PL_PAT_CANINT)
+		end if
+	else
+		button_press_counter = 0
+	end if
+	
 	if config_mode = YES then
 		if device_awake_timer>0 then
 			device_awake_timer=device_awake_timer-1
@@ -146,12 +159,21 @@ sub on_wln_event(wln_event as enum pl_wln_events)
 	end if
 end sub
 
+sub on_button_pressed()
+	button_press_counter = button_press_counter + 1
+	ntag_pw_reset_timer = NTAG_PW_WAIT_TIME	
+end sub
+
 sub on_button_released()
-	' TODO: place "on_button_released" event handler code here...
-	pic_write(&hA3,"\x77")
-	delay_ms(5)
-	if pic_read(&hA3,1)="\x77" then
-		stg_set("NWPR",0,"1")
-		device_add_event("Password Recovery Requested.")
-	end if		
+
+	'press MD 3 times, and hold it for 2~5 seconds the third time
+	if button_press_counter > 2 and button.time > NTAG_PW_RESET_TIME then
+		pat.play("G-R-G-R",PL_PAT_CANINT)
+		pic_write(&hA3,"\x77")
+		delay_ms(5)
+		if pic_read(&hA3,1)="\x77" then
+			stg_set("NWPR",0,"1")
+			device_add_event("Password Recovery Requested.")
+		end if				
+	end if	
 end sub

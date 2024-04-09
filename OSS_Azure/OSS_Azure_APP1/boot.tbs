@@ -236,13 +236,13 @@ sub check_app_fw_version()
 		dim pos2 as byte = instr(1,s,".",2)
 		dim w1 as word = val(mid(s,2,pos1-2))*100+val(mid(s,pos1+1,pos2-pos1-1))
 		
-'		if w1<200 then
+		if w1<200 then
 	
-'			goto fw201
-'		else if w1>=200 then
-'fw201:		
+			goto fw201
+		else if w1>=200 then
+fw201:		
 
-'		end if
+		end if
 	end if
 end sub
 
