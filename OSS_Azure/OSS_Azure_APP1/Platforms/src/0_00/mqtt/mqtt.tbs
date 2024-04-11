@@ -527,6 +527,7 @@ sub mqtt_proc_data()
 						mqtt_connection_counter=MQTT_CONNECTION_TIMER*2
 						callback_mqtt_connect_ok()
 						proc_data_state=EN_MQTT_PD_STATES_READING_HEADER
+						mqtt_unreplied_ping_count=0
 		
 		case PUBLISH:	select case proc_data_state
 						case EN_MQTT_PD_STATES_READING_PAYLOAD:

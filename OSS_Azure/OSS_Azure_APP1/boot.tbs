@@ -28,42 +28,7 @@ declare modbus_device_id as byte
 sub boot()
     'sys.debugmode = PL_SYS_DBG_SERIAL
 	'sys.debugmode = PL_SYS_DBG_NET
-    'Setting Library Initialization
-    '================================================================
-    dim stg_init_code as en_stg_status_codes
-    dim stg_name as string(STG_MAX_SETTING_NAME_LEN)
 	
-    if stg_start_no_init()<>EN_STG_STATUS_OK then 
-        pat.play("R-R-~",PL_PAT_CANINT)
-        if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
-    end if
-
-    stg_init_code=stg_check_all(stg_name)
-    select case stg_init_code
-    case EN_STG_STATUS_OK:
-    '--- all good ---
-    case EN_STG_STATUS_INVALID, EN_STG_STATUS_FAILURE:
-        if stg_restore_multiple(EN_STG_INIT_MODE_NORMAL)<>EN_STG_STATUS_OK then
-            pat.play("R-R-~",PL_PAT_CANINT)
-            sys.halt
-        end if
-    case else:
-        'some other trouble
-        pat.play("R-R-~",PL_PAT_CANINT)
-        sys.halt
-    end select
-
-	CELL__AT_APN = stg_get("GAN",0)
-	CELL__MYUSERNAME = stg_get("GUR",0)
-	CELL__MYPASSWORD = stg_get("GPW",0)
-	operation_mode = stg_get("OPMD",0)
-    '-----------------------------------------------------------------
-	
-    dim f as byte
-    for f=0 to MAX_NUM_INTERFACES-1
-        interface_ready(f)=NO
-    next f
-
     'Fd(flash disk) setup
     '================================================================
     if fd.mount<>PL_FD_STATUS_OK then
@@ -75,6 +40,53 @@ sub boot()
             if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
         end if
     end if
+
+    'Tables setup
+    '================================================================
+    if tbl_start()<>EN_TBL_STATUS_OK then
+        if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
+    end if
+	
+    'Setting Library Initialization	
+    '================================================================
+    dim stg_init_code as en_stg_status_codes
+    dim stg_name as string(STG_MAX_SETTING_NAME_LEN)
+	
+	stg_init_code = stg_start_no_init()
+    if stg_init_code<>EN_STG_STATUS_OK then 
+        pat.play("R-R-~",PL_PAT_CANINT)
+        if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
+	else
+		stg_init_code=stg_check_all(stg_name)
+		select case stg_init_code
+		case EN_STG_STATUS_OK:
+		'--- all good ---
+		case EN_STG_STATUS_INVALID, EN_STG_STATUS_FAILURE:
+			if stg_restore_multiple(EN_STG_INIT_MODE_NORMAL)<>EN_STG_STATUS_OK then
+				pat.play("R-R-~",PL_PAT_CANINT)
+				if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
+			end if
+		case else:
+			'some other trouble
+			pat.play("R-R-~",PL_PAT_CANINT)
+			if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
+		end select	
+    end if
+	
+	if stg_init_code<>EN_STG_STATUS_OK then
+		device_add_event("Setting init failed.")
+	end if
+
+	CELL__AT_APN = stg_get("GAN",0)
+	CELL__MYUSERNAME = stg_get("GUR",0)
+	CELL__MYPASSWORD = stg_get("GPW",0)
+	operation_mode = stg_get("OPMD",0)
+    '-----------------------------------------------------------------
+	
+    dim f as byte
+    for f=0 to MAX_NUM_INTERFACES-1
+        interface_ready(f)=NO
+    next f
 	
     '-----------------------------------------------------------------
 	'mcp23017 setup on socket 5
@@ -83,7 +95,7 @@ sub boot()
 	case MCP23017_SELF_TEST_FAIL:
 		sys.debugprint("mcp23017 self test failed!\r\n")
 		if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
-
+		device_add_event("mcp2307 init failed.")
 	case MCP23017_NO_SSI_AVAILABLE:
 		sys.debugprint("SSI channel could not be allocated, using bit banging instead.\r\n")
 	end select
@@ -137,12 +149,6 @@ sub boot()
 		exit sub
 	end if
 	
-    'Tables setup
-    '================================================================
-    if tbl_start()<>EN_TBL_STATUS_OK then
-        if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
-    end if
-
 	upgrade_app_fw_init()
 	connect_to_network = need_to_connect()
 
@@ -157,6 +163,12 @@ sub boot()
 		wln.autoconnect = YES
 		sys.reboot()
 	end if
+	
+	if comm_mode = 1 and wln.autoconnect = YES then
+		wln.autoconnect = NO
+		sys.reboot()
+	end if
+	
 	if connect_to_network=YES then
 		'DNS setup
 		'================================================================

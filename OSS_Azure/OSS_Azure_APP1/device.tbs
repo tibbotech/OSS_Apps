@@ -910,9 +910,24 @@ sub read_onboard_t_h_co2_sensor()
 		time_to_str(ts,daycounts,mincounts,seconds)
 		ts=ts+".000Z"
 		
-		add_telemetry("temperature",temp,ts)
-		add_telemetry("humidity",humd,ts)
-		add_telemetry("co2",str_co2,ts)
+		if temperature > -40 and temperature < 85 then
+			add_telemetry("temperature",temp,ts)
+		else
+			device_add_event("Sensor value out of range [temp]: " + temp)
+		end if
+		
+		if humidity > 0 and humidity < 100 then
+			add_telemetry("humidity",humd,ts)
+		else
+			device_add_event("Sensor value out of range [humd]: " + humd)
+		end if
+
+		if co2 > 1 and co2 < 10000 then
+			add_telemetry("co2",str_co2,ts)
+		else
+			device_add_event("Sensor value out of range [co2]: " + str_co2)
+		end if
+		
 		'in power saving mode log battery level
 		if operation_mode = 1 then
 			add_telemetry("BAT_LVL",str(battery_level),ts)
@@ -987,9 +1002,19 @@ sub read_onboard_t_h_sensor()
 	if daycounts>0 then
 		time_to_str(ts,daycounts,mincounts,seconds)
 		ts=ts+".000Z"
+
+		if temperature > -40 and temperature < 85 then
+			add_telemetry("temperature",temp,ts)
+		else
+			device_add_event("Sensor value out of range [temp]: " + temp)
+		end if
 		
-		add_telemetry("temperature",temp,ts)
-		add_telemetry("humidity",humd,ts)
+		if humidity > 0 and humidity < 100 then
+			add_telemetry("humidity",humd,ts)
+		else
+			device_add_event("Sensor value out of range [humd]: " + humd)
+		end if
+
 		'in power saving mode log battery level
 		if operation_mode = 1 then
 			add_telemetry("BAT_LVL",str(battery_level),ts)
@@ -1078,8 +1103,18 @@ sub read_onboard_hum_temp_legacy()
 		time_to_str(ts,daycounts,mincounts,seconds)
 		ts=ts+".000Z"
 
-		add_telemetry("temperature",temp,ts)
-		add_telemetry("humidity",humd,ts)
+		if temperature > -40 and temperature < 85 then
+			add_telemetry("temperature",temp,ts)
+		else
+			device_add_event("Sensor value out of range [temp]: " + temp)
+		end if
+		
+		if humidity > 0 and humidity < 100 then
+			add_telemetry("humidity",humd,ts)
+		else
+			device_add_event("Sensor value out of range [humd]: " + humd)
+		end if
+
 		'in power saving mode log battery level
 		if operation_mode = 1 then
 			add_telemetry("BAT_LVL",str(battery_level),ts)
@@ -1349,4 +1384,19 @@ sub device_migrating()
 			
 end sub
 
+sub delay_ms(ms as word)
+#if PLATFORM_ID=TPP2W or PLATFORM_ID=TPP2N or PLATFORM_ID=TPP3W or PLATFORM_ID=TPP3N
+	dim ax,bx as word
 
+	for ax=0 to ms
+		for bx=0 to 5
+		next bx
+	next ax
+#else
+	dim t as dword
+	ms = sys.timercountms + ms
+	while sys.timercountms < ms
+	wend
+#endif
+
+end sub

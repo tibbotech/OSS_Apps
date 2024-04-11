@@ -58,7 +58,7 @@ function swab(w as word) as word
 	swab = ((w shr 8) and &hFF) or ((w and &hFF) shl 8)
 end function
 
-sub delay_ms(ms as word)
+sub pic_delay_ms(ms as word)
 
 #if PLATFORM_ID=TPP2W or PLATFORM_ID=TPP2N or PLATFORM_ID=TPP3W or PLATFORM_ID=TPP3N
 	dim ax,bx as word
@@ -107,7 +107,7 @@ end sub
 sub pic_do_reset()
 
 	pic_set_reset(true)
-	delay_ms(1)
+	pic_delay_ms(1)
 	pic_set_reset(false)
 
 end sub
@@ -526,16 +526,16 @@ sub pic_enter_lvp_mode(options as byte)
 
 	' Enter LVP mode
 	' Bring MCLR to V_il (low state)
-	delay_ms(10)
+	pic_delay_ms(10)
 	
 	io.num = icsp_mclr
 	io.enabled = YES
 	io.state = HIGH
 	
-	delay_ms(10)
+	pic_delay_ms(10)
 	
 	io.state = LOW
-	delay_ms(2)
+	pic_delay_ms(2)
 	
 	' This is a 'magic' sequence of bits, which forces PIC
 	' to fall into the low voltage programming mode
@@ -558,7 +558,7 @@ sub pic_enter_lvp_mode(options as byte)
 		
 	end select
 	
-	delay_ms(20)
+	pic_delay_ms(20)
 	
 end sub
 
@@ -568,7 +568,7 @@ sub pic_leave_lvp_mode()
 	io.num = icsp_mclr
 	io.state = HIGH
 	io.state = LOW
-	delay_ms(5)
+	pic_delay_ms(5)
 	io.state = HIGH
 
 	io.num = icsp_scl
@@ -579,7 +579,7 @@ sub pic_leave_lvp_mode()
 	io.enabled = YES
 	io.state = HIGH
 	
-	delay_ms(10)
+	pic_delay_ms(10)
 	
 end sub
 
@@ -1418,7 +1418,7 @@ function program_firmware(byref fw as firmware) as boolean
 	
 	pic_do_reset()
 	
-	delay_ms(25)
+	pic_delay_ms(25)
 
 	pic_enter_lvp_mode(options)
 
@@ -1448,7 +1448,7 @@ function program_firmware(byref fw as firmware) as boolean
 			
 			pic_leave_lvp_mode()
 			pic_do_reset()
-			delay_ms(25)
+			pic_delay_ms(25)
 			pic_enter_lvp_mode(options)
 			pic_bulk_erase_device(options)
 
@@ -1500,7 +1500,7 @@ function program_firmware(byref fw as firmware) as boolean
 
 	pic_leave_lvp_mode()
 
-	delay_ms(25)
+	pic_delay_ms(25)
 
 	pic_do_reset()
 	

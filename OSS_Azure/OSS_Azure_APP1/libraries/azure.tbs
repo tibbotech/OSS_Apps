@@ -15,8 +15,8 @@ const AZURE_CONNECTION_TOUT=120
 
 dim azure_state as en_azure_states=EN_AZURE_NOT_INITIALIZED
 dim azure_rid as dword=0
-dim device_bound_message_topic as string(64)
-dim server_bound_message_topic as string(64)
+dim device_bound_message_topic as string
+dim server_bound_message_topic as string
 dim azure_init_flag as word = 0
 dim azure_dps_sock as byte = 255
 dim azure_current_dps_server as string(64)=""

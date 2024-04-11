@@ -480,14 +480,3 @@ sub mcp23017_debug_print(data as string)
 	sys.debugprint(MCP23017_STAMP+data+MCP23017_CR_LF)
 end sub
 #endif
-
-'Handled by PIC_LVP library.
-'sub pic_set_reset(rv as low_high)
-'	mcp23017_line_set(EXT_MCLR_LINE,EXT_MCLR_PORT,rv,TBT00_3_S5_CHANNEL)
-'end sub
-
-'sub pic_do_reset()
-'	pic_set_reset(true)
-'	delay_ms(1)
-'	pic_set_reset(false)
-'end sub

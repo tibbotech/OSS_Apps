@@ -1,1 +1,0 @@
-lzo1x-999.exe  ..\..\OSS_Azure_APP1\tmp\OSS_Azure_APP0-(WM2000).bin ..\..\Release_Files\Compressed_For_WiFi-4G_Upgrades\OSS_Azure_APP1_2-00-06.bin

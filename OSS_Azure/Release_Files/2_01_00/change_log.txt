@@ -1,0 +1,52 @@
+Changelog of OSS APP
+	-	Date of change:09/04/2024
+	-	New revision of OSS APP: V2.01.00
+	-	Previous revision of OSS APP: 2.00.06 - 21/12/2023
+	-	The reason for change: 
+			-- Check App version and prepare for setting changes
+			-- LVP mode, allow upload SUP PIC firmware.
+			-- DHCP and IP setup. 
+			-- Device migrating command. 
+			-- NTAG password reset (by Azure command / MD button).
+			-- Disable power inhibit for App upgrade.
+			-- Try to connect to previously provisioned hub.
+			-- Optimize memory usage.
+			-- MQTT clean session for Azure offline command.
+			-- Extend 'Event' message length
+			-- Add boundary values for sensor
+			-- bug fix: fail to connect to different url (http)
+			-- bug fix: endless wait when i2c fail
+			-- bug fix: in mqtt, once mqtt_unreplied_ping_count exceed 3, keep reconnects
+
+	-	Files changed:
+			--boot.tbs: Check App version and prepare for setting changes; LVP mode.
+			--device.tbs: DHCP and IP setup; Device migrating; NTAG password reset; Disable power inhibit for App upgrade; Try to connect to previously provisioned hub; Boundary values for sensor.
+			--global.tbh: Version change; LVP mode.
+			--azure.tbh: Try to connect to previously provisioned hub.
+			--azure.tbs: Try to connect to previously provisioned hub; Optimize memory usage; Clean session for offline command.
+			--http.tbh: Optimize memory usage.
+			--http.tbs: Clear previsouly requested domain name (bug fix: when connecting to different url)
+			--mcp23017.tbh: Move some code to PIC_LVP.tbh
+			--mcp23017.tbs: Move some code to PIC_LVP.tbs
+			--super_i2c.tbs: Avoid endless wait
+			--luis.xtxt: DHCP and IP setup
+			--main.tbs: DHCP and IP setup; NTAG password reset;
+			--PIC_LVP.tbh: Bug fix (by Tarasov)
+			--PIC_LVP.tbs: Bug fix (by Tarasov)
+			--mqtt.tbs: Clean session; (bug fix: clear mqtt_unreplied_ping_count on CONNACK)
+			--settings.xtxt: DHCP and IP setup; NTAG password reset; Previously provisioned hub
+			--tables.xtxt: Increase 'value' field size for longer 'event' message.
+
+	-   Release files built:  
+			--2_01_00/OSS_Azure_APP0.tpc
+			--2_01_00/OSS_Azure_APP1.tpc
+			--2_01_00/OSS_Azure_APP0_APP1.bin
+			--2_01_00/OSS_Azure_APP0_APP1_2-01-00.tcu
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_020.hex
+			
+	- Level of change:Major 
+	- Risk assessment and cons: 
+	- Deprecated Features: 
+			
