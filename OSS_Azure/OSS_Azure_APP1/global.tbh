@@ -69,7 +69,7 @@ const TBT00_3_S5_DATA = PL_IO_NUM_4
 #define CELL__PWRKEY_PORT		EXT_PORT_A
 #define CELL__STATUS_LINENUM	EXT_LINE_7
 #define CELL__STATUS_PORT		EXT_PORT_A
-
+#define CELL__SIM_MODEL_IS_7000 true
 
 #define SC_DTR_LINENUM			EXT_LINE_6
 #define SC_DTR_PORT				EXT_PORT_A
@@ -77,8 +77,6 @@ const TBT00_3_S5_DATA = PL_IO_NUM_4
 #define VMOD_SHDN_PORT			EXT_PORT_B
 #define TX_BUF_LINENUM			EXT_LINE_7
 #define TX_BUF_PORT				EXT_PORT_B
-#define EXT_MCLR_LINE			EXT_LINE_4
-#define EXT_MCLR_PORT			EXT_PORT_B
 #define PMU_INHIBIT_LINE		EXT_LINE_5
 #define PMU_INHIBIT_PORT		EXT_PORT_B
 
@@ -178,9 +176,6 @@ declare function mcp23017_line_get2(num as ext_line_name, port as ext_port_name,
 declare sub close_interface_sockets(interface as pl_sock_interfaces)
 declare sub boot()
 declare sub device_sleep()
-declare sub init_pic_supervisor()
-declare sub enable_pic_supervisor()
-declare sub disable_pic_supervisor()
 declare sub device_proc_timer()
 declare sub pic_write(addr as byte, byref data as string)
 declare function pic_read(addr as byte, length as byte) as string

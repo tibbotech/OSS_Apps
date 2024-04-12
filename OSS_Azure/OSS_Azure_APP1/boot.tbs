@@ -189,12 +189,10 @@ sub boot()
 					sys.reboot
 				end if	
 			end if	
-			init_pic_supervisor()
-			enable_pic_supervisor()	
 			cell__start(CELL__SIMCARD_PIN, CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD)
 		end if
 	end if
-	
+
 	#if SOCK_DEBUGPRINT
 		if sys.runmode = PL_SYS_MODE_DEBUG then
 			if wln.enabled=NO then

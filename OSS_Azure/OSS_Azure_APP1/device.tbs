@@ -474,7 +474,7 @@ sub cell_callback_io_extender_setup()
 
 	'TX_BUF line
 	mcp23017_line_out_enable(TX_BUF_LINENUM,TX_BUF_PORT,yes,TBT00_3_S5_CHANNEL)
-	mcp23017_line_set(TX_BUF_LINENUM,TX_BUF_PORT, LOW, TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(TX_BUF_LINENUM,TX_BUF_PORT, HIGH, TBT00_3_S5_CHANNEL)
 end sub
 
 sub cell__callback_modem_restart_failed()
@@ -555,22 +555,6 @@ sub cell__callback_after_switching_from_DATA_to_CMD()
 end sub
 
 sub cell__callback_after_switching_from_CMD_to_DATA()
-end sub
-                
-sub init_pic_supervisor()
-	'Init MCLR IO and Enables pic supervisor
-    mcp23017_line_out_enable(EXT_MCLR_LINE,EXT_MCLR_PORT,YES,TBT00_3_S5_CHANNEL)
-	mcp23017_line_set(EXT_MCLR_LINE, EXT_MCLR_PORT,  HIGH, TBT00_3_S5_CHANNEL)
-end sub
-
-sub enable_pic_supervisor()
-	'Keeps pic running
-	mcp23017_line_set(EXT_MCLR_LINE, EXT_MCLR_PORT,  HIGH, TBT00_3_S5_CHANNEL)
-end sub
-
-sub disable_pic_supervisor()
-	'Keeps pic reset
-	mcp23017_line_set(EXT_MCLR_LINE, EXT_MCLR_PORT,  LOW, TBT00_3_S5_CHANNEL)
 end sub
 
 sub device_sleep()
