@@ -1973,14 +1973,13 @@ sub cell__at_send(atcmd as string)
 			
 		else if ( CELL__AT_CMD_CONTAINS_PLUS ) then	'input arg `atcmd` is a partial AT-command containing the AT-name without `AT` but prepended with a plus `+` (e.g. +CGDATA)
 			atcmd = CELL__AT + atcmd
-			
+					
 		else	'input arg `atcmd` is a partial AT-command containing the AT-name only without `AT+` (e.g. CGDATA)
 			atcmd = CELL__AT_PLUS + atcmd
 			
 		end if
 
 		atcmd = atcmd + CELL__CRLF	'append \r\n
-		
 	end if
 	
 	'Send AT-command
@@ -4796,6 +4795,12 @@ sub cell__at_proc_sys_timer()
 																PHASE_PWR_DONOT_CHANGE, PHASE_AT_AT, 
 																	PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
 																		PHASE_PARSE_DONOT_CHANGE)
+
+'			cell__at_cmd_exec(CELL__AT, 
+'								PHASE_PWR_DONOT_CHANGE, PHASE_AT_AT, 
+'									PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
+'										PHASE_PARSE_AT_MESSAGE)
+										
         case PHASE_AT_AT:	
 'XXXXXXXXXXXXXXXXXXXXXXXXXXX  reodering the AT command
 

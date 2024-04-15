@@ -101,7 +101,7 @@ public sub sock_release(sock_num as byte)
 	#if PLATFORM_ID <> WM2000
 	sock.allowedinterfaces="NET"
 	#else 
-	sock.allowedinterfaces="WLN"
+	sock.allowedinterfaces="WLN,PPP"
 	#endif 
 	sock.connectiontout=0
 	sock.endchar=13

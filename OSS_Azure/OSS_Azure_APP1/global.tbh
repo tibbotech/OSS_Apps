@@ -1,5 +1,5 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="V2.01.00"
+const OSS_APP_FW_VER="V2.01.01"
 const OSS_SUP_FW_VER = "020"
 #define MQTT_DEBUG_PRINT 1
 #define LUIS_CONFIG_FILE "luis.xtxt"
@@ -69,10 +69,10 @@ const TBT00_3_S5_DATA = PL_IO_NUM_4
 #define CELL__PWRKEY_PORT		EXT_PORT_A
 #define CELL__STATUS_LINENUM	EXT_LINE_7
 #define CELL__STATUS_PORT		EXT_PORT_A
-#define CELL__SIM_MODEL_IS_7000 true
-
 #define SC_DTR_LINENUM			EXT_LINE_6
 #define SC_DTR_PORT				EXT_PORT_A
+#define CELL__SIM_MODEL_IS_7000 true
+
 #define VMOD_SHDN_LINENUM		EXT_LINE_6
 #define VMOD_SHDN_PORT			EXT_PORT_B
 #define TX_BUF_LINENUM			EXT_LINE_7
