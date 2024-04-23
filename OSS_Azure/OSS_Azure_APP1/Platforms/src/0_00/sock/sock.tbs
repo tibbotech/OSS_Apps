@@ -40,6 +40,7 @@ public function sock_get(byref signature as string) as byte
 			#if SOCK_DEBUG_PRINT
 				sock_debugprint("'"+sock_user_signature(f)+"' got socket #"+str(f))
 			#endif
+			 
 			exit function
 		end if
 	next f
@@ -98,11 +99,7 @@ public sub sock_release(sock_num as byte)
 	
 	'restore the socket to its default state
 	sock.acceptbcast=NO
-	#if PLATFORM_ID <> WM2000
-	sock.allowedinterfaces="NET"
-	#else 
-	sock.allowedinterfaces="WLN,PPP"
-	#endif 
+	sock.allowedinterfaces=sock.availableinterfaces 
 	sock.connectiontout=0
 	sock.endchar=13
 	sock.escchar=255

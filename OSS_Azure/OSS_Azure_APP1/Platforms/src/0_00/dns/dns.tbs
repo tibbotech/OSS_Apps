@@ -76,7 +76,7 @@ function dns_start(dns_sock_num as byte) as en_dns_status_codes
 	sock.protocol=PL_SOCK_PROTOCOL_UDP
 	sock.inconmode=PL_SOCK_INCONMODE_ANY_IP_ANY_PORT
 	sock.reconmode=PL_SOCK_RECONMODE_3
-
+	sock.allowedinterfaces = sock.availableinterfaces
 	dns_init_flag=DNS_INIT_SIGNATURE
 end function
 
@@ -92,28 +92,24 @@ function dns_connect(interface as pl_sock_interfaces, byref dns_server_ip as str
 	end if
 	
 	sock.num=dns_sock
+	sock.targetinterface = interface
 	
-	#if NET_AVAILABLE
-		if interface=PL_SOCK_INTERFACE_NET then
-			sock.targetinterface=PL_SOCK_INTERFACE_NET
+	select case interface
+	case PL_SOCK_INTERFACE_NET:
+		if instr(1,sock.allowedinterfaces,"NET",1) then
 			goto l1
 		end if
-	#endif
+	case PL_SOCK_INTERFACE_WLN:
+		if instr(1,sock.allowedinterfaces,"WLN",1) then
+			goto l1
+		end if	
+	case PL_SOCK_INTERFACE_PPP:
+		if instr(1,sock.allowedinterfaces,"PPP",1) then
+			goto l1
+		end if	
+	case else
+	end select
 	
-	#if WLN_AVAILABLE
-		if interface=PL_SOCK_INTERFACE_WLN then
-			sock.targetinterface=PL_SOCK_INTERFACE_WLN
-			goto l1
-		end if
-	#endif
-
-	#if CELLULAR_AVAILABLE
-		if interface=PL_SOCK_INTERFACE_PPP then
-			sock.targetinterface=PL_SOCK_INTERFACE_PPP
-			goto l1
-		end if
-	#endif
-
 	#if DNS_DEBUG_PRINT
 		dns_debug_print_status(EN_STATUS_DNS_INVALID_INTERFACE)
 	#endif
@@ -121,6 +117,7 @@ function dns_connect(interface as pl_sock_interfaces, byref dns_server_ip as str
 	dns_connect=EN_STATUS_DNS_INVALID_INTERFACE
 	exit function 'invalid interface specified	
 l1:	
+	sock.targetinterface = interface
 	if dns_domain<>"" then
 		dns_connect=EN_STATUS_DNS_REQUEST_IN_PROGRESS
 		exit function
@@ -445,10 +442,10 @@ end sub
 
 #if DNS_DEBUG_PRINT
 sub dns_debugprint(byref print_data as string)
-
-	sys.debugprint(DNS_STAMP+print_data+DNS_CR_LF)
-	'#if SOCK_DEBUGPRINT
-	'debugprint(DNS_STAMP+print_data+DNS_CR_LF)
-	'#endif
+	#if SYS_SOCK_DEBUGPRINT or SYS_EVENT_DEBUGPRINT
+		sys_debugprint(DNS_STAMP+print_data+DNS_CR_LF)
+	#else
+		sys.debugprint(DNS_STAMP+print_data+DNS_CR_LF)
+	#endif
 end sub
 #endif

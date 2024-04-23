@@ -769,12 +769,13 @@ end sub
 
 #endif
  
-#if MQTT_DEBUG_PRINT=1
+#if MQTT_DEBUG_PRINT
 sub mqtt_debug_print(data as string)
-	sys.debugprint(MQTT_STAMP+data+MQTT_CR_LF)
-	
-	'#if SOCK_DEBUGPRINT
-	'debugprint(MQTT_STAMP+data+MQTT_CR_LF)
-	'#endif
+
+	#if SYS_SOCK_DEBUGPRINT or SYS_EVENT_DEBUGPRINT
+		sys_debugprint(MQTT_STAMP+data+MQTT_CR_LF)
+	#else
+		sys.debugprint(MQTT_STAMP+data+MQTT_CR_LF)
+	#endif
 end sub
 #endif

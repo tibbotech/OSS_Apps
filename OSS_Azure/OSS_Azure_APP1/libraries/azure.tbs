@@ -648,10 +648,11 @@ end function
 
 #if AZURE_DEBUG_PRINT
 	sub azure_debugprint(byref print_data as string)
-		sys.debugprint("AZURE> "+print_data+"\x0d\x0a")
 		
-		'#if SOCK_DEBUGPRINT
-		'debugprint("AZURE> "+print_data+"\x0d\x0a")
-		'#endif
+		#if SYS_SOCK_DEBUGPRINT or SYS_EVENT_DEBUGPRINT
+			sys_debugprint("AZURE> "+print_data+"\x0d\x0a")
+		#else
+			sys.debugprint("AZURE> "+print_data+"\x0d\x0a")
+		#endif
 	end sub
 #endif	

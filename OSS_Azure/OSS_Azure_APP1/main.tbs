@@ -40,7 +40,7 @@ sub on_sys_timer()
 		end if	
 		exit sub
 	end if
-	if connect_to_network=YES then	
+	if connect_to_azure_required=YES then	
 		if comm_mode=1 then
 			cell__proc_sys_timer()
 		end if
@@ -95,6 +95,11 @@ sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as strin
 			connect_to_azure_server()
 		end if
 	end if
+	
+	#if SYS_SOCK_DEBUGPRINT
+		sock.num = SYS_DPRINT_SOCK_NUM
+		sock.connect()
+	#endif
 end sub
 
 sub on_sock_data_sent()
@@ -162,6 +167,7 @@ end sub
 sub on_button_pressed()
 	button_press_counter = button_press_counter + 1
 	ntag_pw_reset_timer = NTAG_PW_WAIT_TIME	
+
 end sub
 
 sub on_button_released()

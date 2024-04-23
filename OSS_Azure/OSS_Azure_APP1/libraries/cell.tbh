@@ -17,7 +17,7 @@
 	#define CELL_BANDTYPE "3"	'<----- CHANGE THIS AS NEEDED (1: CAT-M, 2: NB-Iot, 3: CAT-M and NB-IoT)
 #endif
 
-'XXXXXXXXXXXXXXXXXXX USING IO EXTENDER FOR CELL
+
 #ifndef CELL_IO_EXTENDER
 	#define CELL_IO_EXTENDER 0 '<-------------------- Not using IO extender
 #endif
@@ -339,8 +339,8 @@ const CELL__BYTE_SIZE_MAX = &hff
 const CELL__SOCK_NUM_MAX = &hf
 
 const CELL__NUMOF_TIMES_TO_SEND_ATCMD = 30
-const CELL__MODEM_RESTART_RETRY_MAX = 30
-const CELL__POWER_ONOFF_RETRY_MAX = 8
+const CELL__MODEM_RESTART_RETRY_MAX = 5
+const CELL__POWER_ONOFF_RETRY_MAX = 2
 const CELL__RESET_RETRY_MAX = 4
 const CELL__SHDN_RETRY_MAX = 2
 const CELL__ISRETRY_INPROGR_IN_IDLEMODE_RETRY_MAX = 10
@@ -359,7 +359,7 @@ const CELL__AT_RETRY_TIMEOUT_MAX = (2*3)	'(default: 2*2) maximum timeout to RECE
 const CELL__SIM70xx_AT_CGREG_TIMEOUT_MIN = (2*6)
 const CELL__AT_CGREG_TIMEOUT_MIN = (2*3)	'(default: 2*2) minimum timeout before changing PWRKEY to Inactive (<span style="color: gray;">= 2*2 [500msec] = 4 [500msec] = 2 [sec]</span>)
 const CELL__ISRETRY_INPROGR_IN_IDLEMODE_RETRY_TIMEOUT_MIN = (2*2)
-const CELL__ON_SER_DATA_ARRIV_NOT_TRIGG_RETRY_TIMOUT_MIN = (2*4)
+const CELL__ON_SER_DATA_ARRIV_NOT_TRIGG_RETRY_TIMOUT_MIN = (2*5)
 
 #if CELL__PPP_MODE_ISENABLED
 	const CELL__PPP_RETRY_MAX = 10
@@ -1285,7 +1285,7 @@ declare sub cell__callback_at_reply_contains_error()
 	'Callback to notify that the SMS-storage is full.
 #endif
 
-'XXXXXXXXXXXXXXXXXXX USING IO EXTENDER FOR CELL
+
 #if CELL_IO_EXTENDER
 	declare sub cell_callback_io_extender_setup()
 #endif
@@ -1866,7 +1866,7 @@ declare sub cell__at_cmd_exec(byref atcmd as string,
 	'<li>next_parse_phase<font color="magenta"> - </font><i>Set next parse phase (<font color="gray">If not used, set to PHASE_PARSE_DONOT_CHANGE</font>)</i></li>
 '</ul>
 
-declare sub cell__sleeptimer(sleeptime as word)
+declare sub cell__sleeptimer(sleeptime as dword)
 '<b>METHOD. </b><br><br>
 'Waits for a specified number of seconds.<br><br>
 '<b>Input parameters:</b>

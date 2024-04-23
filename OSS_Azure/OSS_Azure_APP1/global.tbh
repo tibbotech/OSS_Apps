@@ -1,5 +1,5 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="V2.01.01"
+const OSS_APP_FW_VER="V2.01.02"
 const OSS_SUP_FW_VER = "020"
 #define MQTT_DEBUG_PRINT 1
 #define LUIS_CONFIG_FILE "luis.xtxt"
@@ -8,7 +8,14 @@ const OSS_SUP_FW_VER = "020"
 #define DNS_DEBUG_PRINT 0
 #define HTTP_DEBUG_PRINT 1
 #define CELL__DEBUG_PRINT 1
-#define SOCK_DEBUGPRINT 0
+#define SYS_EVENT_DEBUGPRINT 0
+#define SYS_SOCK_DEBUGPRINT 0
+#define SYS_DPRINT_SOCK_NUM 10
+#define SYS_DPRINT_TARGET_IP "192.168.1.120"
+#define SYS_DPRINT_TARGET_PORT 1001
+
+#define AWKE_TIME_FOR_WLN 2
+#define AWKE_TIME_FOR_CELL 4
 #define TBL_ADJUST_LIST_WHEN_FULL 0  'adjust table size as soon as record is deleted
 #define TBL_SECTOR_SIZE 512
 #define MQTT_CER_FILE "DigiCert.cer"
@@ -58,7 +65,7 @@ const HIH6130_READ_ADDR=&h4F
 
 const TBT00_3_S5_CLK = PL_IO_NUM_9
 const TBT00_3_S5_DATA = PL_IO_NUM_4
-#define CELL__RTS_LINENUM PL_IO_NUM_2_INT0
+#define CELL__RTS_LINENUM PL_IO_NUM_3_INT1
 #define CELL__CTS_LINENUM PL_INT_NUM_0
 
 #define CELL__RESET_LINENUM		EXT_LINE_2
@@ -156,7 +163,7 @@ declare sensor_channel as byte
 declare pic_channel as byte
 declare device_awake_timer as word
 declare sleep_time as word
-declare connect_to_network as no_yes
+declare connect_to_azure_required as no_yes
 declare min_rec_num_to_send as word
 declare upgrade_state as byte 'upgrade over air state, 0~7 indicate the parts that is being downloading, 255: no upgrade in progress, 254: whole file completed
 declare config_mode as no_yes
@@ -182,10 +189,8 @@ declare function pic_read(addr as byte, length as byte) as string
 declare sub read_ntag()
 declare function need_to_connect() as no_yes
 declare sub upgrade_app_fw_init()
-declare sub delay_ms(ms as word)
+declare sub delay_ms(ms as dword)
 declare sub enter_LVP_mode()
 declare sub exit_LVP_mode()
 declare sub check_and_upgrade_sup_pic()
-#if SOCK_DEBUGPRINT
-declare sub debugprint(byref s as string)
-#endif
+declare sub sys_debugprint(byref s as string)

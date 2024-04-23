@@ -28,7 +28,7 @@ dim new_dvid as string(32)
 dim new_scid as string(16) 
 dim new_pkey as string(64)
 dim migrate_failed as no_yes = NO
-
+dim rand_event_num as byte 
 declare sub device_sampling()
 declare sub device_migrating()
 declare function get_json_value(byref json_str as string, byref attribute as string) as string 
@@ -548,6 +548,7 @@ sub cell__callback_ppp_link_established()
 		connect_to_firmware_server()
 	else
 		connect_to_azure_server()
+		pat.play("G-~",PL_PAT_CANINT)
 	end if
 end sub
 
@@ -592,10 +593,12 @@ sub device_add_event(byref event_msg as string)
 	dim ts as string(36) 
 	dim f as byte
 	
+	rand_event_num = rand_event_num+1
 	f=fd.filenum
 	rtc.getdata(daycounts,mincounts,seconds)
 	time_to_str(ts,daycounts,mincounts,seconds)
-	ts=ts+".000Z"		
+	
+	ts=ts+"."+str(rand_event_num)+"Z"		
 	tbl_result=tbl_select("Azure","Azure")
 	tbl_result=tbl_field_sg("time",ts,EN_TBL_SET)
 	tbl_result=tbl_field_sg("type","event",EN_TBL_SET)
@@ -791,6 +794,10 @@ public sub connect_to_azure_server()
 	dim AZURE_SCOPE_ID as string=stg_get("SCID",0)
 	dim AZURE_DPS_SERVER as string=stg_get("DPSS",0)
 	dim AZURE_PRIMARY_KEY as string=stg_get("PKEY",0)
+	
+	if connect_to_azure_required = NO then
+		exit sub
+	end if
 	
 	'when switching between server making sure all previous connection is closed
 	http_stop()
@@ -1328,15 +1335,15 @@ sub device_sampling()
 			
 			'in Low power mode, and not sending cycle, go to sleep after taking sample
 			if operation_mode > 0 then
-				if connect_to_network = NO and sample_timer = 0 then
+				if connect_to_azure_required = NO and sample_timer = 0 then
 					device_sleep()
 				end if
 			else
 				'when in Always on mode, sample time is same as sleep time
 				sample_timer = sleep_time*120
-			end if			
+			end if
+			azure_send_telemetry()
 		end if	
-		azure_send_telemetry()
 	end if 	
 end sub
 
@@ -1368,7 +1375,7 @@ sub device_migrating()
 			
 end sub
 
-sub delay_ms(ms as word)
+sub delay_ms(ms as dword)
 #if PLATFORM_ID=TPP2W or PLATFORM_ID=TPP2N or PLATFORM_ID=TPP3W or PLATFORM_ID=TPP3N
 	dim ax,bx as word
 
@@ -1377,9 +1384,8 @@ sub delay_ms(ms as word)
 		next bx
 	next ax
 #else
-	dim t as dword
-	ms = sys.timercountms + ms
-	while sys.timercountms < ms
+	dim t as dword = sys.timercountms + ms
+	while sys.timercountms < t
 	wend
 #endif
 
