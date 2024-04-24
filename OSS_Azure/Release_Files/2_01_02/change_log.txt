@@ -1,0 +1,34 @@
+Changelog of OSS APP
+	-	Date of change:24/04/2024
+	-	New revision of OSS APP: V2.01.02
+	-	Previous revision of OSS APP: 2.01.00 - 12/04/2024
+	-	The reason for change: 
+			-- Add 2 different fixed maximum awake time when operating in WLN mode and CELL mode. (2 minutes and 4 minutes)
+			-- Add 2 debug feature, debug print using TCP connection and Flash Disk
+			-- Add independent "delay_ms" subroutine for libraries that needs. (PIC_LVP)
+			-- bug fix: Dropping event due to same timestamp
+			-- bug fix: Cell flowcontrol not working correctly
+			-- bug fix: DNS library assign incorrect target interface.
+			-- bug fix: Cell library use auto-bauding for SIMCOM7000
+	-	Files changed:
+			-- global.tbh: Debug print over TCP and telemetry event; minimum awake time for WLN and CELL; Cell rts IO.
+			-- azure.tbs: Debug print over TCP and telemetry event.
+			-- cell.tbs: Debug print over TCP and telemetry event; Remove IFC(SIM7000 support auto-bauding)
+			-- main.tbs: Debug print over TCP and telemetry event.
+			-- PIC_LVP.tbs: Add pic_delay_ms() sub.
+			-- dns.tbs: Fix interface related bug.
+			-- mqtt.tbs: Debug print over TCP and telemetry event.
+			-- sockts.tbs: Fix interface related bug.
+	-   Release files built:  
+			--2_01_00/OSS_Azure_APP0.tpc
+			--2_01_00/OSS_Azure_APP1.tpc
+			--2_01_00/OSS_Azure_APP0_APP1.bin
+			--2_01_00/OSS_Azure_APP0_APP1_2-01-02.tcu
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_020.hex
+			
+	- Level of change:Major 
+	- Risk assessment and cons: 
+	- Deprecated Features: 
+			

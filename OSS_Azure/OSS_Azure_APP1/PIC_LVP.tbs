@@ -68,11 +68,28 @@ sub pic_delay_ms(ms as dword)
 		next bx
 	next ax
 #else
-	dim t as dword = sys.timercountms + ms
-	while sys.timercountms < t
+	dim t as dword
+	ms = sys.timercountms + ms
+	while sys.timercountms < ms
 	wend
 #endif
 
+end sub
+
+sub delay()
+
+	dim i as byte 
+	dim d as byte 
+	
+	if sys.runmode=PL_SYS_MODE_RELEASE then 
+		d = 8
+	else 
+		d = 1 
+	end if
+	
+	for i = 0 to d
+	next i
+	
 end sub
 
 sub pic_set_reset(rv as boolean)
@@ -103,7 +120,7 @@ sub start_stop_bit()
 
 	io.num = icsp_scl
 	io.state = HIGH
-	pic_delay_ms(10)
+	delay()
 	io.state = LOW
 	
 end sub
@@ -120,7 +137,7 @@ sub pic_send_bits(data as dword, numbits as byte)
 	for i = 0 to numbits-1
 		io.lineset(icsp_sda, data and &h0001)
 		io.state = HIGH
-		pic_delay_ms(1)
+		'delay()
 		io.state = LOW
 		data = data shr 1
 	next i
@@ -142,7 +159,7 @@ function pic_recv_bits() as word
 	
 	for i = 0 to 13
 		io.state = HIGH
-		pic_delay_ms(10)
+		delay()
 		io.state = LOW
 		res = (res shr 1) or ((io.lineget(icsp_sda) and &h1) shl 13)
 	next i
@@ -245,7 +262,7 @@ function pic_recv_bits_new() as dword
 	
 	for i = 0 to 23
 		io.state = HIGH
-		pic_delay_ms(1)
+		'delay()
 		io.state = LOW
 		res = (res shl 1) or (io.lineget(icsp_sda) and &h1)
 	next i
