@@ -500,7 +500,8 @@ sub azure_json_callback(byref key as string, byref value as string)
 		if key = "status" and value = "assigned" then
 			azure_assigned_status=true
 		end if
-		if key = "errorCode" and value  = "trackingId" then
+'		if key = "errorCode" and value  = "trackingId" then
+		if key = "errorCode" then
 			azure_assigned_status=false
 		end if
 	case EN_AZURE_PROVISIONING:
@@ -512,43 +513,43 @@ sub azure_json_callback(byref key as string, byref value as string)
 			azure_assigned_status=false
 		end if
 	end select
+	#if AZURE_DEBUG_PRINT
+		azure_debugprint(key+":"+value)
+	#endif
 end sub
 
 function azure_parse_http(data as string) as string
 	azure_parse_http = ""
 	dim start_pos as byte = 0
 	dim end_pos as byte = 0
-	dim parsing as boolean = true
 	dim segment_length as byte
 
-	while parsing = true
+	do
 		segment_length = 255 - len(azure_http_buf)
 		if segment_length > len(data) then
 			segment_length = len(data)
 		end if
 		azure_http_buf = azure_http_buf + mid(data,1,segment_length)
 		data = right(data,len(data) - segment_length)
-		start_pos = instr(1,azure_http_buf,"\x22",1)
-		end_pos = instr(1,azure_http_buf,"\x22",2)
 		
-		if end_pos <> 0 then
-			dim item as string = mid(azure_http_buf,start_pos + 1,end_pos - start_pos - 1)
-			if azure_current_json_key = "" then
-				azure_current_json_key = item
-			else if azure_current_json_value = "" then
-				azure_current_json_value = item
+		start_pos = instr(1,azure_http_buf,"{",1)
+		if start_pos = 0 then start_pos = instr(1,azure_http_buf,",",1)
+		end_pos = instr(start_pos+1,azure_http_buf,",",1)
+		if end_pos = 0 then end_pos = instr(start_pos+1,azure_http_buf,"}",1)
+		
+		if start_pos> 0 and end_pos > 0 then
+			dim item as string = mid(azure_http_buf, start_pos+1, end_pos - start_pos - 1)
+			dim sep_pos as byte = instr(1,item,":",1)
+			if sep_pos > 0 then
+				azure_current_json_key = mid(item, 1, sep_pos - 1)
+				azure_current_json_value = mid(item, sep_pos+1, len(item) - sep_pos - 1)
 				azure_json_callback(azure_current_json_key, azure_current_json_value)
 				azure_current_json_key = ""
 				azure_current_json_value = ""
 			end if
+			azure_http_buf = right(azure_http_buf,len(azure_http_buf) - end_pos + 1)	
 		end if
-		if end_pos <> 0 then
-			azure_http_buf = right(azure_http_buf,len(azure_http_buf) - end_pos)
-		else
-			parsing = false
-		end if
-		
-	wend
+	loop while start_pos > 0
 	
 end function
 
