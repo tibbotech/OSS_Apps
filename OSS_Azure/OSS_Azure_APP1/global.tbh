@@ -1,5 +1,5 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="V2.01.02"
+const OSS_APP_FW_VER="V2.01.03"
 const OSS_SUP_FW_VER = "020"
 #define MQTT_DEBUG_PRINT 1
 #define LUIS_CONFIG_FILE "luis.xtxt"
@@ -60,7 +60,7 @@ const HIH6130_READ_ADDR=&h4F
 #define CELL__PPP_MODE_ISENABLED	1
 #define CELL__AT_USERMODE_ISENABLED	0
 #define CELL__GPS_MODE_ISENABLED	0
-#define CELL_BANDTYPE "2"
+#define CELL_BANDTYPE "3"
 #define CELL__DATA_SER_PORT 0
 
 const TBT00_3_S5_CLK = PL_IO_NUM_9

@@ -11,7 +11,7 @@ const AZURE_API_VERSION="?api-version=2019-03-31"
 'const AZURE_MQTT_API_VERSION="?api-version=2018-06-30"
 const AZURE_MQTT_API_VERSION="?api-version=2021-04-12"
 const TOPIC_TIMESTAMP="iothub-creation-time-utc="
-const AZURE_CONNECTION_TOUT=120
+const AZURE_CONNECTION_TOUT=150
 
 dim azure_state as en_azure_states=EN_AZURE_NOT_INITIALIZED
 dim azure_rid as dword=0
@@ -500,10 +500,10 @@ sub azure_json_callback(byref key as string, byref value as string)
 		if key = "status" and value = "assigned" then
 			azure_assigned_status=true
 		end if
-'		if key = "errorCode" and value  = "trackingId" then
 		if key = "errorCode" then
 			azure_assigned_status=false
 		end if
+
 	case EN_AZURE_PROVISIONING:
 		if key = "status" and value = "assigned" then
 			azure_assigned_status=true
@@ -542,14 +542,18 @@ function azure_parse_http(data as string) as string
 			dim sep_pos as byte = instr(1,item,":",1)
 			if sep_pos > 0 then
 				azure_current_json_key = mid(item, 1, sep_pos - 1)
-				azure_current_json_value = mid(item, sep_pos+1, len(item) - sep_pos - 1)
+				azure_current_json_value = mid(item, sep_pos+1, len(item) - sep_pos)
+				if right(azure_current_json_key,1) = "\x22" then azure_current_json_key = left(azure_current_json_key,len(azure_current_json_key)-1)
+				if left(azure_current_json_key,1) = "\x22" then azure_current_json_key = right(azure_current_json_key,len(azure_current_json_key)-1)
+				if right(azure_current_json_value,1) = "\x22" then azure_current_json_value = left(azure_current_json_value,len(azure_current_json_value)-1)
+				if left(azure_current_json_value,1) = "\x22" then azure_current_json_value = right(azure_current_json_value,len(azure_current_json_value)-1)				
 				azure_json_callback(azure_current_json_key, azure_current_json_value)
 				azure_current_json_key = ""
 				azure_current_json_value = ""
 			end if
 			azure_http_buf = right(azure_http_buf,len(azure_http_buf) - end_pos + 1)	
 		end if
-	loop while start_pos > 0
+	loop while start_pos > 0 and end_pos > 0
 	
 end function
 

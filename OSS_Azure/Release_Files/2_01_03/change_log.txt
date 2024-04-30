@@ -1,0 +1,29 @@
+Changelog of OSS APP
+	-	Date of change:30/04/2024
+	-	New revision of OSS APP: V2.01.03
+	-	Previous revision of OSS APP: 2.01.02 - 24/04/2024
+	-	The reason for change: 
+			-- Remove legacy sensor, and rename the rest of sensors.
+			-- Change Cell comm Band Type
+			-- bug fix: After store previous iot hub, if modify the connection parameter, device doesn't connect to provision server for new hub.
+			-- bug fix: SIMCOM module sometimes stuck in reset cycle
+
+	-	Files changed:
+			-- device.tbs: bug fix: didn't reprovision after changing connection parameters.
+			-- global.tbh: Change Cell comm Band Type
+			-- azure.tbs: bug fix: didn't reprovision after changing connection parameters.
+			-- cell.tbs bug fix: SIMCOM module sometimes stuck in reset cycle
+
+	-   Release files built:  
+			--2_01_00/OSS_Azure_APP0.tpc
+			--2_01_00/OSS_Azure_APP1.tpc
+			--2_01_00/OSS_Azure_APP0_APP1.bin
+			--2_01_00/OSS_Azure_APP0_APP1_2-01-03.tcu
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_020.hex
+			
+	- Level of change:Major 
+	- Risk assessment and cons: 
+	- Deprecated Features: 
+			

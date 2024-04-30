@@ -1702,13 +1702,14 @@ sub cell__powering_onoff_wait(next_pwr_on_phase as en_cell__op_pwr_phases, next_
     cell__elapsedtime = cell__calc_timediff_16b(cell__starttime, cell__newtime)	'calculate the elapsed time
 
     if cell__elapsedtime <= CELL__STATUS_TIMEOUT_MAX then	'maximum timeout for the modem to turn ON/OFF
+		cell__sleeptimer(200)
 		cell__newstate = CELL__MODEM_STATUS	'update the modem state
 
 		if cell__newstate <> cell__startstate then	'check periodically whether the modem state has changed
 			if CELL__MODEM_STATUS = cell__status_setto_on then	'Modem has turned ON
 				'***IMPORTANT: update start-timecounter
+				cell__sleeptimer(200)
 				cell__starttime = sys.timercount
-							
 				'Set next phase to transit to (e.g. PHASE_PWR_SERPORT_CHK_RDY_STATE)
 				cell__update_op_next_phases(next_pwr_on_phase, next_at_phase, next_ppp_phase, next_gps_phase, next_parse_phase)
 						

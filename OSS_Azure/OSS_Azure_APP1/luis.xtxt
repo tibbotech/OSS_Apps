@@ -21,7 +21,7 @@ I=DVID;T=STRING;C=EDIT;D=Device ID;xIndex=19;
 I=PKEY;T=STRING;C=EDIT;D=Primary Key;xIndex=20;
 I=SEN;D=Sensors;T=GROUP;
 I=OPMD;T=BYTE;D=Operation Mode;C=STATIC;O=Always On/0/Low-Power Mode/1;xIndex=22;
-I=STPY;T=BYTE;D=Sensor Type;C=STATIC;V=none;S=none;O=Temp-Hum-Legacy/0/Temp-Hum/1/Temp-Hum-CO2/2/Modbus-BP02/128/Modbus-Soil/129;xIndex=23;
+I=STPY;T=BYTE;D=Sensor Type;C=STATIC;V=none;S=none;O=01- T\\H/0/02-T\\H\\CO2/1/M-BP02/127/M-SOIL/128;xIndex=23;
 I=MBID;T=BYTE;D=Modbus Device ID;C=EDIT;V=none;S=STPY<128?"i":"e";xIndex=24;
 I=SPT;T=INT;C=EDIT;D=Sensor Sampling Time (min);V=SPT<1?"Sampling Time cannont be 0":"";xIndex=25;S=1==1?"i":"e";
 I=RCN;T=INT;C=EDIT;D=No. of Samples to Aggregate;V=RCN<1?"No. of Samples to Aggregate cannont be 0":"";S=1==1?"i":"e";xIndex=26;
