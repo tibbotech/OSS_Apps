@@ -297,7 +297,7 @@ dim cell__at_cmd_storArray_numof_cmds as word
                 #else
                 
 				#if SYS_SOCK_DEBUGPRINT or SYS_EVENT_DEBUGPRINT
-					sys_debugprint(print_data + CELL__CRLF)
+					alternate_debugprint(print_data + CELL__CRLF)
 				#else
 					sys.debugprint(print_data + CELL__CRLF)
 				#endif

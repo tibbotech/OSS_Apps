@@ -44,8 +44,8 @@ declare sub time_to_str(byref ts_str as string(20),
 declare sub device_sleep()
 declare sub device_upgrade_start()
 declare sub device_store_app_fw(data as string)
-declare sub read_onboard_t_h_co2_sensor()
-declare sub read_onboard_t_h_sensor()
+declare sub read_onboard_t_h_co2_sensor(byref ts as string)
+declare sub read_onboard_t_h_sensor(byref ts as string)
 declare function add_telemetry(byref telemetry_name as string, byref telemetry_value as string, byref ts as string) as en_tbl_status_codes
 declare sub update_stg_ts_and_send_azure(byref stg_name as string)
 declare sub update_server_properties()
@@ -88,34 +88,44 @@ sub callback_stg_error(byref stg_name_or_num as string,index as byte,status as e
 end sub
 
 sub callback_stg_pre_get(byref stg_name_or_num as string,index as byte,byref stg_value as string)
+	dim debug_string as string = ""
+	
 	select case stg_name_or_num
 		case "DH":
 			stg_value=wln.autodhcp
-			sys.debugprint("WiFi DHCP: " + stg_value + "\r\n")				
+			debug_string="WiFi DHCP: " + stg_value
 		case "WAP":
 			stg_value=wln.autoconnectssid
-			sys.debugprint("WiFi Access Point: " + stg_value + "\r\n")		
+			debug_string="WiFi Access Point: " + stg_value
 		case "WPW":
 			stg_value=wln.autoconnectpassword
-			sys.debugprint("WiFi Password: " + stg_value + "\r\n")					
+			debug_string="WiFi Password: " + stg_value
 		case else:
 	end select
-        
+
+	#if DEVICE_DEBUG_PRINT
+		if debug_string<>"" then
+			device_debug_print(debug_string)
+		end if
+	#endif
+
 end sub    
 
 sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref stg_value as string)
+	dim debug_string as string = ""
+
     select case stg_name_or_num
 	case "UPGS":
 		upgrade_trigger = val(stg_value)
 	case "DH":
 		wln.autodhcp = stg_value
-		sys.debugprint("WiFi DHCP: " + stg_value + "\r\n")			
+		debug_string="WiFi DHCP: " + stg_value
 	case "WAP":
 		wln.autoconnectssid = stg_value
-		sys.debugprint("WiFi Access Point: " + stg_value + "\r\n")		
+		debug_string="WiFi Access Point: " + stg_value
 	case "WPW":
 		wln.autoconnectpassword = stg_value
-		sys.debugprint("WiFi Password: " + stg_value + "\r\n")		
+		debug_string="WiFi Password: " + stg_value
 	case "SPT":
 		sleep_time = val(stg_value)
 	case "RCN":
@@ -125,6 +135,12 @@ sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref s
 			reprovision_needed = YES
 		end if
     end select
+	
+	#if DEVICE_DEBUG_PRINT
+		if debug_string<>"" then
+			device_debug_print(debug_string)
+		end if
+	#endif	
 end sub
         
 sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref stg_value as string)
@@ -179,9 +195,6 @@ sub callback_dns_answer_acquired(return_type as en_dns_return_type, byref return
     http_dns_answer_acquired(return_type, return_string)
     mqtt_dns_answer_acquired(return_type, return_string)
 
-    'if return_type=EN_DNS_RET_IP then
-    '    sys.debugprint("DNS:" + ddstr(return_string) + "\r\n")
-    'end if
 end sub
 
 sub callback_dns_ok()
@@ -354,10 +367,12 @@ sub callback_azure_rtc_correction(daycounts as word, mincounts as word, seconds 
 end sub
 
 sub callback_azure_provision_failed()
-	device_add_event("Provision failed, Device ID: "+new_dvid)
-	new_dvid = ""
-	new_scid = "" 
-	new_pkey = ""
+	if device_migrate = YES then
+		device_add_event("Migrate failed, Device ID: "+new_dvid)
+		new_dvid = ""
+		new_scid = "" 
+		new_pkey = ""
+	end if
 	provision_failed = YES
 end sub
 
@@ -614,7 +629,9 @@ sub device_add_event(byref event_msg as string)
 	tbl_result=tbl_field_sg("value",event_msg,EN_TBL_SET)
 	tbl_result=tbl_record_add("")		
 	
-	sys.debugprint("Event: "+event_msg+"\x0a")
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print("Event: "+event_msg)
+	#endif
 	fd.filenum = f
 end sub
 
@@ -825,13 +842,11 @@ public sub connect_to_azure_server()
 end sub
 
 ' This function is to read the sensor board that has a local MCU on it and T/H and CO2 sensor is populated on it
-sub read_onboard_t_h_co2_sensor()
+sub read_onboard_t_h_co2_sensor(byref ts as string)
 	dim data0, data1, data2, data3, data4, data5, data6, data7 as byte
 	dim tmp1,hi,lo,temp2 as byte
 	dim co2, humidity, temperature as float
-	dim humd,temp,str_co2,error,ts as string(36)
-	dim daycounts, mincounts as word
-	dim seconds as byte
+	dim humd,temp,str_co2,error as string(36)
 	
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	si2c_get(sensor_channel)
@@ -904,48 +919,39 @@ sub read_onboard_t_h_co2_sensor()
 	error=hex(data7)
 	error=right(error,len(error)-2)
 
-	'check the timestampe, if it's invalid, don't sample, but sample again in 2 sec
-	rtc.getdata(daycounts,mincounts,seconds)
-	if daycounts>0 then
-		time_to_str(ts,daycounts,mincounts,seconds)
-		ts=ts+".000Z"
-		
-		if temperature > -40 and temperature < 85 then
-			add_telemetry("temperature",temp,ts)
-		else
-			device_add_event("Sensor value out of range [temp]: " + temp)
-		end if
-		
-		if humidity > 0 and humidity < 100 then
-			add_telemetry("humidity",humd,ts)
-		else
-			device_add_event("Sensor value out of range [humd]: " + humd)
-		end if
-
-		if co2 > 1 and co2 < 10000 then
-			add_telemetry("co2",str_co2,ts)
-		else
-			device_add_event("Sensor value out of range [co2]: " + str_co2)
-		end if
-		
-		'in power saving mode log battery level
-		if operation_mode = 1 then
-			add_telemetry("BAT_LVL",str(battery_level),ts)
-		end if
-		
-		sys.debugprint(temp+"C "+humd+"% "+str_co2+chr(10)+chr(13))
+	if temperature > -40 and temperature < 85 then
+		add_telemetry("temperature",temp,ts)
 	else
-		sample_timer=4
-	end if	
+		device_add_event("Sensor value out of range [temp]: " + temp)
+	end if
+	
+	if humidity > 0 and humidity < 100 then
+		add_telemetry("humidity",humd,ts)
+	else
+		device_add_event("Sensor value out of range [humd]: " + humd)
+	end if
+
+	if co2 > 1 and co2 < 10000 then
+		add_telemetry("co2",str_co2,ts)
+	else
+		device_add_event("Sensor value out of range [co2]: " + str_co2)
+	end if
+	
+	'in power saving mode log battery level
+	if operation_mode = 1 then
+		add_telemetry("BAT_LVL",str(battery_level),ts)
+	end if
+	
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print(temp+"C "+humd+"% "+str_co2)
+	#endif
 end sub
 ' This function is to read the sensor board that has a local MCU on it and T/H sensor is populated on it but CO2 sensor is NOT populated on it
-sub read_onboard_t_h_sensor()
+sub read_onboard_t_h_sensor(byref ts as string)
 	dim data0, data1, data2, data3, data4 as byte
 	dim tmp1,hi,lo,temp2 as byte
 	dim humidity, temperature as float
-	dim humd,temp,ts as string(36)
-	dim daycounts, mincounts as word
-	dim seconds as byte
+	dim humd,temp as string(36)
 	
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	si2c_get(sensor_channel)
@@ -997,32 +1003,26 @@ sub read_onboard_t_h_sensor()
 	humd=ftostr(humidity,FTOSTR_MODE_AUTO,5)
 	temp=ftostr(temperature,FTOSTR_MODE_AUTO,5)
 	
-	'check the timestampe, if it's invalid, don't sample, but sample again in 2 sec
-	rtc.getdata(daycounts,mincounts,seconds)
-	if daycounts>0 then
-		time_to_str(ts,daycounts,mincounts,seconds)
-		ts=ts+".000Z"
-
-		if temperature > -40 and temperature < 85 then
-			add_telemetry("temperature",temp,ts)
-		else
-			device_add_event("Sensor value out of range [temp]: " + temp)
-		end if
-		
-		if humidity > 0 and humidity < 100 then
-			add_telemetry("humidity",humd,ts)
-		else
-			device_add_event("Sensor value out of range [humd]: " + humd)
-		end if
-
-		'in power saving mode log battery level
-		if operation_mode = 1 then
-			add_telemetry("BAT_LVL",str(battery_level),ts)
-		end if
-		sys.debugprint(temp+"C "+humd+"% "+chr(10)+chr(13))
+	if temperature > -40 and temperature < 85 then
+		add_telemetry("temperature",temp,ts)
 	else
-		sample_timer=4
-	end if	
+		device_add_event("Sensor value out of range [temp]: " + temp)
+	end if
+	
+	if humidity > 0 and humidity < 100 then
+		add_telemetry("humidity",humd,ts)
+	else
+		device_add_event("Sensor value out of range [humd]: " + humd)
+	end if
+
+	'in power saving mode log battery level
+	if operation_mode = 1 then
+		add_telemetry("BAT_LVL",str(battery_level),ts)
+	end if
+
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print(temp+"C "+humd+"% ")
+	#endif
 end sub
 
 sub read_modbus_bp02()
@@ -1174,7 +1174,10 @@ sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref
 			dim BP_02_Temperature_val as word = modbus_read_word(bytes,0)
 			temp=str(BP_02_Temperature_val)
 			temp=left(temp,len(temp)-1)+"."+right(temp,1)
-			sys.debugprint(temp+" C\n")
+
+			#if DEVICE_DEBUG_PRINT
+				device_debug_print(temp+"C ")
+			#endif			
 			tbl_result=tbl_select("Azure","Azure")
 			tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
 			tbl_result=tbl_field_sg("type","temperature",EN_TBL_SET)
@@ -1186,7 +1189,11 @@ sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref
 			dim BP_02_Humidity_val as word = modbus_read_word(bytes,0)
 			temp=str(BP_02_Humidity_val)
 			temp=left(temp,len(temp)-1)+"."+right(temp,1)
-			sys.debugprint(temp+" RH\n")
+
+			#if DEVICE_DEBUG_PRINT
+				device_debug_print(temp+" RH")
+			#endif			
+			
 			tbl_result=tbl_select("Azure","Azure")
 			tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
 			tbl_result=tbl_field_sg("type","humidity",EN_TBL_SET)
@@ -1243,26 +1250,43 @@ sub device_sampling()
 	if sample_timer>0 then
 		sample_timer=sample_timer-1
 		if sample_timer = 0 then
-			select case sensor_type
-			case 0:
-				read_onboard_t_h_sensor()	
-			case 1:
-				read_onboard_t_h_co2_sensor()			
-			case 128:
-				read_modbus_bp02()
-			case else:
-			end select
+		
+			dim daycounts, mincounts as word
+			dim seconds as byte		
+			dim ts as string(36)		
 			
-			'in Low power mode, and not sending cycle, go to sleep after taking sample
-			if operation_mode > 0 then
-				if connect_to_azure_required = NO and sample_timer = 0 then
-					device_sleep()
+			'check the timestampe, if it's invalid, don't sample, but sample again in 2 sec
+			rtc.getdata(daycounts,mincounts,seconds)
+			if daycounts>0 then
+				time_to_str(ts,daycounts,mincounts,seconds)
+				ts=ts+".000Z"
+				
+				select case sensor_type
+				case 0:
+					read_onboard_t_h_sensor(ts)	
+				case 1:
+					read_onboard_t_h_co2_sensor(ts)			
+				case 128:
+					read_modbus_bp02()
+				case else:
+				end select
+
+				'in Low power mode, and not sending cycle, go to sleep after taking sample
+				if operation_mode > 0 then
+					if connect_to_azure_required = NO and sample_timer = 0 then
+						device_sleep()
+					end if
+				else
+					'when in Always on mode, sample time is same as sleep time
+					sample_timer = sleep_time*120
 				end if
+				azure_send_telemetry()
 			else
-				'when in Always on mode, sample time is same as sleep time
-				sample_timer = sleep_time*120
+				sample_timer = 4
+				#if DEVICE_DEBUG_PRINT
+					device_debug_print("Bad timestampe, skip sensor sampling")
+				#endif					
 			end if
-			azure_send_telemetry()
 		end if	
 	end if 	
 end sub
@@ -1310,3 +1334,14 @@ sub delay_ms(ms as dword)
 #endif
 
 end sub
+
+#if DEVICE_DEBUG_PRINT
+sub device_debug_print(byref data as string)
+
+	#if SYS_SOCK_DEBUGPRINT or SYS_EVENT_DEBUGPRINT
+		alternate_debugprint(MQTT_STAMP+data+MQTT_CR_LF)
+	#else
+		sys.debugprint(data+"\r\n")
+	#endif
+end sub
+#endif

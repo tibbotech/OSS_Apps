@@ -74,7 +74,7 @@ sub boot()
     end if
 	
 	if stg_init_code<>EN_STG_STATUS_OK then
-		device_add_event("Setting init failed.")
+		device_debug_print("Setting init failed.")
 	end if
 
 	CELL__AT_APN = stg_get("GAN",0)
@@ -96,7 +96,7 @@ sub boot()
 		sys.debugprint("mcp23017 self test failed!\r\n")
 		if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
 		pat.play("R-R-R",PL_PAT_CANINT)
-		device_add_event("mcp2307 init failed.")
+		device_debug_print("mcp2307 init failed.")
 	case MCP23017_NO_SSI_AVAILABLE:
 		sys.debugprint("SSI channel could not be allocated, using bit banging instead.\r\n")
 	end select
@@ -249,7 +249,7 @@ sub sensor_level_shift_on()
     io.state = HIGH
 end sub
 
-sub sys_debugprint(byref s as string)
+sub alternate_debugprint(byref s as string)
 	#if SYS_EVENT_DEBUGPRINT
 		device_add_event(s)
 	#endif
@@ -407,6 +407,7 @@ sub check_and_upgrade_sup_pic()
 	dim upgrade_success as boolean
 	
 	if ver <> OSS_SUP_FW_VER then
+		device_debug_print("Running PIC: "+ver+ "/ Current PIC: "+OSS_SUP_FW_VER)
 		enter_LVP_mode()
 		pic_write(&h30,"\x77")
 		upgrade_success = pic_lvp_upload_firmware(OSS_SUP_PIC_FILE)
@@ -425,9 +426,9 @@ sub check_and_upgrade_sup_pic()
 		exit_LVP_mode()
 		
 		if upgrade_success = false then
-			device_add_event("PIC FW upgraded failed!")
+			device_debug_print("PIC FW upgraded failed!")
 		else
-			device_add_event("PIC FW upgraded!")
+			device_debug_print("PIC FW upgraded!")
 			sys.reboot()
 		end if
 	end if

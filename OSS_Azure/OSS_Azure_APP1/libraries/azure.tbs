@@ -655,7 +655,7 @@ end function
 	sub azure_debugprint(byref print_data as string)
 		
 		#if SYS_SOCK_DEBUGPRINT or SYS_EVENT_DEBUGPRINT
-			sys_debugprint("AZURE> "+print_data+"\x0d\x0a")
+			alternate_debugprint("AZURE> "+print_data+"\x0d\x0a")
 		#else
 			sys.debugprint("AZURE> "+print_data+"\x0d\x0a")
 		#endif

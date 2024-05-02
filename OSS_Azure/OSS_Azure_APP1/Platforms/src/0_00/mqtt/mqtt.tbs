@@ -773,7 +773,7 @@ end sub
 sub mqtt_debug_print(data as string)
 
 	#if SYS_SOCK_DEBUGPRINT or SYS_EVENT_DEBUGPRINT
-		sys_debugprint(MQTT_STAMP+data+MQTT_CR_LF)
+		alternate_debugprint(MQTT_STAMP+data+MQTT_CR_LF)
 	#else
 		sys.debugprint(MQTT_STAMP+data+MQTT_CR_LF)
 	#endif

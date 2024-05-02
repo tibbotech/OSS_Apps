@@ -443,7 +443,7 @@ end sub
 #if DNS_DEBUG_PRINT
 sub dns_debugprint(byref print_data as string)
 	#if SYS_SOCK_DEBUGPRINT or SYS_EVENT_DEBUGPRINT
-		sys_debugprint(DNS_STAMP+print_data+DNS_CR_LF)
+		alternate_debugprint(DNS_STAMP+print_data+DNS_CR_LF)
 	#else
 		sys.debugprint(DNS_STAMP+print_data+DNS_CR_LF)
 	#endif

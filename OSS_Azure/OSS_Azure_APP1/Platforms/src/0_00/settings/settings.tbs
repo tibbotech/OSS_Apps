@@ -1524,8 +1524,9 @@ lb2:		if i<stg_sdr(num).p1 or i>stg_sdr(num).p2 then
 		if stg_sdr(num).storage=`E` then
 			'store the data into the NV MEM
 			stg_sg_internal=EN_STG_STATUS_FAILURE
-			
-			sys.debugprint(stg_name_or_num+"\x0a")
+			#if STG_DEBUG_PRINT
+				stg_debugprint(stg_name_or_num)
+			#endif
 			#if STG_STORAGE_MEMORY=0
 				if stor.setdata(stg_str,stg_sdr(num).memaddr)=len(stg_str) then
 					stg_sg_internal=EN_STG_STATUS_OK
@@ -1877,7 +1878,6 @@ end sub
 '------------------------------------------------------------------------------
 #if STG_DEBUG_PRINT
 sub stg_debugprint(byref print_data as string)
-
 	sys.debugprint(STG_STAMP+print_data+STG_CR_LF)
 end sub
 #endif
