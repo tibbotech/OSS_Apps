@@ -327,15 +327,12 @@ end sub
 sub sensor_init()
 	sensor_type = val(stg_get("STPY",0))
 	select case sensor_type
-	case 0: 'temp_hum_legacy
+	
+	case 0:	'temp_hum
 		sample_timer = 4
 		init_i2c_sensor()
 		
-	case 1:	'temp_hum
-		sample_timer = 4
-		init_i2c_sensor()
-		
-	case 2:	'temp_hum_co2
+	case 1:	'temp_hum_co2
 		sample_timer = 40
 		init_i2c_sensor()
 		
