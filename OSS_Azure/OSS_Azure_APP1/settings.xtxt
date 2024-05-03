@@ -14,7 +14,7 @@
 >>PKEY	E	S	1	0	64	I	^	Primary key
 >>EPT	E	W	1	0	65535	A	0	Sampling period (sec)
 >>SPT	E	W	1	1	65535	A	1	Sleep time (min)
->>AWT	E	W	1	1	65535	A	2	Awake time (min)
+>>XXX1	E	W	1	1	65535	A	2	ABANDON
 >>RCN	E	W	1	1	65535	A	1	Number of Records start to send
 >>UPD	E	B	1	0	255	A	255	Update step
 >>BTAG	E	S	1	2	2	A	~~	BLE nTag ID
@@ -27,7 +27,7 @@
 >>TZ	E	S	1	0	64	A	^	Time Zone
 >>DVNT	E	S	1	0	64	A	^	Device Note
 >>DVNM	E	S	1	0	32	A	OSS	Device Name
->>UPGS	R	B	1	0	1	A	^	Trigger for upgrade
+>>XXX2	R	B	1	0	1	A	^	ABANDON
 >>HUBN	E	S	1	0	64	A	^	Iot hub name
 >>NWPR	E	B	1	0	1	A	0	Password Recovery Requested (NTAG)
 #define STG_DESCRIPTOR_FILE "settings.xtxt"

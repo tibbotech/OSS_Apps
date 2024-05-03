@@ -1,6 +1,7 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="V2.01.03"
-const OSS_SUP_FW_VER = "020"
+const OSS_APP_FW_VER="V2.01.04"
+const OSS_SUP_FW_VER = "021"
+#define OSS_SUP_PIC_FILE "OSS_SUPR_PIC_FW_021.hex"
 #define MQTT_DEBUG_PRINT 1
 #define LUIS_CONFIG_FILE "luis.xtxt"
 #define LUIS_DEBUG_PRINT 0
@@ -21,7 +22,6 @@ const OSS_SUP_FW_VER = "020"
 #define TBL_SECTOR_SIZE 512
 #define MQTT_CER_FILE "DigiCert.cer"
 #define HTTP_CER_FILE "DigiCert.cer"
-#define OSS_SUP_PIC_FILE "OSS_SUPR_PIC_FW_020.hex"
 #define PIC_LVP_TARGET_TYPE PIC_16LF18345
 
 #define MQTT_LARGE_PACKETS 1
@@ -166,7 +166,7 @@ declare device_awake_timer as word
 declare sleep_time as word
 declare connect_to_azure_required as no_yes
 declare min_rec_num_to_send as word
-declare upgrade_state as byte 'upgrade over air state, 0~7 indicate the parts that is being downloading, 255: no upgrade in progress, 254: whole file completed
+declare upgrade_state as byte 'upgrade over air state, 0~7(above) indicate the parts that is being downloading, 255: no upgrade in progress, 254: whole file completed
 declare config_mode as no_yes
 declare config_bt_name as string(16)
 declare CELL__AT_APN as string(24)

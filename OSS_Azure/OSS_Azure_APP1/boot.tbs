@@ -17,7 +17,6 @@ dim sensor_type as byte
 dim operation_mode as byte '0: always on, 1: low power mode
 
 declare sub check_app_fw_version()
-declare sub upgrade_app_fw_init()
 declare sub sensor_init()
 declare sub pic_init()
 
@@ -184,7 +183,7 @@ sub boot()
 				sys.reboot()
 			end if
 			
-			if comm_mode = 1 and wln.autoconnect = YES then
+			if comm_mode = 1 and wln.autoconnect = YES and (sys.runmode =PL_SYS_MODE_RELEASE or sys.debugmode = PL_SYS_DBG_SERIAL) then
 				wln.autoconnect = NO
 				sys.reboot()
 			end if		
@@ -208,7 +207,9 @@ sub boot()
 		end if
 	end if
 	
-	'device_awake_timer=val(stg_get("AWT",0))*120
+	if upgrade_state <> 255 then
+		device_awake_timer = device_awake_timer*2
+	end if
 	sleep_time=val(stg_get("SPT",0))
 
 '	if sys.resettype=PL_SYS_RESET_TYPE_EXTERNAL then
@@ -333,7 +334,7 @@ sub sensor_init()
 		init_i2c_sensor()
 		
 	case 1:	'temp_hum_co2
-		sample_timer = 40
+		sample_timer = 60
 		init_i2c_sensor()
 		
 	case 128,129: 'modbus sensor

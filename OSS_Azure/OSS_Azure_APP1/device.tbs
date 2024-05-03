@@ -11,19 +11,18 @@ dim sensor_channel as byte
 dim pic_channel as byte
 dim device_awake_timer as word
 dim sleep_time as word
-dim upgrade_state as byte = 255  
+dim upgrade_state as byte = 255  'upgrade over air state, 0~7(above) indicate the parts that is being downloading, 255: no upgrade in progress, 254: whole file completed
 dim app_fw_size as dword=4294836225
-dim app_fw_filenum as byte
+dim app_fw_filenum as byte = 255
 dim app_fw_checksum as dword
 dim part_size as dword=4294836225
-dim part_filenum as byte
+dim part_filenum as byte = 255
 dim part_checksum as dword
 dim http_conn_timeout as no_yes = NO
 dim total_chuncks as byte = 0
 dim part_num as byte = 255
 dim battery_level as byte = 0
 dim property_modified as no_yes = YES
-dim upgrade_trigger as byte = 0
 dim sensor_telemetry_ts as string(36) = ""
 dim modbus_device_id as byte
 dim device_migrate as no_yes = NO
@@ -42,7 +41,6 @@ declare sub time_to_str(byref ts_str as string(20),
 	byref time_second_byte as byte)
 
 declare sub device_sleep()
-declare sub device_upgrade_start()
 declare sub device_store_app_fw(data as string)
 declare sub read_onboard_t_h_co2_sensor(byref ts as string)
 declare sub read_onboard_t_h_sensor(byref ts as string)
@@ -55,12 +53,7 @@ declare sub read_modbus_bp02()
 
 sub device_proc_timer()	
 	'deduct device_awake_timer only when device is not doing upgrade and in Low power mode
-	if upgrade_state = 255 then
-		if upgrade_trigger = 1 then
-			stg_set("UPGS",0,"0")
-			azure_send_property("UPGS","0")
-			device_upgrade_start()
-		end if
+'	if upgrade_state = 255 then
 		if operation_mode > 0 then
 			if device_awake_timer>0 then
 				device_awake_timer=device_awake_timer-1
@@ -73,14 +66,15 @@ sub device_proc_timer()
 				end if
 			end if
 		end if		
-		device_sampling()
 		device_migrating()		
-	else
+'	else
+	if upgrade_state <> 255 then
 		if http_conn_timeout = YES then
 			http_conn_timeout = NO
 			connect_to_azure_server()
 		end if
 	end if
+	device_sampling()
 end sub
 
 sub callback_stg_error(byref stg_name_or_num as string,index as byte,status as en_stg_status_codes)
@@ -115,8 +109,7 @@ sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref s
 	dim debug_string as string = ""
 
     select case stg_name_or_num
-	case "UPGS":
-		upgrade_trigger = val(stg_value)
+
 	case "DH":
 		wln.autodhcp = stg_value
 		debug_string="WiFi DHCP: " + stg_value
@@ -240,10 +233,7 @@ sub callback_http_header_arrival(header_type as string, header_value as string)
 		case else:
 			
 		end select
-		if operation_mode = 0 then 
-			total_chuncks = 1
-			part_num = 0
-		end if		
+	
 	end if
 
 end sub
@@ -278,10 +268,7 @@ sub callback_http_send_headers()
 		http_send_headers("Content-Type","application/json")
 		http_send_headers("Connection","keep-alive")
 		http_send_headers("DeviceID", AZURE_DEVICE_ID)
-		
-		if operation_mode>0 then
-			http_send_headers("Part", str(upgrade_state))
-		end if
+		http_send_headers("Part", str(upgrade_state))
 	end if 
 end sub
 
@@ -381,7 +368,9 @@ sub callback_azure_command_triggered(byref command as string, byref param as str
     select case command
     case "UPGRADE": 'offline command, not expecting response
 		stg_set("DLPT",0,param)
-		upgrade_trigger = 1
+		stg_set("UPD",0,"0")
+		device_add_event("Upgrade start!")
+		
 	case "RSTNTGPW":
 		pic_write(&hA3,"\x77")
 		delay_ms(5)
@@ -432,7 +421,14 @@ sub callback_azure_on_telemetry_sent()
 	if active_rec_num>0 then
 		azure_send_telemetry()
 	else
-		if operation_mode > 0 then device_awake_timer = 1 'go to sleep
+		if operation_mode > 0 then 
+			device_awake_timer = 1 'go to sleep
+		else
+			upgrade_state = val(stg_get("UPD",0))
+			if upgrade_state <> 255 then
+				connect_to_firmware_server()
+			end if
+		end if
 	end if
 
 end sub        
@@ -568,11 +564,13 @@ end sub
 
 sub cell__callback_ppp_link_established()
 	
-	if config_mode=NO and upgrade_state <255 then
-		connect_to_firmware_server()
-	else
-		connect_to_azure_server()
-		pat.play("G-~",PL_PAT_CANINT)
+	if config_mode=NO then
+		if upgrade_state <255 then
+			connect_to_firmware_server()
+		else
+			connect_to_azure_server()
+			pat.play("G-~",PL_PAT_CANINT)
+		end if
 	end if
 end sub
 
@@ -635,28 +633,6 @@ sub device_add_event(byref event_msg as string)
 	fd.filenum = f
 end sub
 
-sub device_upgrade_start()
-	stg_set("UPD",0,"0")
-	device_add_event("Upgrage start!")
-	azure_send_telemetry()
-	
-	'if running always on mode, start upgarde right away, otherwise start upgrade on next cycle
-	if operation_mode = 0 then
-		'when in Always on mode, send the event before switch to firmware server.
-		dim d as dword = sys.timercountms
-		while sock.txlen > 0 
-			if sys.timercountms < d or sys.timercountms > d+1000 then
-				exit while
-			end if
-		wend
-		if sock.txlen = 0 then
-			azure_on_telemetry_sent()
-		end if
-		upgrade_app_fw_init()
-		connect_to_firmware_server()
-	end if
-end sub
-
 function app_fw_copy_part_to_file() as ok_ng
 	fd.filenum=app_fw_filenum
 	fd.open(APP_FW_FILE)
@@ -709,15 +685,10 @@ sub device_store_app_fw(data as string)
 	pat.play("R-",PL_PAT_CANINT)
 	'if always on mode, store data directly to the destination file.
 	'otherwise stored it to partial file and only copy to destination file if partial file is varified.
-	if operation_mode = 0 then
-		filenum = app_fw_filenum
-		filename = APP_FW_FILE
-		part_checksum = app_fw_checksum
-	else
-		filenum = part_filenum
-		filename = PART_FILE
-	end if
-	
+
+	filenum = part_filenum
+	filename = PART_FILE
+
 	fd.filenum=filenum
 	if fd.fileopened=NO then
 		fd.open(filename)
@@ -740,45 +711,42 @@ sub device_store_app_fw(data as string)
 				device_add_event("Upgrade failed, retry..")
 			else
 				device_add_event("Upgrade failed, retry..")
-				device_upgrade_start()				
+				stg_set("UPD",0,"0") 'start over
+				'device_upgrade_start()				
 			end if
 			exit sub
 		end if
 	else
 		exit sub
 	end if
+
+	if app_fw_copy_part_to_file() = OK then
+		device_add_event(+str(part_num+1)+"/"+str(total_chuncks)+" downloaded")
+	else	
+		device_add_event("Upgrade failed, retry..")
+		stg_set("UPD",0,"0") 'start over		
+	end if
+	'in power saving mode, connect to azure to finish other task
+	connect_to_azure_server()
 	
-	'checksum verification passed
-	if operation_mode = 0 then
-		stg_set("UPD",0,"255")
-		device_add_event("Download Completed, flashing firmware! ")
-		'keep ACSIP alive
-		mcp23017_line_out_enable(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,yes,TBT00_3_S5_CHANNEL)
-		mcp23017_line_set(PMU_INHIBIT_LINE, PMU_INHIBIT_PORT, LOW, TBT00_3_S5_CHANNEL)
-		fd.copyfirmwarefromfilelzo()
-	else
-		if app_fw_copy_part_to_file() = OK then
-			device_add_event(+str(part_num+1)+"/"+str(total_chuncks)+" downloaded")
-		else	
-			device_add_event("Upgrade failed, retry..")
-			device_upgrade_start()			
-		end if
-		'in power saving mode, connect to azure to finish other task
-		connect_to_azure_server()
-	end if	
 end sub
 
 public sub upgrade_app_fw_init()
-	app_fw_filenum = filenum_get("FMW")
-	part_filenum = filenum_get("PAR")
 	upgrade_state = val(stg_get("UPD",0))
-	upgrade_trigger = val(stg_get("UPGS",0))
+	if upgrade_state = 255 then exit sub
 	
-	fd.filenum=part_filenum
-	fd.delete(PART_FILE)
-	fd.create(PART_FILE)
+	if app_fw_filenum = 255 then app_fw_filenum = filenum_get("FMW")
+	if part_filenum = 255 then 
+		part_filenum = filenum_get("PAR")
+		fd.filenum=part_filenum
+		fd.delete(PART_FILE)
+		fd.create(PART_FILE)
+	else
+		fd.filenum=part_filenum
+		fd.setfilesize(0)
+	end if
 
-	if upgrade_state = 0 or operation_mode = 0 then
+	if upgrade_state = 0 then
 		fd.filenum=app_fw_filenum
 		fd.delete(APP_FW_FILE)
 		fd.create(APP_FW_FILE)		
@@ -810,7 +778,8 @@ public sub connect_to_firmware_server()
 		if sock.statesimple = PL_SSTS_EST then
 			sock.discard()
 		end if
-	end if	
+	end if
+	upgrade_app_fw_init()
 	url=stg_get("DLPT",0)
 	http_request(HTTP_GET, url, current_interface,"")		
 end sub
@@ -1274,7 +1243,7 @@ sub device_sampling()
 				'in Low power mode, and not sending cycle, go to sleep after taking sample
 				if operation_mode > 0 then
 					if connect_to_azure_required = NO and sample_timer = 0 then
-						device_sleep()
+						device_awake_timer = 1
 					end if
 				else
 					'when in Always on mode, sample time is same as sleep time
