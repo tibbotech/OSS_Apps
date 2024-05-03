@@ -58,7 +58,7 @@ function swab(w as word) as word
 	swab = ((w shr 8) and &hFF) or ((w and &hFF) shl 8)
 end function
 
-sub pic_delay_ms(ms as dword)
+sub pic_delay_ms(ms as word)
 
 #if PLATFORM_ID=TPP2W or PLATFORM_ID=TPP2N or PLATFORM_ID=TPP3W or PLATFORM_ID=TPP3N
 	dim ax,bx as word
@@ -1231,6 +1231,7 @@ function program_data(byref fw as firmware, n as byte, nn as byte, options as by
 		pic_recv_bits()
 	
 	case 2:
+		'pic_command(CMD_LOAD_CONFIG) 
 		pic_load_pc_address(&hF000)
 		
 	case 1:

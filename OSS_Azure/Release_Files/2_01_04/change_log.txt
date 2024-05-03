@@ -1,0 +1,34 @@
+Changelog of OSS APP
+	-	Date of change:03/05/2024
+	-	New revision of OSS APP: V2.01.04
+	-	Previous revision of OSS APP: 2.01.03 - 30/04/2024
+	-	The reason for change: 
+			-- New PIC firmware (021)
+			-- Remove legacy sensor
+			-- Extend CO2 sensor initial wait time to 30 seconds
+			-- Always on mode now also download firmware by parts.
+			-- Centralize debug print.
+
+	-	Files changed:
+			-- boot.tbs: Extend CO2 sensor initial wait time.
+			-- device.tbs: New PIC firmware (021); Remove legacy sensor; Download firmware by parts.
+			-- global.tbh: New PIC firmware (021); Centralize debug print.
+			-- azure.tbs: Centralize debug print.
+			-- cell.tbs: Centralize debug print.
+			-- dns.tbs: Centralize debug print.
+			-- mqtt.tbs: Centralize debug print.
+			-- settings.tbs: Centralize debug print.
+
+	-   Release files built:  
+			--2_01_00/OSS_Azure_APP0.tpc
+			--2_01_00/OSS_Azure_APP1.tpc
+			--2_01_00/OSS_Azure_APP0_APP1.bin
+			--2_01_00/OSS_Azure_APP0_APP1_2-01-04.tcu
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_021.hex
+			
+	- Level of change:Major 
+	- Risk assessment and cons: 
+	- Deprecated Features: 
+			
