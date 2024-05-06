@@ -1,0 +1,23 @@
+Changelog of OSS APP
+	-	Date of change:06/05/2024
+	-	New revision of OSS APP: V2.01.05
+	-	Previous revision of OSS APP: 2.01.04 - 03/05/2024
+	-	The reason for change: 
+			-- Bug fix: Unable to define modbus sensor address.
+
+	-	Files changed:
+			-- luis.xtxt: Bug fix: Unable to define modbus sensor address.
+
+	-   Release files built:  
+			--2_01_00/OSS_Azure_APP0.tpc
+			--2_01_00/OSS_Azure_APP1.tpc
+			--2_01_00/OSS_Azure_APP0_APP1.bin
+			--2_01_00/OSS_Azure_APP0_APP1_2-01-05.tcu
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_021.hex
+			
+	- Level of change:Major 
+	- Risk assessment and cons: 
+	- Deprecated Features: 
+			
