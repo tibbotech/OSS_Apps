@@ -1,5 +1,5 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="V2.01.05"
+const OSS_APP_FW_VER="V2.01.06"
 const OSS_SUP_FW_VER = "021"
 #define OSS_SUP_PIC_FILE "OSS_SUPR_PIC_FW_021.hex"
 #define MQTT_DEBUG_PRINT 1
@@ -32,7 +32,7 @@ const OSS_SUP_FW_VER = "021"
 #define FILENUM_MAX_SIGNATURE_LEN 3
 #define FILENUM_MAX_FILES 3
 
-#define MODBUS_TIMEOUT 3000
+#define MODBUS_TIMEOUT 10000
 
 const MAX_NUM_INTERFACES=4
 

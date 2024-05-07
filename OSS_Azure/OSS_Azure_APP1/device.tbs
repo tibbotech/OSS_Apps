@@ -50,6 +50,9 @@ declare sub update_server_properties()
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
 declare sub read_modbus_bp02()
+declare sub read_modbus_soil()
+declare sub proc_modbus_bp2(byref request_item as modbus_request_item, byref reply as string)
+declare sub proc_modbus_soil(byref request_item as modbus_request_item, byref reply as string)
 
 sub device_proc_timer()	
 	'deduct device_awake_timer only when device is not doing upgrade and in Low power mode
@@ -1006,6 +1009,16 @@ sub read_modbus_bp02()
 
 end sub
 
+sub read_modbus_soil()
+	dim daycounts, mincounts as word 
+	dim seconds as byte
+	
+	rtc.getdata(daycounts,mincounts,seconds)
+	time_to_str(sensor_telemetry_ts,daycounts,mincounts,seconds)
+	sensor_telemetry_ts=sensor_telemetry_ts+".000Z"
+	modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 2, "", MODBUS_UART, modbus_RTU) 'humidity + temperature 
+	
+end sub
 
 sub pic_write(addr as byte, byref data as string)
 	dim i as byte
@@ -1070,20 +1083,19 @@ function need_to_connect() as no_yes
 	end if
 	
 	select case sensor_type
-	case 0: 
+	case 0, 128, 129: 
 		number_of_fld = 2
-		'in power saving mode log battery level
-		if operation_mode = 1 then number_of_fld = number_of_fld+1
+		
 	case 1: 
 		number_of_fld = 3
-		'in power saving mode log battery level
-		if operation_mode = 1 then number_of_fld = number_of_fld+1
-	case 128:
-		number_of_fld = 2
+	
 	case else:	
 	end select
 	
-    tbl_select("Azure","Azure")
+	'in power saving mode log battery level
+	if operation_mode = 1 then number_of_fld = number_of_fld+1
+	
+	tbl_select("Azure","Azure")
 	tbl_get_num_records(active_rec_num,NO)
 	active_rec_num=active_rec_num/number_of_fld
 	min_rec_num_to_send=val(stg_get("RCN",0))
@@ -1113,7 +1125,7 @@ function modbus_callback_ReadInputStatus(address as word) as boolean
 	
 end function
 
-function modbus_callback_WriteSingleCoil(address as word, value as low_high) as boolean
+function modbus_callback_WriteSingleCoil(address as word, value as low_high) as byte 
 	
 end function
 
@@ -1125,51 +1137,96 @@ function modbus_callback_ReadInputRegister(address as word) as word
 	
 end function
 
+function modbus_callback_set_holding_register(address as word, data as word) as boolean
+	
+end function
+
 function modbus_set_holding_register(address as word, data as string) as boolean
 	
 end function
 
-sub callback_modubus_timeout(device_id as byte)
-	sample_timer = 4
+sub callback_modbus_slave_reply_timeout(byref request_item as modbus_request_item)
+	sample_timer = 10
 end sub
 
 sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref reply as string)
+
+	if request_item.device_id = modbus_device_id then
+		select case sensor_type
+		case 128: proc_modbus_bp2(request_item, reply)
+		case 129: proc_modbus_soil(request_item, reply)
+		end select
+	end if
+end sub
+
+sub proc_modbus_soil(byref request_item as modbus_request_item, byref reply as string)
 	dim bytes as byte(255) = reply
-	dim light, temp as string(36)
+	dim humd, temp as string(36)
 	dim tbl_result as en_tbl_status_codes	
 	
-	if request_item.device_id = modbus_device_id then
-		if request_item.start_register=400 then
-			dim BP_02_Temperature_val as word = modbus_read_word(bytes,0)
-			temp=str(BP_02_Temperature_val)
-			temp=left(temp,len(temp)-1)+"."+right(temp,1)
-
-			#if DEVICE_DEBUG_PRINT
-				device_debug_print(temp+"C ")
-			#endif			
-			tbl_result=tbl_select("Azure","Azure")
-			tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
-			tbl_result=tbl_field_sg("type","temperature",EN_TBL_SET)
-			tbl_result=tbl_field_sg("value",temp,EN_TBL_SET)				
-			tbl_result=tbl_record_add("")	
-		end if
+	if request_item.start_register=2 then
+		dim SOIL_Humidity_val as word = modbus_read_word(bytes,0)
+		dim SOIL_Temperature_val as short = modbus_read_word(bytes,2)
+		temp=stri(SOIL_Temperature_val)
+		if SOIL_Temperature_val<>0 then temp=left(temp,len(temp)-1)+"."+right(temp,1)
 		
-		if request_item.start_register=404 then
-			dim BP_02_Humidity_val as word = modbus_read_word(bytes,0)
-			temp=str(BP_02_Humidity_val)
-			temp=left(temp,len(temp)-1)+"."+right(temp,1)
+		humd=str(SOIL_Humidity_val)
+		if SOIL_Humidity_val<>0 then humd=left(humd,len(humd)-1)+"."+right(humd,1)		
 
-			#if DEVICE_DEBUG_PRINT
-				device_debug_print(temp+" RH")
-			#endif			
-			
-			tbl_result=tbl_select("Azure","Azure")
-			tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
-			tbl_result=tbl_field_sg("type","humidity",EN_TBL_SET)
-			tbl_result=tbl_field_sg("value",temp,EN_TBL_SET)				
-			tbl_result=tbl_record_add("")	
-		end if
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print(temp+"C ")		
+			device_debug_print(humd+" RH")
+		#endif
+		
+		tbl_result=tbl_select("Azure","Azure")
+		tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
+		tbl_result=tbl_field_sg("type","temperature",EN_TBL_SET)
+		tbl_result=tbl_field_sg("value",temp,EN_TBL_SET)	
+		tbl_result=tbl_record_add("")
+		
+		tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
+		tbl_result=tbl_field_sg("type","humidity",EN_TBL_SET)
+		tbl_result=tbl_field_sg("value",humd,EN_TBL_SET)			
+		tbl_result=tbl_record_add("")	
+	end if	
+end sub
+
+sub proc_modbus_bp2(byref request_item as modbus_request_item, byref reply as string)
+	dim bytes as byte(255) = reply
+	dim temp as string(36)
+	dim tbl_result as en_tbl_status_codes	
+	
+	if request_item.start_register=400 then
+		dim BP_02_Temperature_val as short = modbus_read_word(bytes,0)
+		temp=stri(BP_02_Temperature_val)
+		if BP_02_Temperature_val <> 0 then temp=left(temp,len(temp)-1)+"."+right(temp,1)
+
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print(temp+"C ")
+		#endif			
+		tbl_result=tbl_select("Azure","Azure")
+		tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
+		tbl_result=tbl_field_sg("type","temperature",EN_TBL_SET)
+		tbl_result=tbl_field_sg("value",temp,EN_TBL_SET)				
+		tbl_result=tbl_record_add("")	
 	end if
+	
+	if request_item.start_register=404 then
+		dim BP_02_Humidity_val as word = modbus_read_word(bytes,0)
+		temp=str(BP_02_Humidity_val)
+		temp=left(temp,len(temp)-1)+"."+right(temp,1)
+
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print(temp+" RH")
+		#endif			
+		
+		tbl_result=tbl_select("Azure","Azure")
+		tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
+		tbl_result=tbl_field_sg("type","humidity",EN_TBL_SET)
+		tbl_result=tbl_field_sg("value",temp,EN_TBL_SET)				
+		tbl_result=tbl_record_add("")	
+	end if
+
 end sub
 
 sub update_server_properties()
@@ -1237,6 +1294,8 @@ sub device_sampling()
 					read_onboard_t_h_co2_sensor(ts)			
 				case 128:
 					read_modbus_bp02()
+				case 129:
+					read_modbus_soil()
 				case else:
 				end select
 

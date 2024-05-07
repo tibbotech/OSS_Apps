@@ -1,25 +1,27 @@
 include "global.tbh"
-
-declare sub modbus_tcp_send(socket as byte, transactionId as word, protocolId as word, modbusUnitId as byte, modbusFunction as modbusFunc, byref data as string)
 declare sub modbus_queue_add(request_item as modbus_request_item)
 declare sub modbus_send(interface_number as byte, protocol as modbusProtocol, transactionId as word, protocolId as word, modbusUnitId as byte, modbusFunction as modbusFunc, byref data as string)
-declare sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref reply as string)
 declare sub modbus_master_send_next()
+declare sub modbus_debug_print(byref message as string)
+declare function modbus_print_packet(byref s as string) as string
 declare function modbus_get_input_register(register as word) as word
 declare function modbus_get_holding_register(register as word) as word
 declare function modbus_queue_pop() as modbus_request_item
 declare function modbus_master_get_request(byref request_item as modbus_request_item) as string
 declare function modbus_crc16(data as byte(255), byte_cnt as byte) as word
-
+declare function modbus_time_elapsed(end_time as dword) as boolean
 dim modbus_queue_start as char
 dim modbus_queue_end as char
-dim modbus_awaiting_reply as boolean
 dim modbus_slave_recv_buffer as string
 dim modbus_request_queue as modbus_request_item(MODBUS_MAX_REQUESTS)
 dim modbus_master_recv_buffer as string
 dim modbus_trans_id as word
 dim modbus_queue_count as byte
-
+dim modbus_slave_id  as byte = 1
+dim modbus_slave_send_buffer as string=""
+dim modbus_slave_protocol as modbusProtocol=modbus_TCP
+dim modbus_slave_interface as byte=255
+dim modbus_slave_last_recv_ts as dword=0
 dim _crc_table_hi as byte(256) = {
 	&H00,&HC1,&H81,&H40,&H01,&HC0,&H80,&H41,&H01,&HC0,&H80,&H41,&H00,&HC1,&H81,&H40,
 	&H01,&HC0,&H80,&H41,&H00,&HC1,&H81,&H40,&H00,&HC1,&H81,&H40,&H01,&HC0,&H80,&H41,
@@ -38,7 +40,6 @@ dim _crc_table_hi as byte(256) = {
 	&H01,&HC0,&H80,&H41,&H00,&HC1,&H81,&H40,&H00,&HC1,&H81,&H40,&H01,&HC0,&H80,&H41,
 	&H00,&HC1,&H81,&H40,&H01,&HC0,&H80,&H41,&H01,&HC0,&H80,&H41,&H00,&HC1,&H81,&H40
 }
-
 dim _crc_table_lo as byte(256) = {
 	&H00,&HC0,&HC1,&H01,&HC3,&H03,&H02,&HC2,&HC6,&H06,&H07,&HC7,&H05,&HC5,&HC4,&H04,
 	&HCC,&H0C,&H0D,&HCD,&H0F,&HCF,&HCE,&H0E,&H0A,&HCA,&HCB,&H0B,&HC9,&H09,&H08,&HC8,
@@ -57,10 +58,7 @@ dim _crc_table_lo as byte(256) = {
 	&H88,&H48,&H49,&H89,&H4B,&H8B,&H8A,&H4A,&H4E,&H8E,&H8F,&H4F,&H8D,&H4D,&H4C,&H8C,
 	&H44,&H84,&H85,&H45,&H87,&H47,&H46,&H86,&H82,&H42,&H43,&H83,&H41,&H81,&H80,&H40,
 }
-
 '	Define MODBUS UnitID for TCP
-'#define MODBUSUNITID 1
-
 function modbus_initialize() as boolean
 	
 	modbus_queue_clear()
@@ -68,7 +66,6 @@ function modbus_initialize() as boolean
 	modbus_initialize = true
 	
 end function
-
 sub modbus_slave_receive(byref recv_data as string, interface_number as byte, protocol as modbusProtocol)
 	
 	dim transactionId as word
@@ -85,8 +82,11 @@ sub modbus_slave_receive(byref recv_data as string, interface_number as byte, pr
 	dim FloatAsDWord as dword
 	dim modbusBits as byte
 	dim crc,tmpcrc as word=0
+	dim prefix_len as byte=0
+	dim crc_size as byte = 0
 	dim data as string = modbus_slave_recv_buffer + recv_data
 	modbus_slave_recv_buffer = data
+	modbus_slave_last_recv_ts=sys.timercountms
 	if len(modbus_slave_recv_buffer)=255 then
 		modbus_slave_recv_buffer=""
 		exit sub
@@ -94,45 +94,57 @@ sub modbus_slave_receive(byref recv_data as string, interface_number as byte, pr
 	
 	while len(modbus_slave_recv_buffer) <> 0
 	data = modbus_slave_recv_buffer
+	
 	if protocol=modbus_TCP then
+		prefix_len = 6
 		if len(data) < 8 then exit sub
 		transactionId = asc(mid(data, 1, 1)) * 256 + asc(mid(data, 2, 1))
 		protocolId = asc(mid(data, 3, 1)) * 256 + asc(mid(data, 4, 1))
 		if protocolId <> 0 then exit sub
-		length = asc(mid(data, 5, 1)) * 256 + asc(mid(data, 6, 1))
-		modbusUnitId = asc(mid(data, 7, 1))
-		modbusFunction = asc(mid(data, 8, 1))
-		if len(data)<length * 2 then
-			exit sub
-		end if
-		data=mid(data,9,length)
-		dim ss as byte=6+length+1
-		modbus_slave_recv_buffer = mid(modbus_slave_recv_buffer,ss,255)
 	else
-'		data=modbus_slave_recv_buffer+data
 		if len(data) <= 5 then exit sub
-		modbusUnitId = asc(mid(data, 1, 1))
-		modbusFunction = asc(mid(data, 2, 1))
-		length = asc(mid(data, 3, 1))
-		str_modbus = mid(data, 3, length + 3)
-		if len(data) < 5 + length then 
+		crc_size = 2
+	end if
+	
+	modbusUnitId = asc(mid(data, prefix_len + 1, 1))
+	modbusFunction = asc(mid(data, prefix_len + 2, 1))
+	
+	select case modbusFunction
+		case WriteMultipleCoils,PresetMultipleRegisters:
+			length=asc(mid(data, prefix_len + 7, 2)) + 7 + crc_size
+		case else:
+			length= 6 + crc_size
+	end select
+	
+	if len(data) < prefix_len + length then
 			exit sub
-		end if
-		crc=asc(mid(data, 3 + len(str_modbus), 1)) * 256 + asc(mid(data, 4 + len(str_modbus), 1))
-		dim tmpstr as string=mid(data,1,2 + len(str_modbus))
+	end if
+	#if MODBUS_DEBUG_PRINT
+		dim packet as string=modbus_print_packet(data)
+		modbus_debug_print("recv " + packet)
+	#endif
+	
+	str_modbus=mid(data, prefix_len + 3,length)
+	
+	if protocol=modbus_RTU then
+		crc=asc(mid(data, length - 1, 1)) * 256 + asc(mid(data, length, 1))
+		dim tmpstr as string=mid(data,1,length-2)
 		tmpcrc=modbus_crc16(tmpstr, len(tmpstr))
 		if crc<>tmpcrc then
+			#if MODBUS_DEBUG_PRINT
+				modbus_debug_print("wrong crc")
+			#endif
 			exit sub
 		end if
 		dim remaining as byte = len(data) - (len(tmpstr)+2)
 		modbus_slave_recv_buffer = mid(data,len(tmpstr) + 3,remaining)
-		data=str_modbus
+	else
+		dim ss as byte=6+length+1
+		modbus_slave_recv_buffer = mid(modbus_slave_recv_buffer,ss,255)
 	end if
-
-#ifdef MODBUSUNITID
-	if modbusUnitId = MODBUSUNITID then
-#endif
-
+	
+	data=str_modbus
+	if modbusUnitId = modbus_slave_id or protocol = modbus_TCP then
 		select case modbusFunction
 		case ReadCoilStatus:				' Read DO
 			modbusStartReference = asc(mid(data, 1, 1)) * 256 + asc(mid(data, 2, 1))
@@ -142,8 +154,7 @@ sub modbus_slave_receive(byref recv_data as string, interface_number as byte, pr
 			if modbusCount mod 8 <> 0 then
 				modbusLenMultipleData = modbusLenMultipleData + 1
 			end if
-
-			str_modbus = str_modbus + chr(modbusLenMultipleData)
+			str_modbus = chr(modbusLenMultipleData)
 			j = 1
 			k = 0
 			modbusBits = 0
@@ -174,13 +185,12 @@ sub modbus_slave_receive(byref recv_data as string, interface_number as byte, pr
 			if modbusCount mod 8 <> 0 then
 				modbusLenMultipleData = modbusLenMultipleData + 1
 			end if
-
-			str_modbus = str_modbus + chr(modbusLenMultipleData)
+			str_modbus = chr(modbusLenMultipleData)
 			j = 1
 			k = 0
 			modbusBits = 0
 			for i = 1 to modbusCount
-				if modbus_callback_ReadCoilStatus(modbusStartReference) = true then
+				if modbus_callback_ReadInputStatus(modbusStartReference) = true then
 					modbusBits = modbusBits or j
 				end if
 				modbusStartReference = modbusStartReference + 1
@@ -222,15 +232,18 @@ sub modbus_slave_receive(byref recv_data as string, interface_number as byte, pr
 			modbusStartReference = asc(mid(data, 1, 1)) * 256 + asc(mid(data, 2, 1))
 			modbusValue = asc(mid(data, 3, 1)) * 256 + asc(mid(data, 4, 1))
 			if modbusValue = &hFF00 then modbusValue = 1
-			if modbus_callback_WriteSingleCoil(modbusStartReference, modbusValue) = true then
-				modbus_send(interface_number, protocol, transactionId, protocolId, modbusUnitId, modbusFunction, mid(data, 9, 4))
+			modbusBits=modbus_callback_WriteSingleCoil(modbusStartReference, modbusValue)
+			if modbusBits = 0 or modbusBits = 1 then
+				modbus_send(interface_number, protocol, transactionId, protocolId, modbusUnitId, modbusFunction, mid(data, 1, 4))
+			else 
+				modbus_send(interface_number, protocol, transactionId, protocolId, modbusUnitId, &h86, str(modbusBits))
 			end if
 		
 		case PresetSingleRegister:			' Write AO
 			modbusStartReference = asc(mid(data, 1, 1)) * 256 + asc(mid(data, 2, 1))
-			modbusValue=modbusValue = asc(mid(data, 3, 1)) * 256 + asc(mid(data, 4, 1))
-			if modbus_set_holding_register(modbusStartReference, modbusValue) = true then
-				modbus_send(interface_number, protocol, transactionId, protocolId, modbusUnitId, modbusFunction, mid(data, 9, 4))
+			modbusValue = asc(mid(data, 3, 1)) * 256 + asc(mid(data, 4, 1))
+			if modbus_callback_set_holding_register(modbusStartReference, modbusValue) = true then
+				modbus_send(interface_number, protocol, transactionId, protocolId, modbusUnitId, modbusFunction, mid(data, 1, 4))
 			end if
 			
 		case WriteMultipleCoils:			' Write DO multiple
@@ -241,73 +254,58 @@ sub modbus_slave_receive(byref recv_data as string, interface_number as byte, pr
 			if modbusCount mod 8 <> 0 then
 				modbusLenMultipleData = modbusLenMultipleData + 1
 			end if
-			if (length = len(data) + 6) and (modbusLenMultipleData = asc(mid(data, 5, 1))) and (length = modbusLenMultipleData + 7) then
-				j = 1
-				k = 0
-				for i = 1 to modbusCount
-					if j = 1 then
-						modbusValue = asc(mid(data, 6 + k, 1))
-					end if
-					if (modbusValue and &h1) = 1 then
-						modbus_callback_WriteSingleCoil(modbusStartReference, 1)
-					else 
-						modbus_callback_WriteSingleCoil(modbusStartReference, 0)
-					end if
-					modbusValue = modbusValue shr 1
-					modbusStartReference = modbusStartReference + 1
-					if j = 8 then
-						j = 1
-						k = k + 1
-					else
-						j = j + 1
-					end if
-				next i
-				modbus_send(interface_number, protocol, transactionId, protocolId, modbusUnitId, modbusFunction, mid(data, 9, 4))
-			end if
+			
+			j = 1
+			k = 0
+			for i = 1 to modbusCount
+				if j = 1 then
+					modbusValue = asc(mid(data, 6 + k, 1))
+				end if
+				if (modbusValue and &h1) = 1 then
+					modbus_callback_WriteSingleCoil(modbusStartReference, 1)
+				else 
+					modbus_callback_WriteSingleCoil(modbusStartReference, 0)
+				end if
+				modbusValue = modbusValue shr 1
+				modbusStartReference = modbusStartReference + 1
+				if j = 8 then
+					j = 1
+					k = k + 1
+				else
+					j = j + 1
+				end if
+			next i
+			modbus_send(interface_number, protocol, transactionId, protocolId, modbusUnitId, modbusFunction, mid(data, 1, 4))
 			
 		case PresetMultipleRegisters:		' Write AO multiple
 			modbusStartReference = asc(mid(data, 1, 1)) * 256 + asc(mid(data, 2, 1))
 			modbusCount = asc(mid(data, 3, 1)) * 256 + asc(mid(data, 4, 1))
-			' Check length 
-			if (length = len(data) - 6) and (modbusCount * 2 = asc(mid(data, 5, 1))) and (length = modbusCount * 2 + 7) then
-				for i = 1 to modbusCount
-					modbus_set_holding_register(modbusStartReference, mid(data,4,2))
-					modbusStartReference = modbusStartReference + 1
-				next i
-				modbus_send(interface_number, protocol, transactionId, protocolId, modbusUnitId, modbusFunction, mid(data, 1, 4))
-			end if
+            for i = 1 to modbusCount
+                modbusValue = asc(mid(data, 6 + (i - 1) * 2, 1)) * 256 + asc(mid(data, 6 + (i - 1) * 2 + 1, 1))
+                modbus_callback_set_holding_register(modbusStartReference, modbusValue)
+                modbusStartReference = modbusStartReference + 1
+            next i
+            modbus_send(interface_number, protocol, transactionId, protocolId, modbusUnitId, modbusFunction, mid(data, 1, 4))
 			
 		end select
-
-#ifdef MODBUSUNITID
 	end if
-#endif
 	wend
-
 end sub
-
-sub modbus_tcp_send(socket as byte, transactionId as word, protocolId as word, modbusUnitId as byte, modbusFunction as modbusFunc, byref data as string)
-	
-	dim packet as string(8)
-	
-	packet = chr(transactionId shr 8) + chr(transactionId and &hFF)
-	packet = packet + chr(protocolId shr 8) + chr(protocolId and &hFF)
-	packet = packet + chr(0) + chr(len(data) + 2)
-	packet = packet + chr(modbusUnitId)
-	packet = packet + chr(modbusFunction)
-	
-	sock.num = socket
-	sock.setdata(packet)
-	sock.setdata(data)
-	sock.send()
-	
-end sub
-
 sub modbus_send(interface_number as byte, protocol as modbusProtocol, transactionId as word, protocolId as word, modbusUnitId as byte, modbusFunction as modbusFunc, byref data as string)
+	dim senddata as string=""
 	if protocol=modbus_TCP then
-		modbus_tcp_send(interface_number, transactionId, protocolId, modbusUnitId, modbusFunction, data)
+		dim packet as string(8)
+		packet = chr(transactionId shr 8) + chr(transactionId and &hFF)
+		packet = packet + chr(protocolId shr 8) + chr(protocolId and &hFF)
+		packet = packet + chr(0) + chr(len(data) + 2)
+		packet = packet + chr(modbusUnitId)
+		packet = packet + chr(modbusFunction)
+		
+		senddata=packet+data
+		sock.num = interface_number
+		sock.setdata(senddata)
+		sock.send()
 	else if protocol=modbus_RTU then
-		dim senddata as string=""
 		senddata = chr(modbusUnitId)
 		senddata = senddata + chr(modbusFunction)
 		if len(data) = 0 then
@@ -319,59 +317,107 @@ sub modbus_send(interface_number as byte, protocol as modbusProtocol, transactio
 		dim crc as word = modbus_crc16(senddata, len(senddata))
 		senddata = senddata + chr(crc shr 8)
 		senddata = senddata + chr(crc and &HFF)
-	
 		ser.num=interface_number
-		ser.notifysent(1)
-		ser.setdata(senddata)
+		ser.notifysent(ser.txbuffsize-len(senddata))
+		modbus_slave_send_buffer=senddata
+	end if
+	#if MODBUS_DEBUG_PRINT
+		dim packet as string=modbus_print_packet(senddata)
+		modbus_debug_print("send " + packet)
+	#endif
+end sub
+sub modbus_proc_ser_data_sent()
+	if modbus_queue_count>0 then
+		if ser.num=modbus_request_queue(modbus_queue_start).interface_number
+	 		AND modbus_request_queue(modbus_queue_start).timestamp<>0
+	 		AND modbus_request_queue(modbus_queue_start).protocol=modbus_RTU then
+			modbus_request_queue(modbus_queue_start).timestamp=sys.timercountms
+			dim data as string=modbus_master_get_request(modbus_request_queue(modbus_queue_start))
+			ser.rxclear()
+			ser.txclear()
+			'modbus requires 1.75ms delay between frames
+			dim targ as dword=sys.timercountms+2
+			while sys.timercountms<targ
+			wend
+			ser.setdata(data)
+			ser.send()
+		end if
+	end if
+	if ser.num=modbus_slave_interface AND modbus_slave_protocol=modbus_RTU AND modbus_slave_send_buffer<>"" then
+		ser.txclear()
+		ser.setdata(modbus_slave_send_buffer)
 		ser.send()
+		modbus_slave_send_buffer=""
 	end if
 end sub
-
 sub modbus_master_send_next()
 	if modbus_queue_start = -1 then
 		exit sub
 	end if
 	dim prev_num as byte=0
 	dim data as string=modbus_master_get_request(modbus_request_queue(modbus_queue_start))
+	#if MODBUS_DEBUG_PRINT
+		dim tmp as string=modbus_print_packet(data)
+		modbus_debug_print("send " + tmp)
+	#endif
+	modbus_request_queue(modbus_queue_start).timestamp=sys.timercountms
 	if modbus_request_queue(modbus_queue_start).protocol=modbus_TCP then
 		prev_num=sock.num
 		sock.num=modbus_request_queue(modbus_queue_start).interface_number
+		if sock.statesimple <> PL_SSTS_EST then
+			exit sub
+		end if
 		sock.setdata(data)
 		sock.send()
 		sock.num=prev_num
 	else if modbus_request_queue(modbus_queue_start).protocol=modbus_RTU then
 		prev_num=ser.num
 		ser.num=modbus_request_queue(modbus_queue_start).interface_number
-		ser.notifysent(1)
-		ser.setdata(data)
-		ser.send()
+		ser.notifysent(ser.txbuffsize-len(data))
 		ser.num=prev_num
 	end if
+	
+'	modbus_debug_print("sent for " + str(modbus_request_queue(modbus_queue_start).device_id))
+	
 	modbus_master_recv_buffer=""
-	modbus_awaiting_reply=true
 end sub
-
 sub modbus_proc_timer()
+	dim request_item as modbus_request_item
 	if modbus_queue_start <> -1 then
-		if modbus_awaiting_reply = false then
+		if modbus_request_queue(modbus_queue_start).timestamp = 0 then
 			modbus_master_send_next()
 		else
-			if sys.timercountms > modbus_request_queue(modbus_queue_start).timestamp + MODBUS_TIMEOUT then
-				sys.debugprint("modbus timeout for device " + str(modbus_request_queue(modbus_queue_start).device_id) + "\r\n")
-				callback_modubus_timeout(modbus_request_queue(modbus_queue_start).device_id)
-				modbus_awaiting_reply = false
-				modbus_queue_pop()
+			if modbus_time_elapsed(modbus_request_queue(modbus_queue_start).timestamp + MODBUS_TIMEOUT) then
+				dim data as string=modbus_master_get_request(modbus_request_queue(modbus_queue_start))
+				#if MODBUS_DEBUG_PRINT
+					dim tmp as string=modbus_print_packet(data)
+					modbus_debug_print("timeout for " + tmp)
+				#endif
+								
+				request_item = modbus_queue_pop()
+				callback_modbus_slave_reply_timeout(request_item)
 				modbus_master_send_next()
 			end if
 		end if
 	end if
+	if modbus_slave_recv_buffer<>"" then
+		if sys.timercountms-modbus_slave_last_recv_ts>MODBUS_TIMEOUT then
+			modbus_slave_recv_buffer=""
+		end if
+	end if
 end sub
-
+function modbus_time_elapsed(end_time as dword) as boolean
+	modbus_time_elapsed = false
+	dim current_time as dword = sys.timercountms
+	if current_time > end_time AND current_time - end_time < 4000000000 then
+		modbus_time_elapsed = true
+	end if
+end function
 sub modbus_master_request(devaddr as byte, request as byte, start as word, count as word, regdata as string, interface_number as byte, protocol as modbusProtocol)
 	dim request_item as modbus_request_item
 	request_item.data = regdata
 	request_item.device_id = devaddr
-	request_item.timestamp = sys.timercountms
+	request_item.timestamp = 0
 	request_item.request_function = request
 	request_item.start_register = start
 	request_item.count = count
@@ -379,11 +425,7 @@ sub modbus_master_request(devaddr as byte, request as byte, start as word, count
 	request_item.protocol = protocol
 	
 	modbus_queue_add(request_item)
-	if modbus_awaiting_reply=false then
-		modbus_master_send_next()
-	end if
 end sub
-
 function modbus_master_get_request(byref request_item as modbus_request_item) as string
 	dim data as string
 	data=""
@@ -392,12 +434,18 @@ function modbus_master_get_request(byref request_item as modbus_request_item) as
 	data = data + chr(request_item.request_function)
 	data = data + chr(request_item.start_register shr 8)
 	data = data + chr(request_item.start_register and &HFF)
-	if len(request_item.data) = 0 then
-		data = data + chr(request_item.count shr 8)
-		data = data + chr(request_item.count and &HFF)
-	else
-		data = data + request_item.data
-	end if
+	select case request_item.request_function
+		case ReadCoilStatus,ReadInputStatus,ReadHoldingRegisters,ReadInputRegisters:
+			data = data + chr(request_item.count shr 8)
+			data = data + chr(request_item.count and &HFF)
+		case WriteSingleCoil, PresetSingleRegister:
+			data = data + request_item.data
+		case WriteMultipleCoils, PresetMultipleRegisters:
+			data = data + chr(request_item.count shr 8)
+			data = data + chr(request_item.count and &HFF)
+			data = data + chr(request_item.count * 2)
+			data = data + request_item.data
+	end select
 	
 	if request_item.protocol=modbus_RTU then
 		dim crc as word = modbus_crc16(data, len(data))
@@ -417,7 +465,6 @@ function modbus_master_get_request(byref request_item as modbus_request_item) as
 	end if
 	modbus_master_get_request=data
 end function
-
 sub modbus_master_receive(recv_data as string, protocol as modbusProtocol)
 	
 	dim transactionId as word
@@ -436,56 +483,129 @@ sub modbus_master_receive(recv_data as string, protocol as modbusProtocol)
 	dim crc,tmpcrc as word=0
 	dim request_item as modbus_request_item
 	dim data as string = modbus_master_recv_buffer + recv_data
+	dim prefix_len as byte=0
 	modbus_master_recv_buffer = data
 	
 	if protocol=modbus_TCP then
+		prefix_len = 6
 		if len(data) < 8 then exit sub
 		transactionId = asc(mid(data, 1, 1)) * 256 + asc(mid(data, 2, 1))
 		protocolId = asc(mid(data, 3, 1)) * 256 + asc(mid(data, 4, 1))
 		if protocolId <> 0 then exit sub
-		length = asc(mid(data, 5, 1)) * 256 + asc(mid(data, 6, 1))
-		modbusUnitId = asc(mid(data, 7, 1))
-		modbusFunction = asc(mid(data, 8, 1))
-		str_modbus=mid(data,9,255)
 	else
 		if len(data) <= 5 then exit sub
-		modbusUnitId = asc(mid(data, 1, 1))
-		modbusFunction = asc(mid(data, 2, 1))
-		length = asc(mid(data, 3, 1))
-		str_modbus = mid(data, 3, length+1)
-		if len(data) < 5 + length then
+	end if
+	
+	modbusUnitId = asc(mid(data, prefix_len + 1, 1))
+	modbusFunction = asc(mid(data, prefix_len + 2, 1))
+	
+	select case modbusFunction
+		case ReadCoilStatus,ReadInputStatus:
+			length = asc(mid(data, prefix_len + 3, 1)) + 3
+			str_modbus = mid(data,prefix_len + 3 + 1, asc(mid(data, prefix_len + 3, 1)))
+		case ReadHoldingRegisters,ReadInputRegisters:
+			length = asc(mid(data, prefix_len + 3, 1)) + 3
+			str_modbus = mid(data,prefix_len + 3 + 1, asc(mid(data, prefix_len + 3, 1)))
+		case WriteSingleCoil, PresetSingleRegister:
+			length = 6
+			str_modbus = mid(data, prefix_len + 3 + 1, 2)
+		case WriteMultipleCoils,PresetMultipleRegisters:
+			length = 6
+			str_modbus = mid(data,prefix_len + 3 + 1, 2)
+		case else:
+			
+	end select
+	
+	if protocol=modbus_RTU then
+		if len(data) < 2 + length then
 			exit sub
 		end if
-		crc=asc(mid(data, 3 + len(str_modbus), 1)) * 256 + asc(mid(data, 4 + len(str_modbus), 1))
-		dim tmpstr as string=mid(data,1,2+len(str_modbus))
+		crc=asc(mid(data,length+1,1)) * 256 + asc(mid(data,length+2,1))
+		dim tmpstr as string=mid(data,1,length)
 		tmpcrc=modbus_crc16(tmpstr, len(tmpstr))
-		if crc<>tmpcrc then 
-			exit sub
-		end if
 		dim remaining as byte = len(data) - (len(tmpstr)+2)
 		modbus_master_recv_buffer = mid(data,len(tmpstr) + 3,remaining)
-		
+		if crc<>tmpcrc then 
+			#if MODBUS_DEBUG_PRINT
+				modbus_debug_print("wrong crc")
+				dim packet as string=modbus_print_packet(data)
+				modbus_debug_print("data is " + packet)
+			#endif
+			exit sub
+		end if
 	end if
 	
 	request_item = modbus_queue_pop()
 	if request_item.device_id <> modbusUnitId then
-		sys.debugprint("incorrect device\r\n")
+		modbus_debug_print("incorrect device")
 		exit sub
 	end if
-	str_modbus = right(str_modbus,len(str_modbus) - 1)
+	#if MODBUS_DEBUG_PRINT
+		dim tmp as string=modbus_print_packet(data)
+		modbus_debug_print("recv " + tmp)
+	#endif
 	callback_modbus_slave_reply(request_item, str_modbus)
-	modbus_awaiting_reply = false
 	modbus_master_send_next()
 end sub
-
 sub modbus_queue_clear()
 	modbus_queue_start = -1
 	modbus_queue_end = -1
 	modbus_queue_count = 0
-	modbus_awaiting_reply = false
 end sub
-
 sub modbus_queue_add(request_item as modbus_request_item)
+	if request_item.protocol=modbus_TCP then
+		sock.num=request_item.interface_number
+		if sock.statesimple <> PL_SSTS_EST then
+			exit sub
+		end if
+	end if
+	' cut in line if request is write
+	' loop through current queue and find first read request of same device
+	' replace with write request
+	if (request_item.request_function = WriteSingleCoil OR request_item.request_function = PresetSingleRegister
+	OR request_item.request_function = WriteMultipleCoils OR request_item.request_function = PresetMultipleRegisters)
+	AND modbus_queue_count>0 then
+		dim i as byte
+		dim modbus_queue_start_tmp as byte = modbus_queue_start
+		for i=0 to modbus_queue_count-1
+			' if modbus_request_queue(modbus_queue_start_tmp).device_id = request_item.device_id 
+			' AND modbus_request_queue(modbus_queue_start_tmp).start_register = request_item.start_register
+			' AND modbus_request_queue(modbus_queue_start_tmp).timestamp=0 then
+			' 	modbus_request_queue(modbus_queue_start_tmp) = request_item
+			' 	'cutting in line
+			' 	exit sub
+			' end if
+			if modbus_request_queue(modbus_queue_start_tmp).request_function=ReadCoilStatus
+			OR modbus_request_queue(modbus_queue_start_tmp).request_function=ReadInputStatus
+			OR modbus_request_queue(modbus_queue_start_tmp).request_function=ReadHoldingRegisters
+			OR modbus_request_queue(modbus_queue_start_tmp).request_function=ReadInputRegisters then
+				if modbus_request_queue(modbus_queue_start_tmp).timestamp=0 then
+					'cutting in line
+					modbus_request_queue(modbus_queue_start_tmp) = request_item
+					exit sub
+				end if
+			end if
+			modbus_queue_start_tmp = modbus_queue_start_tmp + 1
+			if modbus_queue_start_tmp = MODBUS_MAX_REQUESTS then
+				modbus_queue_start_tmp = 0
+			end if
+		next i
+	end if
+	if modbus_queue_count = MODBUS_MAX_REQUESTS then
+		dim i as byte
+		dim modbus_queue_start_tmp as byte = modbus_queue_start
+		for i=0 to modbus_queue_count-1
+			if modbus_request_queue(modbus_queue_start_tmp).timestamp=0 then
+				'cutting in line
+				modbus_request_queue(modbus_queue_start_tmp) = request_item
+				exit sub
+			end if
+			modbus_queue_start_tmp = modbus_queue_start_tmp + 1
+			if modbus_queue_start_tmp = MODBUS_MAX_REQUESTS then
+				modbus_queue_start_tmp = 0
+			end if
+		next i
+	end if
 	if modbus_queue_start=-1 then
 		modbus_queue_start = 0
 		modbus_queue_end = 0
@@ -493,14 +613,14 @@ sub modbus_queue_add(request_item as modbus_request_item)
 	end if
 	if modbus_queue_end = MODBUS_MAX_REQUESTS then
 		modbus_queue_end=0
-	end if
+	end if	
 	modbus_request_queue(modbus_queue_end) = request_item
 	modbus_queue_end=modbus_queue_end+1
 	modbus_queue_count = modbus_queue_count + 1
 end sub
-
 function modbus_queue_pop() as modbus_request_item
 	if modbus_queue_start <> -1 and modbus_queue_end <> -1 then
+		modbus_request_queue(modbus_queue_start).timestamp = 0
 		modbus_queue_pop = modbus_request_queue(modbus_queue_start)
 		modbus_queue_start = modbus_queue_start + 1
 		if modbus_queue_start = MODBUS_MAX_REQUESTS then
@@ -512,11 +632,9 @@ function modbus_queue_pop() as modbus_request_item
 		end if
 	end if
 end function
-
 function modbus_queue_get_count() as byte
 	modbus_queue_get_count=modbus_queue_count
 end function
-
 function modbus_crc16(data as byte(255), byte_cnt as byte) as word
 	if byte_cnt = 0 then
 		modbus_crc16 = 0
@@ -537,7 +655,24 @@ function modbus_crc16(data as byte(255), byte_cnt as byte) as word
 	modbus_crc16 = (crc_hi shl 8) or crc_lo
 	
 end function
-
 function modbus_read_word(byref bytes as byte(255), start as byte) as word
 	modbus_read_word = (bytes(start) shl 8) or bytes(start + 1)
 end function
+function modbus_print_packet(byref s as string) as string
+	dim size as byte=len(s)
+	dim i as byte
+	dim packet as string=""
+	for i=0 to size-1
+		dim part as string(2)=mid(hex(asc(mid(s,i+1,1))),3,2)
+		if len(part)=1 then
+			part="0" + part
+		end if
+		packet = packet + part + " "
+	next i
+	modbus_print_packet=packet
+end function
+sub modbus_debug_print(byref message as string)
+#if MODBUS_DEBUG_PRINT
+	sys.debugprint("modbus> " + message + "\r\n")
+#endif
+end sub

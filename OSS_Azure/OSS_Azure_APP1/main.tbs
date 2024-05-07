@@ -188,3 +188,7 @@ sub on_button_released()
 		end if				
 	end if	
 end sub
+
+sub on_ser_data_sent()
+	modbus_proc_ser_data_sent()
+end sub
