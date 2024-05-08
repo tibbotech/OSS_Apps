@@ -19,6 +19,8 @@ dim operation_mode as byte '0: always on, 1: low power mode
 declare sub check_app_fw_version()
 declare sub sensor_init()
 declare sub pic_init()
+declare sub check_and_upgrade_supr_pic()
+declare sub check_and_upgrade_sns_pic()
 
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
@@ -56,6 +58,7 @@ sub boot()
         pat.play("R-R-~",PL_PAT_CANINT)
         if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
 	else
+		check_app_fw_version()
 		stg_init_code=stg_check_all(stg_name)
 		select case stg_init_code
 		case EN_STG_STATUS_OK:
@@ -101,7 +104,7 @@ sub boot()
 	end select
 	
 	pic_init()
-	check_and_upgrade_sup_pic()
+	check_and_upgrade_supr_pic()
 	
 	mcp23017_line_out_enable(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,YES,TBT00_3_S5_CHANNEL)
 	mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
@@ -151,8 +154,6 @@ sub boot()
 	
 	upgrade_app_fw_init()
 	connect_to_azure_required = need_to_connect()
-
-	check_app_fw_version()
 	'-----------------------------------------------------------------
 	
     'WM2000 Wi-Fi setup
@@ -227,20 +228,19 @@ sub check_app_fw_version()
 	dim s as string
 	s=stg_get("FWV",0)
 	if OSS_APP_FW_VER<>s then
-		stg_set("FWV",0,OSS_APP_FW_VER)
-		device_add_event("Upgrage done! "+OSS_APP_FW_VER)
-		
 		dim pos1 as byte = instr(1,s,".",1)
 		dim pos2 as byte = instr(1,s,".",2)
 		dim w1 as word = val(mid(s,2,pos1-2))*100+val(mid(s,pos1+1,pos2-pos1-1))
 		
-		if w1<200 then
-	
-			goto fw201
-		else if w1>=200 then
-fw201:		
-
+		if w1<202 then
+			stg_set("CMD",0,"")
+			stg_set("MNUM",0,"")
+			goto fw203
+		else if w1>=203 and w1<204 then
+fw203:		
 		end if
+		stg_set("FWV",0,OSS_APP_FW_VER)
+		device_add_event("Upgrage done! "+OSS_APP_FW_VER)		
 	end if
 end sub
 
@@ -335,13 +335,11 @@ sub sensor_init()
 	sensor_type = val(stg_get("STPY",0))
 	select case sensor_type
 	
-	case 0:	'temp_hum
-		sample_timer = 4
+	case 0, 1:	'temp_hum / temp_hum_co2
+		if sensor_type = 0 then sample_timer = 4
+		if sensor_type = 1 then sample_timer = 60
 		init_i2c_sensor()
-		
-	case 1:	'temp_hum_co2
-		sample_timer = 60
-		init_i2c_sensor()
+		check_and_upgrade_sns_pic()
 		
 	case 128,129: 'modbus sensor
 		sample_timer = 4
@@ -409,15 +407,34 @@ sub exit_LVP_mode()
 	
 end sub
 
-sub check_and_upgrade_sup_pic()	
+sub check_and_upgrade_sns_pic()
+	dim ver0 as byte
+	dim ver1 as byte
+	dim ver2 as byte
+	
+	sensor_level_shift_on()
+	si2c_get(sensor_channel)
+	' Read FW version
+	si2c_start()
+	si2c_write(SENSOR_ADDR or PIC_WR)
+	si2c_write(&h03)
+	si2c_start()
+	si2c_write(SENSOR_ADDR or PIC_RD)
+	ver2 = si2c_read(true)
+	ver1 = si2c_read(true)
+	ver0 = si2c_read(false)
+	si2c_stop()
+end sub
+
+sub check_and_upgrade_supr_pic()	
 	dim ver as string(3) = pic_read(&h98,3)
 	dim upgrade_success as boolean
 	
-	if ver <> OSS_SUP_FW_VER then
-		device_debug_print("Running PIC: "+ver+ "/ Current PIC: "+OSS_SUP_FW_VER)
+	if ver <> OSS_SUPR_FW_VER then
+		device_debug_print("Running PIC: "+ver+ "/ Current PIC: "+OSS_SUPR_FW_VER)
 		enter_LVP_mode()
 		pic_write(&h30,"\x77")
-		upgrade_success = pic_lvp_upload_firmware(OSS_SUP_PIC_FILE)
+		upgrade_success = pic_lvp_upload_firmware(OSS_SUPR_PIC_FILE)
 		
 		io.num=PL_IO_NUM_1_TX0
 		io.state=HIGH
@@ -467,3 +484,4 @@ sub pic_init()
 		ssi.enabled=YES
 	end if
 end sub
+

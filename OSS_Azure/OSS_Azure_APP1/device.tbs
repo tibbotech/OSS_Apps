@@ -126,10 +126,6 @@ sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref s
 		sleep_time = val(stg_value)
 	case "RCN":
 		min_rec_num_to_send = val(stg_value)
-	case "DVID","SCID","PKEY":
-		if config_mode = YES then
-			reprovision_needed = YES
-		end if
     end select
 	
 	#if DEVICE_DEBUG_PRINT
@@ -146,6 +142,11 @@ sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref
 	stg_timestamp.ts_milsec = 0
 	stg_set_ts(stg_name_or_num)
 	property_modified = YES
+	
+	select case stg_name_or_num
+		case "DVID","SCID","PKEY":
+			reprovision_needed = YES
+	end select
 end sub
 
 function callback_stg_vm_read(address as word) as byte
@@ -212,9 +213,11 @@ sub callback_http_request_failed(error_message as string)
 end sub
 
 sub callback_http_header_arrival(header_type as string, header_value as string)
-	if upgrade_state = 255 then
-		iot_header_arrival(header_type, header_value)
-	else
+	if header_type = "Date" then
+		azure_set_datetime(header_value)
+	end if
+	
+	if upgrade_state <> 255 then
 		select case header_type
 		case "Content-Length":
 			part_size=lval(header_value)

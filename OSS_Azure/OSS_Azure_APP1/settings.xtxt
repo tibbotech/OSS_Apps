@@ -30,10 +30,12 @@
 >>XXX2	R	B	1	0	1	A	^	ABANDON
 >>HUBN	E	S	1	0	64	A	^	Iot hub name
 >>NWPR	E	B	1	0	1	A	0	Password Recovery Requested (NTAG)
+>>MNUM	E	S	1	0	20	A	^	Model No.
+>>CMD	E	S	1	0	32	A	^	Command
 #define STG_DESCRIPTOR_FILE "settings.xtxt"
 #define STG_DEBUG_PRINT 1
 #define STG_TIMESTAMP 1
-#define STG_MAX_NUM_SETTINGS 32
+#define STG_MAX_NUM_SETTINGS 34
 #define STG_RAM_ARRAY_SIZE 132
 #define STG_MAX_SETTING_NAME_LEN 4
 #define STG_MAX_SETTING_VALUE_LEN 128

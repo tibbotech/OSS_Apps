@@ -334,3 +334,9 @@ format=65001
 condition=
 locked=no
 location=project
+[file46]
+path=OSS_SNS_PIC_FW_010.hex
+type=binary
+format=
+locked=no
+location=project

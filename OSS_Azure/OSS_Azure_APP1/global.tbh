@@ -1,7 +1,10 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="V2.01.06"
-const OSS_SUP_FW_VER = "021"
-#define OSS_SUP_PIC_FILE "OSS_SUPR_PIC_FW_021.hex"
+const OSS_APP_FW_VER="V2.02.00"
+const OSS_SUPR_FW_VER = "021"
+const OSS_SNS_FW_VER = "010"
+#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_021.hex"
+#define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_021.hex"
+
 #define MQTT_DEBUG_PRINT 1
 #define LUIS_CONFIG_FILE "luis.xtxt"
 #define LUIS_DEBUG_PRINT 0
@@ -193,7 +196,6 @@ declare sub upgrade_app_fw_init()
 declare sub delay_ms(ms as dword)
 declare sub enter_LVP_mode()
 declare sub exit_LVP_mode()
-declare sub check_and_upgrade_sup_pic()
 declare sub alternate_debugprint(byref s as string)
 #if DEVICE_DEBUG_PRINT
 	declare sub device_debug_print(byref data as string)
