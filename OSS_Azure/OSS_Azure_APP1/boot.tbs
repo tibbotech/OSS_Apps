@@ -263,7 +263,6 @@ sub alternate_debugprint(byref s as string)
 	#endif
 end sub
 
-
 sub init_i2c_sensor()
 
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)

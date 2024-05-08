@@ -410,9 +410,16 @@ end sub
 sub callback_azure_conn_timeout()
     if comm_mode=1 then
 		cell__start(CELL__SIMCARD_PIN, CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD)
+	else
+		azure_on_disconnected()
+		azure_fail_to_connect_count = azure_fail_to_connect_count + 1
+		if azure_fail_to_connect_count >= FAIL_CONN_COUNT_MAX then
+			'reset hub name
+			stg_set("HUBN",0,"")
+			provision_failed = YES
+		end if	
 	end if
 end sub
-
 
 sub callback_azure_on_telemetry_sent()
 	dim active_rec_num as word
@@ -1310,7 +1317,7 @@ sub device_sampling()
 				end if
 				azure_send_telemetry()
 			else
-				sample_timer = 4
+				sample_timer = 20
 				#if DEVICE_DEBUG_PRINT
 					device_debug_print("Bad timestampe, skip sensor sampling")
 				#endif					
