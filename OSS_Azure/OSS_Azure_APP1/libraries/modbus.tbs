@@ -389,6 +389,7 @@ sub modbus_proc_timer()
 		else
 			if modbus_time_elapsed(modbus_request_queue(modbus_queue_start).timestamp + MODBUS_TIMEOUT) then
 				dim data as string=modbus_master_get_request(modbus_request_queue(modbus_queue_start))
+				
 				#if MODBUS_DEBUG_PRINT
 					dim tmp as string=modbus_print_packet(data)
 					modbus_debug_print("timeout for " + tmp)

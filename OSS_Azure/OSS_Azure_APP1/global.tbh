@@ -3,7 +3,7 @@ const OSS_APP_FW_VER="V2.02.00"
 const OSS_SUPR_FW_VER = "021"
 const OSS_SNS_FW_VER = "010"
 #define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_021.hex"
-#define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_021.hex"
+#define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_010.hex"
 
 #define MQTT_DEBUG_PRINT 1
 #define LUIS_CONFIG_FILE "luis.xtxt"

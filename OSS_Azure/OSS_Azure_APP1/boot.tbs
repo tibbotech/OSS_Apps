@@ -25,6 +25,7 @@ declare sub check_and_upgrade_sns_pic()
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
 declare modbus_device_id as byte
+declare command_issued as no_yes
 
 sub boot()
     'sys.debugmode = PL_SYS_DBG_SERIAL
@@ -222,6 +223,10 @@ sub boot()
 		device_add_event("Password Recovery Success.")
 		stg_set("NWPR",0,"0")
 	end if
+	
+	if stg_get("CMD",0)<>"" then
+		command_issued = YES
+	end if
 end sub
 
 sub check_app_fw_version()
@@ -408,9 +413,7 @@ sub exit_LVP_mode()
 end sub
 
 sub check_and_upgrade_sns_pic()
-	dim ver0 as byte
-	dim ver1 as byte
-	dim ver2 as byte
+	dim ver as string(3) = ""
 	
 	sensor_level_shift_on()
 	si2c_get(sensor_channel)
@@ -420,10 +423,24 @@ sub check_and_upgrade_sns_pic()
 	si2c_write(&h03)
 	si2c_start()
 	si2c_write(SENSOR_ADDR or PIC_RD)
-	ver2 = si2c_read(true)
-	ver1 = si2c_read(true)
-	ver0 = si2c_read(false)
+	
+	ver = ver + chr(si2c_read(true))
+	ver = ver + chr(si2c_read(true))
+	ver = ver + chr(si2c_read(true))
 	si2c_stop()
+	device_debug_print("Current version: " + ver)
+	
+	if (ver <> OSS_SNS_FW_VER) then
+		' FLASHING
+		pic_lvp_start(SENSOR_CLK_PIN, SENSOR_DAT_PIN, SENSOR_CONTROL_PIN)
+		if not pic_lvp_upload_firmware(OSS_SNS_PIC_FILE) then
+			device_debug_print("SNS PIC FW upgraded failed!")
+		else
+			device_debug_print("SNS PIC FW upgraded!")
+			sys.reboot()			
+		end if
+	end if
+	
 end sub
 
 sub check_and_upgrade_supr_pic()	
@@ -450,9 +467,9 @@ sub check_and_upgrade_supr_pic()
 		exit_LVP_mode()
 		
 		if upgrade_success = false then
-			device_debug_print("PIC FW upgraded failed!")
+			device_debug_print("SUPR PIC FW upgraded failed!")
 		else
-			device_debug_print("PIC FW upgraded!")
+			device_debug_print("SUPR PIC FW upgraded!")
 			sys.reboot()
 		end if
 	end if

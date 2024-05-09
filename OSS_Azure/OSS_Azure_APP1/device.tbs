@@ -31,6 +31,7 @@ dim new_scid as string(16)
 dim new_pkey as string(64)
 dim provision_failed as no_yes = NO
 dim rand_event_num as byte 
+dim command_issued as no_yes = NO
 
 declare sub device_sampling()
 declare sub device_migrating()
@@ -53,6 +54,8 @@ declare sub read_modbus_bp02()
 declare sub read_modbus_soil()
 declare sub proc_modbus_bp2(byref request_item as modbus_request_item, byref reply as string)
 declare sub proc_modbus_soil(byref request_item as modbus_request_item, byref reply as string)
+declare sub co2_calibration()
+declare sub execute_special_command()
 
 sub device_proc_timer()	
 	'deduct device_awake_timer only when device is not doing upgrade and in Low power mode
@@ -78,6 +81,7 @@ sub device_proc_timer()
 		end if
 	end if
 	device_sampling()
+	execute_special_command()
 end sub
 
 sub callback_stg_error(byref stg_name_or_num as string,index as byte,status as en_stg_status_codes)
@@ -892,13 +896,13 @@ sub read_onboard_t_h_co2_sensor(byref ts as string)
 	temperature=temperature/16383
 	temperature=temperature*165
 	
-	co2=data5
-	co2=co2*256+data6
+	co2=data6
+	co2=co2*256+data7
 	humd=ftostr(humidity,FTOSTR_MODE_AUTO,5)
 	temp=ftostr(temperature,FTOSTR_MODE_AUTO,5)
 	str_co2=ftostr(co2,FTOSTR_MODE_AUTO,5)
 	
-	error=hex(data7)
+	error=hex(data5)
 	error=right(error,len(error)-2)
 
 	if temperature > -40 and temperature < 85 then
@@ -1244,11 +1248,7 @@ sub update_server_properties()
 	if property_modified = YES then
 		update_stg_ts_and_send_azure("FWV")
 		update_stg_ts_and_send_azure("CID")	
-		update_stg_ts_and_send_azure("DLPT")
-'		update_stg_ts_and_send_azure("SPT")
-'		update_stg_ts_and_send_azure("RCN")		
-'		update_stg_ts_and_send_azure("TZ")
-'		update_stg_ts_and_send_azure("DVNT")		
+		update_stg_ts_and_send_azure("DLPT")		
 		property_modified = NO
 	end if
 end sub
@@ -1283,6 +1283,7 @@ function get_json_value(byref json_str as string, byref attribute as string) as 
 end function
 
 sub device_sampling()
+
 	if sample_timer>0 then
 		sample_timer=sample_timer-1
 		if sample_timer = 0 then
@@ -1355,6 +1356,30 @@ sub device_migrating()
 		connect_to_azure_server()
 	end if		
 			
+end sub
+
+sub co2_calibration()
+	dim i as byte
+	
+	si2c_get(sensor_channel)
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_WR)
+	si2c_write(&hA0)
+	si2c_write(&h77)
+	delay_ms(10)
+	si2c_stop()
+	 
+end sub
+
+sub execute_special_command()
+	if command_issued = NO then exit sub
+	dim cmd as string(32) = stg_get("CMD",0)
+	if sensor_type = 1 and cmd = "CO2 CALRIBRATION" then 
+		co2_calibration()
+		sample_timer = 60
+		stg_set("CMD",0,"")
+		command_issued = NO
+	end if 	
 end sub
 
 sub delay_ms(ms as dword)
