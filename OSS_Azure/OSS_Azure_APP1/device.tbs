@@ -32,6 +32,7 @@ dim new_pkey as string(64)
 dim provision_failed as no_yes = NO
 dim rand_event_num as byte 
 dim command_issued as no_yes = NO
+dim sensor_read_count as byte = 0 
 
 declare sub device_sampling()
 declare sub device_migrating()
@@ -1161,6 +1162,10 @@ end function
 
 sub callback_modbus_slave_reply_timeout(byref request_item as modbus_request_item)
 	sample_timer = 10
+	sensor_read_count = sensor_read_count + 1
+	if sensor_read_count > 3 then
+		device_add_event("Sensor not connected or sensor does not reply.")
+	end if
 end sub
 
 sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref reply as string)
@@ -1170,6 +1175,7 @@ sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref
 		case 128: proc_modbus_bp2(request_item, reply)
 		case 129: proc_modbus_soil(request_item, reply)
 		end select
+		sensor_read_count = 0
 	end if
 end sub
 

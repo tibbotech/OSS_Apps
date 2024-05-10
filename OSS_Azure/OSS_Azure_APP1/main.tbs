@@ -12,6 +12,7 @@ const NTAG_PW_RESET_TIME = 4
 declare sub device_store_app_fw(data as string)
 declare mqtt_state as en_mqtt_states
 declare reprovision_needed as no_yes
+
 sub on_sys_init()
 	boot()
 end sub

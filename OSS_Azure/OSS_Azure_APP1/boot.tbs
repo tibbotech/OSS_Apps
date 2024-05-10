@@ -146,7 +146,6 @@ sub boot()
 		wend
 		bt.advertise=YES 'allow the device to be discoverable
 		'-----------------------------------------------------------------
-		'luis_start(LUIS_BT_DEVICE_NAME)
 		luis_start(config_bt_name)
 		luis_bt_enabled = true
 		device_awake_timer=1200
@@ -435,6 +434,9 @@ sub check_and_upgrade_sns_pic()
 		pic_lvp_start(SENSOR_CLK_PIN, SENSOR_DAT_PIN, SENSOR_CONTROL_PIN)
 		if not pic_lvp_upload_firmware(OSS_SNS_PIC_FILE) then
 			device_debug_print("SNS PIC FW upgraded failed!")
+			if ver = "\xFF\xFF\xFF" then
+				device_add_event("Sensor not connected.")
+			end if
 		else
 			device_debug_print("SNS PIC FW upgraded!")
 			sys.reboot()			

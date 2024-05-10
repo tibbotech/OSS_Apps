@@ -1,0 +1,33 @@
+Changelog of OSS APP
+	-	Date of change:10/05/2024
+	-	New revision of OSS APP: V2.02.00
+	-	Previous revision of OSS APP: 2.01.06 - 07/05/2024
+	-	The reason for change: 
+			-- Add sensor PIC upgrade feature.
+			-- Add special command to LUIS interface.
+			-- Add Model No. setting
+			-- Add "Sensor not connected" event
+			-- Fix bug which might cause device stop to retry connection if the tls connection wasn't established.
+
+	-	Files changed:
+			-- boot.tbs: Add "Sensor not connected" event; Add special command; Add sensor PIC upgrade feature.
+			-- device.tbs: Add "Sensor not connected" event; Add special command
+			-- global.tbh: Add sensor PIC upgrade feature.
+			-- luis.xtxt: Add special command; Add Model No.
+			-- settings.xtxt: Add special command; Add Model No.
+			-- OSS_SNS_PIC_FW_010.hex: Add sensor PIC upgrade feature.
+
+	-   Release files built:  
+			--2_01_00/OSS_Azure_APP0.tpc
+			--2_01_00/OSS_Azure_APP1.tpc
+			--2_01_00/OSS_Azure_APP0_APP1.bin
+			--2_01_00/OSS_Azure_APP0_APP1_2-02-00.tcu
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_021.hex
+			--OSS_SNS_PIC_FW_010.hex
+
+	- Level of change:Major 
+	- Risk assessment and cons: 
+	- Deprecated Features: 
+			
