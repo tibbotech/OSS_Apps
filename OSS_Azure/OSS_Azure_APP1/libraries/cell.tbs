@@ -4787,10 +4787,16 @@ sub cell__at_proc_sys_timer()
 										PHASE_PARSE_AT_MESSAGE)
         case PHASE_AT_AT:
 			cell__at_cmd_exec(CELL__AT, 
-								PHASE_PWR_DONOT_CHANGE, PHASE_AT_AMPERSAND_E1, 
+								PHASE_PWR_DONOT_CHANGE, PHASE_AT_SLED, 
 									PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
 										PHASE_PARSE_AT_MESSAGE)
-
+		
+		case PHASE_AT_SLED:
+		
+			cell__at_cmd_exec(CELL__AT_SLED, 
+								PHASE_PWR_DONOT_CHANGE, PHASE_AT_AMPERSAND_E1, 
+									PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
+										PHASE_PARSE_AT_MESSAGE)		
 
 		case PHASE_AT_AMPERSAND_E1:
 			cell__at_cmd_exec(CELL__AT_AMPERSAND_E1,

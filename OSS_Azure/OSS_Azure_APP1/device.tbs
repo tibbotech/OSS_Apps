@@ -131,6 +131,10 @@ sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref s
 		sleep_time = val(stg_value)
 	case "RCN":
 		min_rec_num_to_send = val(stg_value)
+	case "CMD":
+		if stg_value <> "" then
+			command_issued = YES
+		end if
     end select
 	
 	#if DEVICE_DEBUG_PRINT
@@ -461,7 +465,7 @@ sub callback_azure_on_connected()
 end sub
 
 sub callback_azure_on_disconnected()
-
+	pat.play("-",PL_PAT_CANINT)
 end sub
 
 sub callback_azure_update_twin_version(byref ver as string)
@@ -1254,7 +1258,8 @@ sub update_server_properties()
 	if property_modified = YES then
 		update_stg_ts_and_send_azure("FWV")
 		update_stg_ts_and_send_azure("CID")	
-		update_stg_ts_and_send_azure("DLPT")		
+		update_stg_ts_and_send_azure("DLPT")
+		update_stg_ts_and_send_azure("MNUM")
 		property_modified = NO
 	end if
 end sub
@@ -1380,12 +1385,12 @@ end sub
 sub execute_special_command()
 	if command_issued = NO then exit sub
 	dim cmd as string(32) = stg_get("CMD",0)
-	if sensor_type = 1 and cmd = "CO2 CALRIBRATION" then 
+	if sensor_type = 1 and cmd = "CACO2:400" then 
 		co2_calibration()
 		sample_timer = 60
-		stg_set("CMD",0,"")
 		command_issued = NO
-	end if 	
+	end if
+	stg_set("CMD",0,"")
 end sub
 
 sub delay_ms(ms as dword)

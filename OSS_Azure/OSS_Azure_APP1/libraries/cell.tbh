@@ -392,7 +392,7 @@ const CELL__AT_AMPERSAND_E1 = "AT&E1"	'Show the CORRECT BAUDRATE after sending c
 const CELL__AT_AMPERSAND_C0 = "AT&C0"	'Set DCD line is always ON
 const CELL__AT_CPSMS_0 = CELL__AT_PLUS + "CPSMS" + "=" + "0"	'Disable Powersaving Mode
 const CELL__AT_AMPERSAND_D0 = "AT&D0"	'Ignore the Status on the DTR
-
+const CELL__AT_SLED = CELL__AT_PLUS + "SLEDS=3,65535,0"
 const CELL__ATE1 = "ATE1"
 const CELL__AT_CGMM = CELL__AT_PLUS + "CGMM"
 const CELL__AT_CBC = CELL__AT_PLUS + "CBC"
@@ -779,6 +779,7 @@ const CELL__AT_CGDATA = CELL__AT_PLUS + "CGDATA" + "=" + CELL__AT_CGDATA_INPUT
 		PHASE_AT_DONOT_CHANGE,
 		PHASE_AT_INIT,
 		PHASE_AT_AT,
+		PHASE_AT_SLED,
 		PHASE_AT_AMPERSAND_E1,
 		PHASE_AT_AMPERSAND_C0,
 		PHASE_AT_CPSMS_0,
