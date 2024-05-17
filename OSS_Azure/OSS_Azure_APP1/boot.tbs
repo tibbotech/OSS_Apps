@@ -341,7 +341,7 @@ sub sensor_init()
 	
 	case 0, 1:	'temp_hum / temp_hum_co2
 		if sensor_type = 0 then sample_timer = 4
-		if sensor_type = 1 then sample_timer = 60
+		if sensor_type = 1 then sample_timer = 10
 		init_i2c_sensor()
 		check_and_upgrade_sns_pic()
 		

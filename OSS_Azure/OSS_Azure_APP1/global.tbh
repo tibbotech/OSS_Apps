@@ -1,9 +1,9 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="V2.02.01"
+const OSS_APP_FW_VER="V2.02.02"
 const OSS_SUPR_FW_VER = "021"
-const OSS_SNS_FW_VER = "010"
+const OSS_SNS_FW_VER = "011"
 #define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_021.hex"
-#define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_010.hex"
+#define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_011.hex"
 
 #define MQTT_DEBUG_PRINT 1
 #define LUIS_CONFIG_FILE "luis.xtxt"
@@ -19,8 +19,8 @@ const OSS_SNS_FW_VER = "010"
 #define SYS_DPRINT_TARGET_PORT 1001
 #define DEVICE_DEBUG_PRINT 1
 
-#define AWKE_TIME_FOR_WLN 2
-#define AWKE_TIME_FOR_CELL 4
+#define AWKE_TIME_FOR_WLN 2 'Maximum awake time when comm mode is in WLN (2 minutes)
+#define AWKE_TIME_FOR_CELL 4 'Maximum awake time when comm mode is in LTE (4 minutes)
 #define TBL_ADJUST_LIST_WHEN_FULL 0  'adjust table size as soon as record is deleted
 #define TBL_SECTOR_SIZE 512
 #define MQTT_CER_FILE "DigiCert.cer"
