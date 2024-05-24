@@ -1,0 +1,37 @@
+Changelog of OSS APP
+	-	Date of change:24/05/2024
+	-	New revision of OSS APP: V2.02.03
+	-	Previous revision of OSS APP: 2.02.02 - 17/05/2024
+	-	The reason for change: 
+			-- Add new property on Azure (IP, MAC, IMEI, ICCD)
+			-- Add sensor bp05
+			-- Add sensor bp03
+			-- New sensor PIC firmware
+			-- New supervisor PIC firmware
+			-- Give Alphabet parts of firmware version means(AZR for Azure, AWS for Amazon, etc...)
+			-- Change abbrivation of humidity displayed on LUIS (HR instead of H).
+			-- Show firmware version in LUIS
+
+	-	Files changed:
+			-- boot.tbs: new property on Azure, Give Alphabet parts of firmware version means, new sensor bp05
+			-- device.tbs: new property on Azure, sensor bp05, sensor bp03
+			-- global.tbh: New sensor PIC firmware, New supervisor PIC firmware
+			-- cell.tbh: new property on Azure
+			-- cell.tbs: new property on Azure
+			-- luis.xtxt: sensor bp05, sensor bp03, Change abbrivation of humidity, Show firmware version
+			-- settings.xtxt: new property on Azure
+
+	-   Release files built:  
+			--2_01_00/OSS_Azure_APP0.tpc
+			--2_01_00/OSS_Azure_APP1.tpc
+			--2_01_00/OSS_Azure_APP0_APP1.bin
+			--2_01_00/OSS_Azure_APP0_APP1_2-02-03.tcu
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_022.hex
+			--OSS_SNS_PIC_FW_012.hex
+
+	- Level of change:Minor
+	- Risk assessment and cons: 
+	- Deprecated Features: 
+			

@@ -59,9 +59,7 @@ type modbus_request_item
 end type
 declare modbus_queue_start as char
 declare modbus_queue_end as char
-declare modbus_awaiting_reply as boolean
 declare modbus_request_queue as modbus_request_item(MODBUS_MAX_REQUESTS)
-declare modbus_recv_buffer as string
 declare modbus_slave_recv_buffer as string
 declare modbus_slave_id as byte
 declare modbus_slave_protocol as modbusProtocol

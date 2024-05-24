@@ -45,7 +45,6 @@ declare sub azure_http_reset()
 declare sub azure_mqtt_start()
 
 public sub azure_start(byref device_id as string, byref scope_id as string, byref dps_url as string, byref symmetricKey as string, interface as pl_sock_interfaces)
-
 '	azure_init_flag=AZURE_INIT_SIGNATURE
 	if device_id="" or scope_id="" or dps_url="" or symmetricKey="" then
 		#if AZURE_DEBUG_PRINT
@@ -69,7 +68,6 @@ public sub azure_start(byref device_id as string, byref scope_id as string, byre
 end sub
 
 public sub azure_on_connected()
-
 	if azure_init_flag<>AZURE_INIT_SIGNATURE then
 		#if AZURE_DEBUG_PRINT
 			azure_debugprint("ERROR: azure_start() wasn't used or failed")
@@ -94,7 +92,6 @@ public sub azure_on_connected()
 end sub
 
 public sub azure_on_disconnected()
-	
 	if azure_init_flag<>AZURE_INIT_SIGNATURE then
 		#if AZURE_DEBUG_PRINT
 			azure_debugprint("ERROR: azure_start() wasn't used or failed")
@@ -111,7 +108,6 @@ public sub azure_on_disconnected()
 end sub
 
 public sub azure_proc_mqtt_msg(byref topic as string,byref data as string)
-	
 	if azure_init_flag<>AZURE_INIT_SIGNATURE then
 		#if AZURE_DEBUG_PRINT
 			azure_debugprint("ERROR: azure_start() wasn't used or failed")
@@ -223,7 +219,6 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string)
 end sub
 
 public sub azure_command_respond(byref command as string, byref returns as string, rid as string, result as en_azure_command_codes)
-
 	if azure_init_flag<>AZURE_INIT_SIGNATURE then
 		#if AZURE_DEBUG_PRINT
 			azure_debugprint("ERROR: azure_start() wasn't used or failed")
@@ -322,7 +317,6 @@ sub azure_send_property(prop_name as string, prop_value as string)
 end sub
 
 public sub azure_send_telemetry()
-
 	if mqtt_state<>EN_MQTT_STATES_LOGGED_IN or azure_telemetry_ts<>"" then
 		exit sub
 	end if
@@ -376,11 +370,9 @@ public sub azure_send_telemetry()
 	sock.num=mqtt_sock_num
 	sock.notifysent(0)
 	mqtt_publish(server_bound_message_topic,json,QOS_AT_MOST_ONCE)					
-
 end sub
 
-sub azure_set_datetime(byref dt_string as string)
-	
+sub azure_set_datetime(byref dt_string as string)	
 	'Mon, 08 Feb 2021 03:16:19 GMT
 	dim daycounts, mincounts as word
 	dim curr_daycounts, curr_mincounts as word
@@ -422,7 +414,6 @@ sub azure_set_datetime(byref dt_string as string)
 end sub
 
 public sub azure_on_telemetry_sent()
-
 	if sock.num<>mqtt_sock_num then
 		exit sub
 	end if
@@ -435,14 +426,11 @@ public sub azure_on_telemetry_sent()
 			rec_num=1
 		wend
 		azure_telemetry_ts=""
-		callback_azure_on_telemetry_sent()
-				
+		callback_azure_on_telemetry_sent()	
 	end if
-
 end sub
 
 sub azure_device_lookup()
-
 	if azure_init_flag<>AZURE_INIT_SIGNATURE then
 		#if AZURE_DEBUG_PRINT
 			azure_debugprint("ERROR: azure_start() wasn't used or failed")
@@ -460,7 +448,6 @@ sub azure_device_lookup()
 end sub
 
 sub azure_dps_device_provisioning()
- 
 	if azure_state<>EN_AZURE_PROVISIONING then
 		azure_state=EN_AZURE_PROVISIONING
 		azure_dps_authorization=azure_generate_sas_token(azure_current_scope_id+"%2Fregistrations%2F"+azure_current_device_id, azure_current_primary_key, 525600)		
@@ -472,17 +459,14 @@ sub azure_dps_device_provisioning()
 end sub
 
 sub iot_send_headers()
-
   if http_request_item.url = azure_current_url then
         http_send_headers("Content-Type","application/json")
 		http_send_headers("Authorization", "SharedAccessSignature sr="+azure_current_scope_id+"%2Fregistrations%2F"+azure_current_device_id+"&sig="+azure_dps_authorization)
     end if
-	
 end sub
 
 
 sub azure_mqtt_start()
-	
 	dim user_name as string=azure_assigned_hub+"/"+azure_current_device_id+"/"+AZURE_MQTT_API_VERSION	
 	dim resourceUri as string= azure_assigned_hub+"%2Fdevices%2F"+azure_current_device_id
 	azure_sas_token="SharedAccessSignature sr="+azure_assigned_hub+"%2Fdevices%2F"+azure_current_device_id+"&sig="+azure_generate_sas_token(resourceUri, azure_current_primary_key, 525600)
@@ -558,15 +542,12 @@ function azure_parse_http(data as string) as string
 end function
 
 sub iot_header_arrival(header_type as string, header_value as string)
-
 	if header_type = "Date" then
 		azure_set_datetime(header_value)
 	end if
-	
 end sub
 
 sub azure_http_request_complete()
-	
 	if http_request_item.url = azure_current_url then
 		select case azure_state		
 		case EN_AZURE_DEVICE_LOOKUP: 
@@ -653,7 +634,6 @@ end function
 
 #if AZURE_DEBUG_PRINT
 	sub azure_debugprint(byref print_data as string)
-		
 		#if SYS_SOCK_DEBUGPRINT or SYS_EVENT_DEBUGPRINT
 			alternate_debugprint("AZURE> "+print_data+"\x0d\x0a")
 		#else

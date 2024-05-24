@@ -198,6 +198,7 @@ dim cell__at_cmd_storArray_numof_cmds as word
 #ifndef CELL__AT_REPLIED_WITH_RDY
     #define CELL__AT_REPLIED_WITH_RDY ( instr(1, ser.getdata(255), CELL__RDY_CRLF, 1) <> 0 )	
 #endif	
+
 #ifndef CELL__AT_REPLIED_WITH_CGREG_0_1
     #define CELL__AT_REPLIED_WITH_CGREG_0_1 ( instr(1, cell__reply, CELL__CGREG_0_1, 1) <> 0 )
 #endif
@@ -2061,7 +2062,7 @@ sub cell__at_parse_message(next_pwr_phase as en_cell__op_pwr_phases, next_at_pha
 		if (CELL__AT_CMD_CONTAINS_CBC) then	'read the voltage value of the powersupply/battery
 			cell__at_get_voltage()	'get the voltage
 		end if	
-		
+
 		'Debug print
 		#if CELL__DEBUGPRINT_AT_ISENABLED
 			cell__debugprint_at_phase(PHASE_AT_FREE_INPUT, cell__at_cmd, cell__reply)	'PRINT `AT-command` + `AT-reply`
@@ -2069,7 +2070,7 @@ sub cell__at_parse_message(next_pwr_phase as en_cell__op_pwr_phases, next_at_pha
 
 
 		'CALLBACK
-		cell__callback_at_reply()
+		cell__callback_at_reply(cell__op_at_phase_bck, cell__reply)
 
 
 '-------Special attention to certain AT-commands:
@@ -4791,12 +4792,22 @@ sub cell__at_proc_sys_timer()
 									PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
 										PHASE_PARSE_AT_MESSAGE)
 		
-		case PHASE_AT_SLED:
-		
+		case PHASE_AT_SLED:		
 			cell__at_cmd_exec(CELL__AT_SLED, 
-								PHASE_PWR_DONOT_CHANGE, PHASE_AT_AMPERSAND_E1, 
+								PHASE_PWR_DONOT_CHANGE, PHASE_AT_GSN, 
 									PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
 										PHASE_PARSE_AT_MESSAGE)		
+		case PHASE_AT_GSN:
+			cell__at_cmd_exec(CELL__AT_GSN, 
+								PHASE_PWR_DONOT_CHANGE, PHASE_AT_CCID, 
+									PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
+										PHASE_PARSE_AT_MESSAGE)				
+	
+		case PHASE_AT_CCID:
+			cell__at_cmd_exec(CELL__AT_CCID, 
+								PHASE_PWR_DONOT_CHANGE, PHASE_AT_AMPERSAND_E1, 
+									PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
+										PHASE_PARSE_AT_MESSAGE)				
 
 		case PHASE_AT_AMPERSAND_E1:
 			cell__at_cmd_exec(CELL__AT_AMPERSAND_E1,

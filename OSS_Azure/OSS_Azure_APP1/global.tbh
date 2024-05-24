@@ -1,23 +1,26 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="V2.02.02"
-const OSS_SUPR_FW_VER = "021"
-const OSS_SNS_FW_VER = "011"
-#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_021.hex"
-#define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_011.hex"
-
-#define MQTT_DEBUG_PRINT 1
+const OSS_APP_FW_VER="AZR2.02.03"
+const OSS_SUPR_FW_VER = "022"
+const OSS_SNS_FW_VER = "012"
+#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_022.hex"
+#define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_012.hex"
 #define LUIS_CONFIG_FILE "luis.xtxt"
+
+#define STG_DEBUG_PRINT 0
+#define MQTT_DEBUG_PRINT 0
 #define LUIS_DEBUG_PRINT 0
-#define WLN_AVAILABLE 1
 #define DNS_DEBUG_PRINT 0
-#define HTTP_DEBUG_PRINT 1
-#define CELL__DEBUG_PRINT 1
+#define HTTP_DEBUG_PRINT 0
+#define CELL__DEBUG_PRINT 0
+#define AZURE_DEBUG_PRINT 0
+#define DEVICE_DEBUG_PRINT 0
 #define SYS_EVENT_DEBUGPRINT 0
 #define SYS_SOCK_DEBUGPRINT 0
 #define SYS_DPRINT_SOCK_NUM 10
 #define SYS_DPRINT_TARGET_IP "192.168.1.120"
 #define SYS_DPRINT_TARGET_PORT 1001
-#define DEVICE_DEBUG_PRINT 1
+
+#define WLN_AVAILABLE 1
 
 #define AWKE_TIME_FOR_WLN 2 'Maximum awake time when comm mode is in WLN (2 minutes)
 #define AWKE_TIME_FOR_CELL 4 'Maximum awake time when comm mode is in LTE (4 minutes)

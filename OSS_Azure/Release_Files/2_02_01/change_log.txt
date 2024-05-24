@@ -19,13 +19,13 @@ Changelog of OSS APP
 			--2_01_00/OSS_Azure_APP0.tpc
 			--2_01_00/OSS_Azure_APP1.tpc
 			--2_01_00/OSS_Azure_APP0_APP1.bin
-			--2_01_00/OSS_Azure_APP0_APP1_2-02-00.tcu
+			--2_01_00/OSS_Azure_APP0_APP1_2-02-01.tcu
 	-   Build machine and toolset versions: 
 			--tios-wm2000-4_01_02.bin
 			--OSS_SUPR_PIC_FW_021.hex
 			--OSS_SNS_PIC_FW_010.hex
 
-	- Level of change:Major 
+	- Level of change:Minor
 	- Risk assessment and cons: 
 	- Deprecated Features: 
 			

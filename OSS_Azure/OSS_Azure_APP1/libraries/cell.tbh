@@ -388,6 +388,8 @@ const CELL__ATO = "ATO"
 
 const CELL__AT_GSHD = CELL__AT_PLUS + "GSHD"
 
+const CELL__AT_CCID = CELL__AT_PLUS + "CCID"
+const CELL__AT_GSN = CELL__AT_PLUS + "GSN"
 const CELL__AT_AMPERSAND_E1 = "AT&E1"	'Show the CORRECT BAUDRATE after sending command AT+CGDATA
 const CELL__AT_AMPERSAND_C0 = "AT&C0"	'Set DCD line is always ON
 const CELL__AT_CPSMS_0 = CELL__AT_PLUS + "CPSMS" + "=" + "0"	'Disable Powersaving Mode
@@ -780,6 +782,8 @@ const CELL__AT_CGDATA = CELL__AT_PLUS + "CGDATA" + "=" + CELL__AT_CGDATA_INPUT
 		PHASE_AT_INIT,
 		PHASE_AT_AT,
 		PHASE_AT_SLED,
+		PHASE_AT_GSN,
+		PHASE_AT_CCID,
 		PHASE_AT_AMPERSAND_E1,
 		PHASE_AT_AMPERSAND_C0,
 		PHASE_AT_CPSMS_0,
@@ -1164,7 +1168,7 @@ declare sub cell__callback_insufficient_buffer_pages()
 '<b>METHOD. </b><br><br>
 'Callback to notify that the buffer pages allocated for data serial port, UDP, and TCP operations are insufficient to initialize the library.
 
-declare sub cell__callback_at_reply()
+declare sub cell__callback_at_reply(phase as en_cell__op_at_phases,byref reply as string)
 '<b>METHOD. </b><br><br>
 'Callback to show the parsed AT reply.
 

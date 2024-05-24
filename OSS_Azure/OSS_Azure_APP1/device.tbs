@@ -51,9 +51,12 @@ declare sub update_stg_ts_and_send_azure(byref stg_name as string)
 declare sub update_server_properties()
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
-declare sub read_modbus_bp02()
+
+
 declare sub read_modbus_soil()
 declare sub proc_modbus_bp2(byref request_item as modbus_request_item, byref reply as string)
+declare sub proc_modbus_bp5(byref request_item as modbus_request_item, byref reply as string)
+declare sub proc_modbus_bp3(byref request_item as modbus_request_item, byref reply as string)
 declare sub proc_modbus_soil(byref request_item as modbus_request_item, byref reply as string)
 declare sub co2_calibration()
 declare sub execute_special_command()
@@ -102,6 +105,9 @@ sub callback_stg_pre_get(byref stg_name_or_num as string,index as byte,byref stg
 		case "WPW":
 			stg_value=wln.autoconnectpassword
 			debug_string="WiFi Password: " + stg_value
+		case "MAC":
+			stg_value=wln.mac
+			debug_string="WiFi MAC: " + stg_value		
 		case else:
 	end select
 
@@ -288,12 +294,10 @@ sub callback_http_send_headers()
 	end if 
 end sub
 
-
 sub callback_http_request_complete()
     if upgrade_state = 255 then
 		azure_http_request_complete()
-	end if
-    
+	end if    
 end sub
 
 sub callback_http_response_code_arrival(http_response as string)
@@ -532,7 +536,21 @@ end sub
 sub cell__callback_insufficient_buffer_pages()
 end sub
 
-sub cell__callback_at_reply()
+sub cell__callback_at_reply(phase as en_cell__op_at_phases,byref reply as string)
+	dim s as string
+	dim i as byte
+	
+	select case phase
+	case PHASE_AT_GSN: 'IMEI
+		i = instr(1,reply,"\x2e",1)
+		s = left(reply,i-1)
+		stg_set("IMEI",0,s)
+	case PHASE_AT_CCID:
+		i = instr(1,reply,"\x2e",1)
+		s = left(reply,i-1)
+		stg_set("CCID",0,s)
+	case else		
+	end select
 end sub
 
 sub cell__callback_at_reply_contains_error()
@@ -643,12 +661,9 @@ sub device_add_event(byref event_msg as string)
 	rtc.getdata(daycounts,mincounts,seconds)
 	time_to_str(ts,daycounts,mincounts,seconds)
 	
-	ts=ts+"."+str(rand_event_num)+"Z"		
-	tbl_result=tbl_select("Azure","Azure")
-	tbl_result=tbl_field_sg("time",ts,EN_TBL_SET)
-	tbl_result=tbl_field_sg("type","event",EN_TBL_SET)
-	tbl_result=tbl_field_sg("value",event_msg,EN_TBL_SET)
-	tbl_result=tbl_record_add("")		
+	ts=ts+"."+str(rand_event_num)+"Z"	
+	
+	tbl_result = add_telemetry("event",event_msg,ts)
 	
 	#if DEVICE_DEBUG_PRINT
 		device_debug_print("Event: "+event_msg)
@@ -843,8 +858,21 @@ sub read_onboard_t_h_co2_sensor(byref ts as string)
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	si2c_get(sensor_channel)
 	
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_WR)
+	si2c_write(&hA0)
+	delay_ms(5)
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_RD)
+	data0=si2c_read(false)
+	si2c_stop()	
+		
+	if data0 <> 0 then
+		sample_timer = 10
+		exit sub
+	end if
+	
 	'fetch temperature and humidity data
-
 	si2c_start()
 	si2c_write(SENSOR_ADDR OR PIC_WR)
 	si2c_write(&h80)
@@ -977,29 +1005,6 @@ sub read_onboard_t_h_sensor(byref ts as string)
 	#endif
 end sub
 
-sub read_modbus_bp02()
-	dim daycounts, mincounts as word 
-	dim seconds as byte
-	
-	rtc.getdata(daycounts,mincounts,seconds)
-	time_to_str(sensor_telemetry_ts,daycounts,mincounts,seconds)
-	sensor_telemetry_ts=sensor_telemetry_ts+".000Z"
-	modbus_master_request(modbus_device_id, ReadInputRegisters, 400, 1, "", MODBUS_UART, modbus_RTU) 'temperature
-	modbus_master_request(modbus_device_id, ReadInputRegisters, 404, 1, "", MODBUS_UART, modbus_RTU) 'humidity
-
-end sub
-
-sub read_modbus_soil()
-	dim daycounts, mincounts as word 
-	dim seconds as byte
-	
-	rtc.getdata(daycounts,mincounts,seconds)
-	time_to_str(sensor_telemetry_ts,daycounts,mincounts,seconds)
-	sensor_telemetry_ts=sensor_telemetry_ts+".000Z"
-	modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 2, "", MODBUS_UART, modbus_RTU) 'humidity + temperature 
-	
-end sub
-
 sub pic_write(addr as byte, byref data as string)
 	dim i as byte
 	
@@ -1063,12 +1068,12 @@ function need_to_connect() as no_yes
 	end if
 	
 	select case sensor_type
+	case 130,131:
+		number_of_fld = 1
 	case 0, 128, 129: 
 		number_of_fld = 2
-		
 	case 1: 
 		number_of_fld = 3
-	
 	case else:	
 	end select
 	
@@ -1139,6 +1144,8 @@ sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref
 		select case sensor_type
 		case 128: proc_modbus_bp2(request_item, reply)
 		case 129: proc_modbus_soil(request_item, reply)
+		case 130: proc_modbus_bp5(request_item, reply)
+		case 131: proc_modbus_bp3(request_item, reply)
 		end select
 		sensor_read_count = 0
 	end if
@@ -1163,16 +1170,41 @@ sub proc_modbus_soil(byref request_item as modbus_request_item, byref reply as s
 			device_debug_print(humd+" RH")
 		#endif
 		
-		tbl_result=tbl_select("Azure","Azure")
-		tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
-		tbl_result=tbl_field_sg("type","temperature",EN_TBL_SET)
-		tbl_result=tbl_field_sg("value",temp,EN_TBL_SET)	
-		tbl_result=tbl_record_add("")
-		
-		tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
-		tbl_result=tbl_field_sg("type","humidity",EN_TBL_SET)
-		tbl_result=tbl_field_sg("value",humd,EN_TBL_SET)			
-		tbl_result=tbl_record_add("")	
+		tbl_result = add_telemetry("temperature",temp,sensor_telemetry_ts)
+		tbl_result = add_telemetry("humidity",humd,sensor_telemetry_ts)
+	end if	
+end sub
+
+sub proc_modbus_bp5(byref request_item as modbus_request_item, byref reply as string)
+	dim bytes as byte(255) = reply
+	dim temp as string(36)
+	dim tbl_result as en_tbl_status_codes	
+	
+	if request_item.start_register=700 then
+		dim Flood as integer = modbus_read_word(bytes,0)
+		temp=stri(Flood)
+	
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print(temp)
+		#endif			
+		add_telemetry("Flood",temp,sensor_telemetry_ts)
+	end if
+
+end sub
+
+sub proc_modbus_bp3(byref request_item as modbus_request_item, byref reply as string)
+	dim bytes as byte(255) = reply
+	dim temp as string(36)
+	dim tbl_result as en_tbl_status_codes	
+	
+	if request_item.start_register=500 then
+		dim Light as integer = modbus_read_word(bytes,0)
+		temp=stri(Light)
+	
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print(temp+"LUX")
+		#endif			
+		add_telemetry("Flood",temp,sensor_telemetry_ts)
 	end if	
 end sub
 
@@ -1189,11 +1221,9 @@ sub proc_modbus_bp2(byref request_item as modbus_request_item, byref reply as st
 		#if DEVICE_DEBUG_PRINT
 			device_debug_print(temp+"C ")
 		#endif			
-		tbl_result=tbl_select("Azure","Azure")
-		tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
-		tbl_result=tbl_field_sg("type","temperature",EN_TBL_SET)
-		tbl_result=tbl_field_sg("value",temp,EN_TBL_SET)				
-		tbl_result=tbl_record_add("")	
+		
+		tbl_result = add_telemetry("temperature",temp,sensor_telemetry_ts)
+		
 	end if
 	
 	if request_item.start_register=404 then
@@ -1205,11 +1235,7 @@ sub proc_modbus_bp2(byref request_item as modbus_request_item, byref reply as st
 			device_debug_print(temp+" RH")
 		#endif			
 		
-		tbl_result=tbl_select("Azure","Azure")
-		tbl_result=tbl_field_sg("time",sensor_telemetry_ts,EN_TBL_SET)
-		tbl_result=tbl_field_sg("type","humidity",EN_TBL_SET)
-		tbl_result=tbl_field_sg("value",temp,EN_TBL_SET)				
-		tbl_result=tbl_record_add("")	
+		tbl_result = add_telemetry("humidity",temp,sensor_telemetry_ts)
 	end if
 
 end sub
@@ -1217,6 +1243,13 @@ end sub
 sub update_server_properties()
 
 	if property_modified = YES then
+		if comm_mode = 0 then
+			update_stg_ts_and_send_azure("MAC")
+			update_stg_ts_and_send_azure("IP")
+		else
+			update_stg_ts_and_send_azure("IMEI")
+			update_stg_ts_and_send_azure("CCID")
+		end if
 		update_stg_ts_and_send_azure("FWV")
 		update_stg_ts_and_send_azure("CID")	
 		update_stg_ts_and_send_azure("MNUM")
@@ -1283,10 +1316,19 @@ sub device_sampling()
 					read_onboard_t_h_sensor(ts)	
 				case 1:
 					read_onboard_t_h_co2_sensor(ts)			
-				case 128:
-					read_modbus_bp02()
-				case 129:
-					read_modbus_soil()
+				case 128: 'bp02
+					sensor_telemetry_ts = ts
+					modbus_master_request(modbus_device_id, ReadInputRegisters, 400, 1, "", MODBUS_UART, modbus_RTU) 'temperature
+					modbus_master_request(modbus_device_id, ReadInputRegisters, 404, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+				case 129: 'modbus soil
+					sensor_telemetry_ts = ts
+					modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 2, "", MODBUS_UART, modbus_RTU) 'humidity + temperature 
+				case 130: 'bp05
+					sensor_telemetry_ts = ts
+					modbus_master_request(modbus_device_id, ReadInputRegisters, 700, 1, "", MODBUS_UART, modbus_RTU) 'flood
+				case 131: 'bp03
+					sensor_telemetry_ts = ts
+					modbus_master_request(modbus_device_id, ReadInputRegisters, 500, 1, "", MODBUS_UART, modbus_RTU) 'ambient light
 				case else:
 				end select
 
@@ -1339,26 +1381,36 @@ sub device_migrating()
 end sub
 
 sub co2_calibration()
-	dim i as byte
-	
+
 	si2c_get(sensor_channel)
 	si2c_start()
 	si2c_write(SENSOR_ADDR OR PIC_WR)
 	si2c_write(&hA0)
 	si2c_write(&h77)
 	delay_ms(10)
-	si2c_stop()
-	 
+	si2c_stop()		
+
 end sub
 
 sub execute_special_command()
 	if command_issued = NO then exit sub
 	dim cmd as string(32) = stg_get("CMD",0)
-	if sensor_type = 1 and cmd = "CACO2:400" then 
-		co2_calibration()
-		sample_timer = 10
-		command_issued = NO
-	end if
+	select case cmd
+	case "CACO2:400":
+		if sensor_type = 1 then
+			co2_calibration()
+			sample_timer = 30
+		else
+			cmd = ""
+		end if
+	case else:
+		cmd = ""
+	end select
+	
+	if cmd <> "" then
+		device_add_event("Advance command ("+cmd+")")
+	end if		
+	command_issued = NO
 	stg_set("CMD",0,"")
 end sub
 

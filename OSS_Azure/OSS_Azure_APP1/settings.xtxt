@@ -1,9 +1,12 @@
->>CID	E	W	1	0	65535	A	0	Customer ID
->>FWV	E	S	1	0	20	I	^	F-ware version
->>MODE	E	B	1	0	1	A	0	Comm mode
+>>IMEI	R	S	1	0	15	A	^	IMEI
+>>CCID	R	S	1	0	22	A	^	ICCID
+>>MAC	R	D	1	6	6	A	0.0.0.0.0.0	MAC address
 >>WAP	R	S	1	0	32	I	^	Wi-Fi SSID
 >>WPW	R	S	1	0	64	I	^	Wi-Fi Password
 >>DH	R	B	1	0	1	A	^	Wi-Fi, DHCP
+>>CID	E	W	1	0	65535	A	0	Customer ID
+>>FWV	E	S	1	0	20	I	^	F-ware version
+>>MODE	E	B	1	0	1	A	0	Comm mode
 >>IP	E	D	1	4	4	A	1.0.0.1	Wi-Fi, IP
 >>GI	E	D	1	4	4	A	127.0.0.1	Wi-Fi, gateway
 >>NM	E	D	1	4	4	A	0.0.0.0	Wi-Fi, netmask
@@ -33,9 +36,8 @@
 >>MNUM	E	S	1	0	20	A	^	Model No.
 >>CMD	E	S	1	0	32	A	^	Command
 #define STG_DESCRIPTOR_FILE "settings.xtxt"
-#define STG_DEBUG_PRINT 1
 #define STG_TIMESTAMP 1
-#define STG_MAX_NUM_SETTINGS 34
-#define STG_RAM_ARRAY_SIZE 132
+#define STG_MAX_NUM_SETTINGS 37
+#define STG_RAM_ARRAY_SIZE 202
 #define STG_MAX_SETTING_NAME_LEN 4
 #define STG_MAX_SETTING_VALUE_LEN 128

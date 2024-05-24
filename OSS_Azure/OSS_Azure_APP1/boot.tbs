@@ -54,12 +54,13 @@ sub boot()
     dim stg_init_code as en_stg_status_codes
     dim stg_name as string(STG_MAX_SETTING_NAME_LEN)
 	
-	stg_init_code = stg_start_no_init()
+	stg_init_code = stg_start_no_init() 'do not init RAM settings, it will change wln.autoconnect etc..
     if stg_init_code<>EN_STG_STATUS_OK then 
         pat.play("R-R-~",PL_PAT_CANINT)
         if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
 	else
 		check_app_fw_version()
+		stg_set("MAC",0,wln.mac) 'load RAM setting "MAC" with real actual MAC address
 		stg_init_code=stg_check_all(stg_name)
 		select case stg_init_code
 		case EN_STG_STATUS_OK:
@@ -77,7 +78,9 @@ sub boot()
     end if
 	
 	if stg_init_code<>EN_STG_STATUS_OK then
-		device_debug_print("Setting init failed.")
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print("Setting init failed.")
+		#endif
 	end if
 
 	CELL__AT_APN = stg_get("GAN",0)
@@ -96,10 +99,14 @@ sub boot()
 	'================================================================
 	select case mcp23017_init("TBT00_3_S5", YES, TBT00_3_S5_CLK, TBT00_3_S5_DATA, TBT00_3_S5_CHANNEL)
 	case MCP23017_SELF_TEST_FAIL:
-		sys.debugprint("mcp23017 self test failed!\r\n")
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print("mcp23017 self test failed!")
+		#endif
 		if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
 		pat.play("R-R-R",PL_PAT_CANINT)
-		device_debug_print("mcp2307 init failed.")
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print("mcp2307 init failed.")
+		#endif
 	case MCP23017_NO_SSI_AVAILABLE:
 		sys.debugprint("SSI channel could not be allocated, using bit banging instead.\r\n")
 	end select
@@ -229,19 +236,50 @@ sub boot()
 end sub
 
 sub check_app_fw_version()
-	dim s as string
-	s=stg_get("FWV",0)
-	if OSS_APP_FW_VER<>s then
-		dim pos1 as byte = instr(1,s,".",1)
-		dim pos2 as byte = instr(1,s,".",2)
-		dim w1 as word = val(mid(s,2,pos1-2))*100+val(mid(s,pos1+1,pos2-pos1-1))
+	dim ver as string(20) = stg_get("FWV",0)
+	dim ver_number as string(20) = ""
+	dim ver_alphabet_new as string(3) = ""
+	dim ver_alphabet_old as string(3) = ""
+	dim tmp as byte
+	dim i as byte
+	
+	if OSS_APP_FW_VER<>ver then
+		for i = 1 to len(OSS_APP_FW_VER)
+			tmp = asc(mid(OSS_APP_FW_VER,i,1))
+			if tmp >= &h30 and tmp <= &h39 then
+				exit for
+			end if
+		next i
+		ver_alphabet_new = left(OSS_APP_FW_VER, i-1)
 		
-		if w1<202 then
-			stg_set("CMD",0,"")
-			stg_set("MNUM",0,"")
-			goto fw203
-		else if w1>=203 and w1<204 then
+		for i = 1 to len(ver)
+			tmp = asc(mid(ver,i,1))
+			if tmp >= &h30 and tmp <= &h39 then
+				exit for
+			end if
+		next i
+		ver_alphabet_old = left(ver, i-1)
+		
+		if ver_alphabet_old = "V" or ver_alphabet_old = ver_alphabet_new then
+			ver_number = right(ver,len(ver)-i+1)
+			
+			dim pos1 as byte = instr(1,ver_number,".",1)
+			dim pos2 as byte = instr(1,ver_number,".",2)
+			dim w1 as word = val(mid(ver_number,1,pos1-1))*100+val(mid(ver_number,pos1+1,pos2-pos1-1))
+			
+			if w1<202 then
+				stg_set("CMD",0,"")
+				stg_set("MNUM",0,"")
+				goto fw203
+			else if w1>=202 and w1<203 then
 fw203:		
+				goto fw204
+			else if w1>=203 and w1<204 then
+fw204:
+			end if
+		else
+			stg_restore_multiple(EN_STG_INIT_MODE_NORMAL)
+			stg_set("FWV",0,OSS_APP_FW_VER)
 		end if
 		stg_set("FWV",0,OSS_APP_FW_VER)
 		device_add_event("Upgrage done! "+OSS_APP_FW_VER)		
@@ -311,12 +349,12 @@ sub init_modbus_sensor()
 
     ser.bits=PL_SER_BB_8
     ser.flowcontrol=PL_SER_FC_DISABLED
-	select case sensor_type
 	
-	case 128:
-		ser.baudrate=PL_SER_BAUD_38400 '38400 for the BP02
+	select case sensor_type
+	case 128, 130, 131:
+		ser.baudrate=PL_SER_BAUD_38400 '38400 for the BP02/BP05
 	case 129:
-		ser.baudrate=PL_SER_BAUD_9600 '38400 for the BP02
+		ser.baudrate=PL_SER_BAUD_9600 '9600 for soil
 	end select
    
     ser.interface=PL_SER_SI_HALFDUPLEX
@@ -340,12 +378,12 @@ sub sensor_init()
 	select case sensor_type
 	
 	case 0, 1:	'temp_hum / temp_hum_co2
-		if sensor_type = 0 then sample_timer = 4
-		if sensor_type = 1 then sample_timer = 10
+		if sensor_type = 0 then sample_timer = 10
+		if sensor_type = 1 then sample_timer = 40
 		init_i2c_sensor()
 		check_and_upgrade_sns_pic()
 		
-	case 128,129: 'modbus sensor
+	case 128,129,130,131: 'modbus sensor
 		sample_timer = 4
 		init_modbus_sensor()
 		
@@ -427,18 +465,23 @@ sub check_and_upgrade_sns_pic()
 	ver = ver + chr(si2c_read(true))
 	ver = ver + chr(si2c_read(true))
 	si2c_stop()
-	device_debug_print("Current version: " + ver)
-	
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print("Current version: " + ver)
+	#endif
 	if (ver <> OSS_SNS_FW_VER) then
 		' FLASHING
 		pic_lvp_start(SENSOR_CLK_PIN, SENSOR_DAT_PIN, SENSOR_CONTROL_PIN)
 		if not pic_lvp_upload_firmware(OSS_SNS_PIC_FILE) then
-			device_debug_print("SNS PIC FW upgraded failed!")
+			#if DEVICE_DEBUG_PRINT
+				device_debug_print("SNS PIC FW upgraded failed!")
+			#endif
 			if ver = "\xFF\xFF\xFF" then
 				device_add_event("Sensor not connected.")
 			end if
 		else
-			device_debug_print("SNS PIC FW upgraded!")
+			#if DEVICE_DEBUG_PRINT
+				device_debug_print("SNS PIC FW upgraded!")
+			#endif
 			sys.reboot()			
 		end if
 	end if
@@ -450,9 +493,11 @@ sub check_and_upgrade_supr_pic()
 	dim upgrade_success as boolean
 	
 	if ver <> OSS_SUPR_FW_VER then
-		device_debug_print("Running PIC: "+ver+ "/ Current PIC: "+OSS_SUPR_FW_VER)
-		enter_LVP_mode()
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print("Running PIC: "+ver+ "/ Current PIC: "+OSS_SUPR_FW_VER)
+		#endif
 		pic_write(&h30,"\x77")
+		enter_LVP_mode()
 		upgrade_success = pic_lvp_upload_firmware(OSS_SUPR_PIC_FILE)
 		
 		io.num=PL_IO_NUM_1_TX0
@@ -469,9 +514,13 @@ sub check_and_upgrade_supr_pic()
 		exit_LVP_mode()
 		
 		if upgrade_success = false then
-			device_debug_print("SUPR PIC FW upgraded failed!")
+			#if DEVICE_DEBUG_PRINT
+				device_debug_print("SUPR PIC FW upgraded failed!")
+			#endif
 		else
-			device_debug_print("SUPR PIC FW upgraded!")
+			#if DEVICE_DEBUG_PRINT
+				device_debug_print("SUPR PIC FW upgraded!")
+			#endif
 			sys.reboot()
 		end if
 	end if
