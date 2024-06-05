@@ -1,0 +1,38 @@
+Changelog of OSS APP
+	-	Date of change:05/06/2024
+	-	New revision of OSS APP: AZR2.03.01
+	-	Previous revision of OSS APP: 2.02.03 - 24/05/2024
+	-	The reason for change: 
+			-- Add sensor bp06.
+			-- Send IMEI and ICCID only when there are changes.
+			-- Green LED is turn off when LTE connection is lost.
+			-- Adjustable Time-out for device awake time.
+			-- Fix the bug that properties are not refresh after device change credential (migrating or by LUIS)
+			-- Extreme value for sensor in inclusive now.
+			-- Fix the bug might cause Http fail to load certificate
+			-- Add retries to device migrating connection
+
+	-	Files changed:
+			-- boot.tbs:  Add BP06, Send IMEI and ICCID only when there are changes, Adjustable Time-out for device awake time.
+			-- device.tbs: Retries for device migrate. Resend properties, Reset LED when LTE is disconnected, Add BP06
+			-- http.tbs: Fix the bug might cause Http fail to load certificate
+			-- main.tbs: Resend all properties when change credential.
+			-- luis.xtxt: BP06, BP05(Flood\\Leak)
+			-- settings.xtxt: Add IMEI, ICCID, AWK(Awake time out), MAC.
+
+	-   Release files built:  
+			--2_03_01/OSS_Azure_APP0.tpc
+			--2_03_01/OSS_Azure_APP1.tpc
+			--2_03_01/OSS_Azure_FW_2-03-01.bin
+			--2_03_01/OSS_Azure_FW_2-03-01.bin.tcu
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_022.hex
+			--OSS_SNS_PIC_FW_012.hex
+
+	- Level of change:Major
+	- Risk assessment and cons: 
+		The older devices that are previous setup, will not resend all properties after upgrade. 
+		(only happen when connect to a different entity)
+	- Deprecated Features: 
+			

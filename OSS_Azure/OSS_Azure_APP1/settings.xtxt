@@ -1,6 +1,3 @@
->>IMEI	R	S	1	0	15	A	^	IMEI
->>CCID	R	S	1	0	22	A	^	ICCID
->>MAC	R	D	1	6	6	A	0.0.0.0.0.0	MAC address
 >>WAP	R	S	1	0	32	I	^	Wi-Fi SSID
 >>WPW	R	S	1	0	64	I	^	Wi-Fi Password
 >>DH	R	B	1	0	1	A	^	Wi-Fi, DHCP
@@ -30,14 +27,17 @@
 >>TZ	E	S	1	0	64	A	^	Time Zone
 >>DVNT	E	S	1	0	64	A	^	Device Note
 >>DVNM	E	S	1	0	32	A	OSS	Device Name
->>XXX2	R	B	1	0	1	A	^	ABANDON
 >>HUBN	E	S	1	0	64	A	^	Iot hub name
 >>NWPR	E	B	1	0	1	A	0	Password Recovery Requested (NTAG)
 >>MNUM	E	S	1	0	20	A	^	Model No.
 >>CMD	E	S	1	0	32	A	^	Command
+>>IMEI	E	S	1	0	15	A	^	IMEI
+>>CCID	E	S	1	0	22	A	^	ICCID
+>>MAC	E	D	1	6	6	A	0.0.0.0.0.0	MAC address
+>>AWK	E	B	1	2	4	A	2	Maximum awake time(min)
 #define STG_DESCRIPTOR_FILE "settings.xtxt"
 #define STG_TIMESTAMP 1
 #define STG_MAX_NUM_SETTINGS 37
-#define STG_RAM_ARRAY_SIZE 202
+#define STG_RAM_ARRAY_SIZE 123
 #define STG_MAX_SETTING_NAME_LEN 4
 #define STG_MAX_SETTING_VALUE_LEN 128

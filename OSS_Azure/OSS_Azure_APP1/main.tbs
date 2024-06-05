@@ -11,7 +11,7 @@ const NTAG_PW_RESET_TIME = 4
 
 declare sub device_store_app_fw(data as string)
 declare mqtt_state as en_mqtt_states
-declare reprovision_needed as no_yes
+declare credential_changed as no_yes
 
 sub on_sys_init()
 	boot()
@@ -35,10 +35,15 @@ sub on_sys_timer()
 	end if
 	
 	if config_mode = YES then
-		if reprovision_needed = YES then
+		if credential_changed = YES then
+			dim i as byte
+			for i = 1 to STG_MAX_NUM_SETTINGS 
+				stg_timestamp.ts_milsec = 0
+				stg_set_ts(str(i))
+			next i
 			stg_set("HUBN",0,"")
-			reprovision_needed = NO
-		end if
+			credential_changed = NO
+		end if	
 		if device_awake_timer>0 then
 			device_awake_timer=device_awake_timer-1
 		else

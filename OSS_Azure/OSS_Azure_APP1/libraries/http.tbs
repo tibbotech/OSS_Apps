@@ -374,12 +374,13 @@ sub http_init_request_socket()
 	sys.buffalloc()
 	
 #if TLS_AVAILABLE
-
-	if http_request_item.domain_name<>http_last_domain then
-		if sock.tlscurrentnum<>255 and sock.tlscurrentnum<>sock.num then
-			sock.num=sock.tlscurrentnum
-		end if	
+	
+	if sock.tlscurrentnum<>255 and sock.tlscurrentnum<>sock.num then
+		sock.num=sock.tlscurrentnum
 		sock.tlsdeinit()
+	end if
+	
+	if http_request_item.domain_name<>http_last_domain then
 		sock.num=http_request_item.socket
 	end if
 	if http_request_item.tls=true then

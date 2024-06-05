@@ -568,11 +568,9 @@ sub azure_http_request_complete()
 end sub
 
 sub azure_content_arrival(data as string)
-	
 	if http_request_item.url = azure_current_url then
 		azure_parse_http(data)
 	end if
-
 end sub
 
 sub azure_http_reset()

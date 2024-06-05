@@ -204,13 +204,13 @@ sub boot()
 		'-----------------------------------------------------------------
 	
 		http_start()
-
+		
+		device_awake_timer = val(stg_get("AWK",0))
+		device_awake_timer = device_awake_timer*120
 		if comm_mode=0 then
 			current_interface = PL_SOCK_INTERFACE_WLN
-			device_awake_timer = AWKE_TIME_FOR_WLN*120
 		else
 			current_interface = PL_SOCK_INTERFACE_PPP
-			device_awake_timer = AWKE_TIME_FOR_CELL*120
 			cell__start(CELL__SIMCARD_PIN, CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD)
 		end if
 	end if
@@ -272,7 +272,11 @@ sub check_app_fw_version()
 				stg_set("MNUM",0,"")
 				goto fw203
 			else if w1>=202 and w1<203 then
-fw203:		
+fw203:			
+				stg_set("MAC",0,wln.mac)
+				stg_set("CCID",0,"")
+				stg_set("IMEI",0,"")
+				stg_set("AWK",0,"2")
 				goto fw204
 			else if w1>=203 and w1<204 then
 fw204:
@@ -351,7 +355,7 @@ sub init_modbus_sensor()
     ser.flowcontrol=PL_SER_FC_DISABLED
 	
 	select case sensor_type
-	case 128, 130, 131:
+	case 128, 130, 131, 132:
 		ser.baudrate=PL_SER_BAUD_38400 '38400 for the BP02/BP05
 	case 129:
 		ser.baudrate=PL_SER_BAUD_9600 '9600 for soil
@@ -383,7 +387,7 @@ sub sensor_init()
 		init_i2c_sensor()
 		check_and_upgrade_sns_pic()
 		
-	case 128,129,130,131: 'modbus sensor
+	case 128,129,130,131,132: 'modbus sensor
 		sample_timer = 4
 		init_modbus_sensor()
 		
@@ -477,6 +481,8 @@ sub check_and_upgrade_sns_pic()
 			#endif
 			if ver = "\xFF\xFF\xFF" then
 				device_add_event("Sensor not connected.")
+			else
+				device_add_event("SNS PIC FW upgrade failed!")
 			end if
 		else
 			#if DEVICE_DEBUG_PRINT
@@ -514,13 +520,9 @@ sub check_and_upgrade_supr_pic()
 		exit_LVP_mode()
 		
 		if upgrade_success = false then
-			#if DEVICE_DEBUG_PRINT
-				device_debug_print("SUPR PIC FW upgraded failed!")
-			#endif
+			device_add_event("SUPR PIC FW upgraded failed!")
 		else
-			#if DEVICE_DEBUG_PRINT
-				device_debug_print("SUPR PIC FW upgraded!")
-			#endif
+			device_add_event("SUPR PIC FW upgraded!")
 			sys.reboot()
 		end if
 	end if

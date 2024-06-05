@@ -3,7 +3,15 @@ include "global.tbh"
 const CELL__SIMCARD_PIN = CELL__QUESTMARK	'<-- CHANGE THIS AS NEEDED
 const FAIL_CONN_COUNT_MAX = 3
 
-dim reprovision_needed as no_yes = NO
+enum en_device_migrate_states
+	EN_DEVICE_MIGRATE_IDLE,
+	EN_DEVICE_MIGRATE_STARTING,
+	EN_DEVICE_MIGRATE_PROVISIONING,
+	EN_DEVICE_MIGRATE_SUCCESS,
+	EN_DEVICE_MIGRATE_FAILED
+end enum
+
+dim credential_changed as no_yes = NO
 dim azure_fail_to_connect_count as byte = 0
 dim azure_current_url as string
 dim sample_timer as word
@@ -25,11 +33,10 @@ dim battery_level as byte = 0
 dim property_modified as no_yes = YES
 dim sensor_telemetry_ts as string(36) = ""
 dim modbus_device_id as byte
-dim device_migrate as no_yes = NO
+dim device_migrate_state as en_device_migrate_states = EN_DEVICE_MIGRATE_IDLE
 dim new_dvid as string(32)
 dim new_scid as string(16) 
 dim new_pkey as string(64)
-dim provision_failed as no_yes = NO
 dim rand_event_num as byte 
 dim command_issued as no_yes = NO
 dim sensor_read_count as byte = 0 
@@ -52,37 +59,28 @@ declare sub update_server_properties()
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
 
-
-declare sub read_modbus_soil()
-declare sub proc_modbus_bp2(byref request_item as modbus_request_item, byref reply as string)
-declare sub proc_modbus_bp5(byref request_item as modbus_request_item, byref reply as string)
-declare sub proc_modbus_bp3(byref request_item as modbus_request_item, byref reply as string)
 declare sub proc_modbus_soil(byref request_item as modbus_request_item, byref reply as string)
+declare sub proc_modbus_bp(byref request_item as modbus_request_item, byref reply as string)
+
 declare sub co2_calibration()
 declare sub execute_special_command()
 
 sub device_proc_timer()	
 	'deduct device_awake_timer only when device is not doing upgrade and in Low power mode
-'	if upgrade_state = 255 then
-		if operation_mode > 0 then
-			if device_awake_timer>0 then
-				device_awake_timer=device_awake_timer-1
-			else
-				'check if sensor sample has been taken before go to sleep
-				if sample_timer > 0 then
-					device_awake_timer = 1
-				else
-					device_sleep()
-				end if
-			end if
-		end if		
-		device_migrating()		
-'	else
+	if operation_mode > 0 then
+		if device_awake_timer>0 then
+			device_awake_timer=device_awake_timer-1
+		else
+			device_sleep()
+		end if
+	end if
 	if upgrade_state <> 255 then
 		if http_conn_timeout = YES then
 			http_conn_timeout = NO
 			connect_to_azure_server()
 		end if
+	else
+		device_migrating()
 	end if
 	device_sampling()
 	execute_special_command()
@@ -159,9 +157,11 @@ sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref
 	
 	select case stg_name_or_num
 		case "DVID","SCID","PKEY":
-			reprovision_needed = YES
-		case "FWV", "CID", "MNUM", "DVNT", "TZ", "DVNM", "MODE", "OPMD", "STPY", "MBID", "RCN", "SPT":
+			if config_mode = YES then credential_changed = YES
+		case "FWV", "CID", "MNUM", "DVNT", "TZ", "DVNM", "MODE", "OPMD", "STPY", "MBID", "RCN", "SPT", "AWK":
 			property_modified = YES
+		case else
+		
 	end select
 end sub
 
@@ -323,13 +323,12 @@ end sub
 sub callback_mqtt_connect_lost()
 	azure_on_disconnected()
 	azure_fail_to_connect_count = azure_fail_to_connect_count + 1
-	if (new_dvid <> "" or new_scid <> "" or  new_pkey <> "") or  azure_fail_to_connect_count >= FAIL_CONN_COUNT_MAX then
+	if azure_fail_to_connect_count >= FAIL_CONN_COUNT_MAX then
 		'reset hub name
 		stg_set("HUBN",0,"")
-		new_dvid=""
-		new_scid=""
-		new_pkey=""
-		provision_failed = YES
+		if device_migrate_state <>EN_DEVICE_MIGRATE_IDLE then
+			device_migrate_state = EN_DEVICE_MIGRATE_FAILED
+		end if
 	end if
 end sub
         
@@ -339,14 +338,9 @@ end sub
 
 sub callback_mqtt_sub_ok()
 	azure_fail_to_connect_count = 0
-	if new_dvid <> "" and new_scid <> "" and new_pkey <> "" and device_migrate = NO then
-		stg_set("DVID",0,new_dvid)
-		stg_set("SCID",0,new_scid)
-		stg_set("PKEY",0,new_pkey)
-		new_dvid=""
-		new_scid=""
-		new_pkey=""
-	end if
+	if device_migrate_state <>EN_DEVICE_MIGRATE_IDLE then
+		device_migrate_state = EN_DEVICE_MIGRATE_SUCCESS
+	end if	
 end sub      
 
 sub callback_tbl_error(status as en_tbl_status_codes)
@@ -374,13 +368,10 @@ sub callback_azure_rtc_correction(daycounts as word, mincounts as word, seconds 
 end sub
 
 sub callback_azure_provision_failed()
-	if device_migrate = YES then
-		device_add_event("Migrate failed, Device ID: "+new_dvid)
-		new_dvid = ""
-		new_scid = "" 
-		new_pkey = ""
+	azure_fail_to_connect_count = azure_fail_to_connect_count + 1
+	if device_migrate_state <>EN_DEVICE_MIGRATE_IDLE then
+		device_migrate_state = EN_DEVICE_MIGRATE_FAILED
 	end if
-	provision_failed = YES
 end sub
 
 sub callback_azure_command_triggered(byref command as string, byref param as string, rid as string)
@@ -404,8 +395,8 @@ sub callback_azure_command_triggered(byref command as string, byref param as str
 		if right(new_pkey,1) = "=" then
 			new_scid = get_json_value(param,"SCID")
 			new_dvid = get_json_value(param,"DVID")
-			device_add_event("Device migrate, new Device ID: " + new_dvid)
-			device_migrate = YES
+			device_add_event("Device migrate starting, new Device ID: " + new_dvid)
+			device_migrate_state = EN_DEVICE_MIGRATE_STARTING
 		else
 			device_add_event("Invalid command paramters.")
 			new_pkey = ""
@@ -433,7 +424,6 @@ sub callback_azure_conn_timeout()
 		if azure_fail_to_connect_count >= FAIL_CONN_COUNT_MAX then
 			'reset hub name
 			stg_set("HUBN",0,"")
-			provision_failed = YES
 		end if	
 	end if
 end sub
@@ -531,6 +521,7 @@ sub cell__callback_modem_on()
 end sub
 
 sub cell__callback_modem_off()
+	pat.play("-",PL_PAT_CANINT)
 end sub
 
 sub cell__callback_insufficient_buffer_pages()
@@ -1068,7 +1059,7 @@ function need_to_connect() as no_yes
 	end if
 	
 	select case sensor_type
-	case 130,131:
+	case 130,131,132:
 		number_of_fld = 1
 	case 0, 128, 129: 
 		number_of_fld = 2
@@ -1142,10 +1133,8 @@ sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref
 
 	if request_item.device_id = modbus_device_id then
 		select case sensor_type
-		case 128: proc_modbus_bp2(request_item, reply)
+		case 128, 130, 131, 132: proc_modbus_bp(request_item, reply)
 		case 129: proc_modbus_soil(request_item, reply)
-		case 130: proc_modbus_bp5(request_item, reply)
-		case 131: proc_modbus_bp3(request_item, reply)
 		end select
 		sensor_read_count = 0
 	end if
@@ -1175,69 +1164,41 @@ sub proc_modbus_soil(byref request_item as modbus_request_item, byref reply as s
 	end if	
 end sub
 
-sub proc_modbus_bp5(byref request_item as modbus_request_item, byref reply as string)
+sub proc_modbus_bp(byref request_item as modbus_request_item, byref reply as string)
 	dim bytes as byte(255) = reply
-	dim temp as string(36)
-	dim tbl_result as en_tbl_status_codes	
-	
-	if request_item.start_register=700 then
-		dim Flood as integer = modbus_read_word(bytes,0)
-		temp=stri(Flood)
-	
-		#if DEVICE_DEBUG_PRINT
-			device_debug_print(temp)
-		#endif			
-		add_telemetry("Flood",temp,sensor_telemetry_ts)
-	end if
+	dim str_tmp as string(36) = ""
+	dim tbl_result as en_tbl_status_codes
+	dim signed_tmp as integer
+	dim telemetry_name as string(16)
 
-end sub
-
-sub proc_modbus_bp3(byref request_item as modbus_request_item, byref reply as string)
-	dim bytes as byte(255) = reply
-	dim temp as string(36)
-	dim tbl_result as en_tbl_status_codes	
+	signed_tmp = modbus_read_word(bytes,0)
+	str_tmp = stri(signed_tmp)
 	
-	if request_item.start_register=500 then
-		dim Light as integer = modbus_read_word(bytes,0)
-		temp=stri(Light)
-	
-		#if DEVICE_DEBUG_PRINT
-			device_debug_print(temp+"LUX")
-		#endif			
-		add_telemetry("Flood",temp,sensor_telemetry_ts)
-	end if	
-end sub
-
-sub proc_modbus_bp2(byref request_item as modbus_request_item, byref reply as string)
-	dim bytes as byte(255) = reply
-	dim temp as string(36)
-	dim tbl_result as en_tbl_status_codes	
-	
-	if request_item.start_register=400 then
-		dim BP_02_Temperature_val as short = modbus_read_word(bytes,0)
-		temp=stri(BP_02_Temperature_val)
-		if BP_02_Temperature_val <> 0 then temp=left(temp,len(temp)-1)+"."+right(temp,1)
-
-		#if DEVICE_DEBUG_PRINT
-			device_debug_print(temp+"C ")
-		#endif			
+	select case request_item.start_register
+	case 400: 'bp02 temperature
+		telemetry_name = "temperature"
+		str_tmp=left(str_tmp,len(str_tmp)-1)+"."+right(str_tmp,1)
 		
-		tbl_result = add_telemetry("temperature",temp,sensor_telemetry_ts)
-		
-	end if
-	
-	if request_item.start_register=404 then
-		dim BP_02_Humidity_val as word = modbus_read_word(bytes,0)
-		temp=str(BP_02_Humidity_val)
-		temp=left(temp,len(temp)-1)+"."+right(temp,1)
+	case 404: 'bp02 humidity
+		telemetry_name = "humidity"
+		str_tmp=left(str_tmp,len(str_tmp)-1)+"."+right(str_tmp,1)
 
+	case 500: 'bp03 light
+		telemetry_name = "Light"
+		
+	case 700: 'bp05 flood
+		telemetry_name = "Flood"
+		
+	case 800: 'bp06 digital input
+		telemetry_name = "DigiInput"
+		
+	case else:
+		exit sub
+	end select
 		#if DEVICE_DEBUG_PRINT
-			device_debug_print(temp+" RH")
-		#endif			
-		
-		tbl_result = add_telemetry("humidity",temp,sensor_telemetry_ts)
-	end if
-
+			device_debug_print(telemetry_name + ">> "+ str_tmp)
+		#endif	
+	add_telemetry(telemetry_name,str_tmp,sensor_telemetry_ts)
 end sub
 
 sub update_server_properties()
@@ -1254,6 +1215,7 @@ sub update_server_properties()
 		update_stg_ts_and_send_azure("CID")	
 		update_stg_ts_and_send_azure("MNUM")
 		update_stg_ts_and_send_azure("DVNT")
+		update_stg_ts_and_send_azure("AWK")
 		update_stg_ts_and_send_azure("TZ")
 		update_stg_ts_and_send_azure("DVNM")
 		update_stg_ts_and_send_azure("MODE")
@@ -1329,6 +1291,9 @@ sub device_sampling()
 				case 131: 'bp03
 					sensor_telemetry_ts = ts
 					modbus_master_request(modbus_device_id, ReadInputRegisters, 500, 1, "", MODBUS_UART, modbus_RTU) 'ambient light
+				case 132: 'bp06
+					sensor_telemetry_ts = ts
+					modbus_master_request(modbus_device_id, ReadInputRegisters, 800, 1, "", MODBUS_UART, modbus_RTU) 'digital input
 				case else:
 				end select
 
@@ -1353,8 +1318,12 @@ sub device_sampling()
 end sub
 
 sub device_migrating()
-	if device_migrate = YES then
-		device_migrate = NO
+	select case device_migrate_state
+	case EN_DEVICE_MIGRATE_IDLE:
+		exit sub
+		
+	case EN_DEVICE_MIGRATE_STARTING:
+		device_migrate_state = EN_DEVICE_MIGRATE_PROVISIONING
 		property_modified = YES
 		mqtt_disconnect()
 		http_stop()
@@ -1371,13 +1340,37 @@ sub device_migrating()
 		stg_set("HUBN",0,"") 'clear hub name
 		dim AZURE_DPS_SERVER as string=stg_get("DPSS",0)
 		azure_start(new_dvid,new_scid, AZURE_DPS_SERVER,new_pkey,current_interface)	'establish conn with new parameters
-	end if
-	
-	if provision_failed = YES then
-		provision_failed = NO
-		connect_to_azure_server()
-	end if		
+		
+	case EN_DEVICE_MIGRATE_PROVISIONING:
 			
+	case EN_DEVICE_MIGRATE_SUCCESS:
+		device_add_event("Device migrated, new Device ID: " + new_dvid)
+		stg_set("DVID",0,new_dvid)
+		stg_set("SCID",0,new_scid)
+		stg_set("PKEY",0,new_pkey)
+		new_dvid=""
+		new_scid=""
+		new_pkey=""
+		dim i as byte
+		for i = 1 to STG_MAX_NUM_SETTINGS 
+			stg_timestamp.ts_milsec = 0
+			stg_set_ts(str(i))
+		next i					
+		property_modified = YES 'resend all properties
+		device_migrate_state = EN_DEVICE_MIGRATE_IDLE
+		connect_to_azure_server()
+		
+	case EN_DEVICE_MIGRATE_FAILED:
+		if azure_fail_to_connect_count >= FAIL_CONN_COUNT_MAX then		
+			device_add_event("Migrate failed, Device ID: "+new_dvid)
+			new_dvid = ""
+			new_scid = "" 
+			new_pkey = ""
+			device_migrate_state = EN_DEVICE_MIGRATE_IDLE
+			connect_to_azure_server()
+		end if
+	end select
+	
 end sub
 
 sub co2_calibration()
