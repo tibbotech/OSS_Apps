@@ -202,6 +202,11 @@ dim cell__at_cmd_storArray_numof_cmds as word
 #ifndef CELL__AT_REPLIED_WITH_CGREG_0_1
     #define CELL__AT_REPLIED_WITH_CGREG_0_1 ( instr(1, cell__reply, CELL__CGREG_0_1, 1) <> 0 )
 #endif
+
+#ifndef CELL__AT_REPLIED_WITH_CGREG_0_5
+    #define CELL__AT_REPLIED_WITH_CGREG_0_5 ( instr(1, cell__reply, CELL__CGREG_0_5, 1) <> 0 )
+#endif
+
 #ifndef CELL__AT_REPLIED_WITH_CGREG_ANY
     #define CELL__AT_REPLIED_WITH_CGREG_ANY ( instr(1, cell__reply, CELL__CGREG_ANY, 1) <> 0 )
 #endif
@@ -2118,7 +2123,7 @@ sub cell__at_parse_message(next_pwr_phase as en_cell__op_pwr_phases, next_at_pha
 			'3. IPCP NEGO
 			'4. PING
 			'5. PPP CONNECTION
-			if NOT CELL__AT_REPLIED_WITH_CGREG_0_1 then	'match was NOT found
+			if NOT (CELL__AT_REPLIED_WITH_CGREG_0_1 or CELL__AT_REPLIED_WITH_CGREG_0_5) then	'match was NOT found
 				'Retry executing & parsing AT+CGREG? for a specified number of times...
 				'... by running `cell__at_parse_message_retry`
 				cell__at_parse_message_retry(next_pwr_phase, next_at_phase, next_ppp_phase, next_gps_phase, PHASE_PARSE_IDLE)

@@ -435,7 +435,7 @@ sub callback_azure_on_telemetry_sent()
 	
 	tbl_select("Azure","Azure")
 	tbl_get_num_records(active_rec_num,NO)
-	if active_rec_num>0 then
+	if active_rec_num > 0 then
 		azure_send_telemetry()
 	else
 		if operation_mode > 0 then 
@@ -447,7 +447,7 @@ sub callback_azure_on_telemetry_sent()
 			end if
 		end if
 	end if
-
+																																																
 end sub        
 
 public sub callback_azure_on_provisioning()
@@ -845,7 +845,12 @@ sub read_onboard_t_h_co2_sensor(byref ts as string)
 	dim tmp1,hi,lo,temp2 as byte
 	dim co2, humidity, temperature as float
 	dim humd,temp,str_co2,error as string(36)
-	
+	dim temp_invalid as no_yes = NO
+	dim humd_invalid as no_yes = NO
+	dim co2_invalid as no_yes = NO
+	dim read_retry as byte = 0
+
+read_again:
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	si2c_get(sensor_channel)
 	
@@ -910,32 +915,46 @@ sub read_onboard_t_h_co2_sensor(byref ts as string)
 	
 	error=hex(data7)
 
-	if temperature > -40 and temperature < 85 then
-		add_telemetry("temperature",temp,ts)
-	else
-		device_add_event("Sensor value out of range [temp]: " + temp)
+	if temperature < -40 or temperature > 85 then
+		temp_invalid = YES
 	end if
 	
-	if humidity > 0 and humidity < 100 then
-		add_telemetry("humidity",humd,ts)
-	else
-		device_add_event("Sensor value out of range [humd]: " + humd)
+	if humidity < 0 or humidity > 100 then
+		humd_invalid = YES
 	end if
 
-	if co2 > 1 and co2 < 10000 then
-		add_telemetry("co2",str_co2,ts)
-	else
-		device_add_event("Sensor value out of range [co2]: " + str_co2)
+	if co2 < 1 or co2 > 10001 then
+		co2_invalid = YES
 	end if
+	
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print(temp+"C "+humd+"% "+str_co2)
+	#endif
+
+	if temp_invalid = YES or humd_invalid = YES or co2_invalid = YES then
+		read_retry = read_retry + 1
+		if read_retry < 10 then
+			temp_invalid = NO
+			humd_invalid = NO 
+			co2_invalid = NO
+			delay_ms(1000)
+			goto read_again			
+		end if
+	end if
+
+	if temp_invalid = NO then add_telemetry("temperature",temp,ts)
+	if humd_invalid = NO then add_telemetry("humidity",humd,ts)
+	if co2_invalid = NO then add_telemetry("co2",str_co2,ts)
 	
 	'in power saving mode log battery level
 	if operation_mode = 1 then
 		add_telemetry("BAT_LVL",str(battery_level),ts)
 	end if
 	
-	#if DEVICE_DEBUG_PRINT
-		device_debug_print(temp+"C "+humd+"% "+str_co2)
-	#endif
+	if temp_invalid = YES then device_add_event("Sensor value out of range [temp]: " + temp)
+	if humd_invalid = YES then device_add_event("Sensor value out of range [humd]: " + humd)
+	if co2_invalid = YES then device_add_event("Sensor value out of range [co2]: " + str_co2)
+	
 end sub
 ' This function is to read the sensor board that has a local MCU on it and T/H sensor is populated on it but CO2 sensor is NOT populated on it
 sub read_onboard_t_h_sensor(byref ts as string)
@@ -943,7 +962,11 @@ sub read_onboard_t_h_sensor(byref ts as string)
 	dim tmp1,hi,lo,temp2 as byte
 	dim humidity, temperature as float
 	dim humd,temp as string(36)
+	dim temp_invalid as no_yes = NO
+	dim humd_invalid as no_yes = NO
+	dim read_retry as byte = 0
 	
+read_again:	
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	si2c_get(sensor_channel)
 	
@@ -974,26 +997,38 @@ sub read_onboard_t_h_sensor(byref ts as string)
 	humd=ftostr(humidity,FTOSTR_MODE_AUTO,5)
 	temp=ftostr(temperature,FTOSTR_MODE_AUTO,5)
 	
-	if temperature > -40 and temperature < 85 then
-		add_telemetry("temperature",temp,ts)
-	else
-		device_add_event("Sensor value out of range [temp]: " + temp)
+	if temperature < -40 or temperature > 85 then
+		temp_invalid = YES
 	end if
 	
-	if humidity > 0 and humidity < 100 then
-		add_telemetry("humidity",humd,ts)
-	else
-		device_add_event("Sensor value out of range [humd]: " + humd)
+	if humidity < 0 or humidity > 100 then
+		humd_invalid = YES
+	end if
+	
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print(temp+"C "+humd+"% ")
+	#endif
+
+	if temp_invalid = YES or humd_invalid = YES then
+		read_retry = read_retry + 1
+		if read_retry < 10 then
+			temp_invalid = NO
+			humd_invalid = NO 
+			delay_ms(1000)
+			goto read_again			
+		end if
 	end if
 
+	if temp_invalid = NO then add_telemetry("temperature",temp,ts)
+	if humd_invalid = NO then add_telemetry("humidity",humd,ts)
+	
 	'in power saving mode log battery level
 	if operation_mode = 1 then
 		add_telemetry("BAT_LVL",str(battery_level),ts)
 	end if
-
-	#if DEVICE_DEBUG_PRINT
-		device_debug_print(temp+"C "+humd+"% ")
-	#endif
+	
+	if temp_invalid = YES then device_add_event("Sensor value out of range [temp]: " + temp)
+	if humd_invalid = YES then device_add_event("Sensor value out of range [humd]: " + humd)
 end sub
 
 sub pic_write(addr as byte, byref data as string)
@@ -1047,6 +1082,7 @@ end function
 function need_to_connect() as no_yes
 	dim active_rec_num as word
 	dim number_of_fld as byte
+	
 	dim daycounts, mincounts as word
 	dim seconds as byte
 	
@@ -1059,7 +1095,7 @@ function need_to_connect() as no_yes
 	end if
 	
 	select case sensor_type
-	case 130,131,132:
+	case 130,131,132,133:
 		number_of_fld = 1
 	case 0, 128, 129: 
 		number_of_fld = 2
@@ -1133,7 +1169,7 @@ sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref
 
 	if request_item.device_id = modbus_device_id then
 		select case sensor_type
-		case 128, 130, 131, 132: proc_modbus_bp(request_item, reply)
+		case 128, 130, 131, 132, 133: proc_modbus_bp(request_item, reply)
 		case 129: proc_modbus_soil(request_item, reply)
 		end select
 		sensor_read_count = 0
@@ -1175,6 +1211,10 @@ sub proc_modbus_bp(byref request_item as modbus_request_item, byref reply as str
 	str_tmp = stri(signed_tmp)
 	
 	select case request_item.start_register
+	case 300: 'bp01 temperature
+		telemetry_name = "temperature"
+		str_tmp=left(str_tmp,len(str_tmp)-2)+"."+right(str_tmp,2)
+		
 	case 400: 'bp02 temperature
 		telemetry_name = "temperature"
 		str_tmp=left(str_tmp,len(str_tmp)-1)+"."+right(str_tmp,1)
@@ -1294,6 +1334,9 @@ sub device_sampling()
 				case 132: 'bp06
 					sensor_telemetry_ts = ts
 					modbus_master_request(modbus_device_id, ReadInputRegisters, 800, 1, "", MODBUS_UART, modbus_RTU) 'digital input
+				case 133: 'bp01
+					sensor_telemetry_ts = ts
+					modbus_master_request(modbus_device_id, ReadInputRegisters, 300, 1, "", MODBUS_UART, modbus_RTU) 'temperature
 				case else:
 				end select
 

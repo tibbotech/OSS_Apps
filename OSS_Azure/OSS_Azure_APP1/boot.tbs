@@ -355,8 +355,8 @@ sub init_modbus_sensor()
     ser.flowcontrol=PL_SER_FC_DISABLED
 	
 	select case sensor_type
-	case 128, 130, 131, 132:
-		ser.baudrate=PL_SER_BAUD_38400 '38400 for the BP02/BP05
+	case 128, 130, 131, 132, 133:
+		ser.baudrate=PL_SER_BAUD_38400 '38400 for the BP01,BP02,BP03,BP04,BP05
 	case 129:
 		ser.baudrate=PL_SER_BAUD_9600 '9600 for soil
 	end select
@@ -387,7 +387,7 @@ sub sensor_init()
 		init_i2c_sensor()
 		check_and_upgrade_sns_pic()
 		
-	case 128,129,130,131,132: 'modbus sensor
+	case 128, 129, 130, 131, 132, 133: 'modbus sensor
 		sample_timer = 4
 		init_modbus_sensor()
 		
@@ -464,7 +464,7 @@ sub check_and_upgrade_sns_pic()
 	si2c_write(&h03)
 	si2c_start()
 	si2c_write(SENSOR_ADDR or PIC_RD)
-	
+	 
 	ver = ver + chr(si2c_read(true))
 	ver = ver + chr(si2c_read(true))
 	ver = ver + chr(si2c_read(true))

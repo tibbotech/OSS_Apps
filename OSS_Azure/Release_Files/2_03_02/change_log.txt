@@ -1,0 +1,36 @@
+Changelog of OSS APP
+	-	Date of change:24/06/2024
+	-	New revision of OSS APP: AZR2.03.02
+	-	Previous revision of OSS APP: AZR2.03.01 - 05/06/2024
+	-	The reason for change: 
+			-- Add sensor bp01.
+			-- Make the extreme values for sensors are inclusive
+			-- Fix the bug that event added in between telemetry got deleted before send
+			-- Mask Wi-Fi password and Azure key
+			-- Add retries sensor reading
+			-- add roaming option for CELL (CGREG: 0,5)
+
+	-	Files changed:
+			-- boot.tbs:  Add BP01
+			-- device.tbs: Sensor retries, event between telemetry got lost, sensor extreme value inclusive.
+			-- cell.tbh: Roaming option
+			-- cell.tbs: Roaming option
+			-- luis.xtxt: BP01, Mask Wi-Fi password and Azure key
+			-- /LUIS_configurator/luis_edit.html: Mask Wi-Fi password and Azure key
+
+	-   Release files built:  
+			--2_03_01/OSS_Azure_APP0.tpc
+			--2_03_01/OSS_Azure_APP1.tpc
+			--2_03_01/OSS_Azure_FW_2-03-02.bin
+			--2_03_01/OSS_Azure_FW_2-03-02.bin.tcu
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_022.hex
+			--OSS_SNS_PIC_FW_012.hex
+
+	- Level of change:Major
+	- Risk assessment and cons: 
+		Sensor retries could lock the device for 10 seconds.
+
+	- Deprecated Features: 
+			
