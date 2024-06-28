@@ -1,5 +1,5 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="AZR2.03.02"
+const OSS_APP_FW_VER="AZR2.04.00"
 const OSS_SUPR_FW_VER = "022"
 const OSS_SNS_FW_VER = "012"
 #define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_022.hex"
@@ -67,7 +67,6 @@ const HIH6130_READ_ADDR=&h4F
 #define CELL__PPP_MODE_ISENABLED	1
 #define CELL__AT_USERMODE_ISENABLED	0
 #define CELL__GPS_MODE_ISENABLED	0
-#define CELL_BANDTYPE "3"
 #define CELL__DATA_SER_PORT 0
 
 const TBT00_3_S5_CLK = PL_IO_NUM_9
@@ -160,6 +159,15 @@ include "libraries\cell.tbh"
 include "libraries\modbus.tbh"
 include "PIC_LVP.tbh"
 'DECLARATIONS--------------------------------------------------------
+
+enum en_sensor_states
+	EN_SENSOR_WAITTING_TO_READ,
+	EN_SENSOR_SAMPLE_READ,
+	EN_SENSOR_SAMPLE_SENT,
+	EN_SENSOR_READ_ERROR,
+	EN_SESNOR_TS_ERROR
+end enum
+
 declare interface_ready(MAX_NUM_INTERFACES) as no_yes
 declare current_interface as pl_sock_interfaces
 declare DNS_socket as byte
@@ -178,10 +186,13 @@ declare config_bt_name as string(16)
 declare CELL__AT_APN as string(24)
 declare CELL__MYUSERNAME as string(16)
 declare CELL__MYPASSWORD as string(16)
+declare CELL__AT_CNMP as string(16)
+declare CELL__AT_CMNB as string(16)
 declare sensor_type as byte
 declare sample_timer as word
 declare battery_level as byte
 declare operation_mode as byte '0: always on, 1: low power mode
+declare sensor_state as en_sensor_states
 
 declare sub device_add_event(byref event_msg as string)
 declare sub connect_to_firmware_server()

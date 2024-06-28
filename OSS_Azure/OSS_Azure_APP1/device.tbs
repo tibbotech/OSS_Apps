@@ -40,6 +40,8 @@ dim new_pkey as string(64)
 dim rand_event_num as byte 
 dim command_issued as no_yes = NO
 dim sensor_read_count as byte = 0 
+dim sensor_state as en_sensor_states
+dim number_of_fld as byte
 
 declare sub device_sampling()
 declare sub device_migrating()
@@ -64,16 +66,19 @@ declare sub proc_modbus_bp(byref request_item as modbus_request_item, byref repl
 
 declare sub co2_calibration()
 declare sub execute_special_command()
+declare sub read_sensor()
 
 sub device_proc_timer()	
-	'deduct device_awake_timer only when device is not doing upgrade and in Low power mode
+	'deduct device_awake_timer only when device is not doing upgrade and in Low power mode	
 	if operation_mode > 0 then
 		if device_awake_timer>0 then
 			device_awake_timer=device_awake_timer-1
-		else
-			device_sleep()
+			if device_awake_timer = 0 then
+				device_sleep()
+			end if
 		end if
-	end if
+	end if	
+		
 	if upgrade_state <> 255 then
 		if http_conn_timeout = YES then
 			http_conn_timeout = NO
@@ -362,9 +367,7 @@ end sub
 
 sub callback_azure_rtc_correction(daycounts as word, mincounts as word, seconds as byte)
 	'if rtc was reseted, take another sample with corrected timestample
-	if daycounts = 0 and sample_timer = 0 then
-		sample_timer = 1
-	end if
+	sensor_state = EN_SENSOR_WAITTING_TO_READ
 end sub
 
 sub callback_azure_provision_failed()
@@ -438,9 +441,8 @@ sub callback_azure_on_telemetry_sent()
 	if active_rec_num > 0 then
 		azure_send_telemetry()
 	else
-		if operation_mode > 0 then 
-			device_awake_timer = 1 'go to sleep
-		else
+		sensor_state = EN_SENSOR_SAMPLE_SENT
+		if operation_mode = 0 then 
 			upgrade_state = val(stg_get("UPD",0))
 			if upgrade_state <> 255 then
 				connect_to_firmware_server()
@@ -854,6 +856,7 @@ read_again:
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	si2c_get(sensor_channel)
 	
+'check if ---Calibrate CO2 at 400ppm--- register has been set	
 	si2c_start()
 	si2c_write(SENSOR_ADDR OR PIC_WR)
 	si2c_write(&hA0)
@@ -864,10 +867,11 @@ read_again:
 	si2c_stop()	
 		
 	if data0 <> 0 then
-		sample_timer = 10
+		sensor_state = EN_SENSOR_READ_ERROR
 		exit sub
 	end if
-	
+'----------------------------
+
 	'fetch temperature and humidity data
 	si2c_start()
 	si2c_write(SENSOR_ADDR OR PIC_WR)
@@ -996,7 +1000,7 @@ read_again:
 	
 	humd=ftostr(humidity,FTOSTR_MODE_AUTO,5)
 	temp=ftostr(temperature,FTOSTR_MODE_AUTO,5)
-	
+
 	if temperature < -40 or temperature > 85 then
 		temp_invalid = YES
 	end if
@@ -1011,7 +1015,7 @@ read_again:
 
 	if temp_invalid = YES or humd_invalid = YES then
 		read_retry = read_retry + 1
-		if read_retry < 10 then
+		if read_retry < 3 then
 			temp_invalid = NO
 			humd_invalid = NO 
 			delay_ms(1000)
@@ -1076,13 +1080,12 @@ function add_telemetry(byref telemetry_name as string, byref telemetry_value as 
 	if add_telemetry<>EN_TBL_STATUS_OK then exit function	
 	add_telemetry=tbl_field_sg("value",telemetry_value,EN_TBL_SET)
 	if add_telemetry<>EN_TBL_STATUS_OK then exit function	
-	add_telemetry=tbl_record_add("")	
+	add_telemetry=tbl_record_add("")
+	sensor_state = EN_SENSOR_SAMPLE_READ 
 end function
 
 function need_to_connect() as no_yes
 	dim active_rec_num as word
-	dim number_of_fld as byte
-	
 	dim daycounts, mincounts as word
 	dim seconds as byte
 	
@@ -1158,11 +1161,7 @@ function modbus_set_holding_register(address as word, data as string) as boolean
 end function
 
 sub callback_modbus_slave_reply_timeout(byref request_item as modbus_request_item)
-	sample_timer = 10
-	sensor_read_count = sensor_read_count + 1
-	if sensor_read_count > 3 then
-		device_add_event("Sensor not connected or sensor does not reply.")
-	end if
+	sensor_state = EN_SENSOR_READ_ERROR
 end sub
 
 sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref reply as string)
@@ -1173,6 +1172,15 @@ sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref
 		case 129: proc_modbus_soil(request_item, reply)
 		end select
 		sensor_read_count = 0
+		
+		'in power saving mode log battery level
+		if operation_mode = 1 then
+			'for mulitple fields sensor, count back number of fields and add the BAT_LVL at then end
+			number_of_fld = number_of_fld -1
+			if number_of_fld = 1 then
+				add_telemetry("BAT_LVL",str(battery_level),sensor_telemetry_ts)
+			end if
+		end if
 	end if
 end sub
 
@@ -1197,6 +1205,7 @@ sub proc_modbus_soil(byref request_item as modbus_request_item, byref reply as s
 		
 		tbl_result = add_telemetry("temperature",temp,sensor_telemetry_ts)
 		tbl_result = add_telemetry("humidity",humd,sensor_telemetry_ts)
+		
 	end if	
 end sub
 
@@ -1299,65 +1308,54 @@ end function
 
 sub device_sampling()
 
-	if sample_timer>0 then
-		sample_timer=sample_timer-1
-		if sample_timer = 0 then
-		
-			dim daycounts, mincounts as word
-			dim seconds as byte		
-			dim ts as string(36)		
-			
-			'check the timestampe, if it's invalid, don't sample, but sample again in 2 sec
-			rtc.getdata(daycounts,mincounts,seconds)
-			if daycounts>0 then
-				time_to_str(ts,daycounts,mincounts,seconds)
-				ts=ts+".000Z"
-				
-				select case sensor_type
-				case 0:
-					read_onboard_t_h_sensor(ts)	
-				case 1:
-					read_onboard_t_h_co2_sensor(ts)			
-				case 128: 'bp02
-					sensor_telemetry_ts = ts
-					modbus_master_request(modbus_device_id, ReadInputRegisters, 400, 1, "", MODBUS_UART, modbus_RTU) 'temperature
-					modbus_master_request(modbus_device_id, ReadInputRegisters, 404, 1, "", MODBUS_UART, modbus_RTU) 'humidity
-				case 129: 'modbus soil
-					sensor_telemetry_ts = ts
-					modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 2, "", MODBUS_UART, modbus_RTU) 'humidity + temperature 
-				case 130: 'bp05
-					sensor_telemetry_ts = ts
-					modbus_master_request(modbus_device_id, ReadInputRegisters, 700, 1, "", MODBUS_UART, modbus_RTU) 'flood
-				case 131: 'bp03
-					sensor_telemetry_ts = ts
-					modbus_master_request(modbus_device_id, ReadInputRegisters, 500, 1, "", MODBUS_UART, modbus_RTU) 'ambient light
-				case 132: 'bp06
-					sensor_telemetry_ts = ts
-					modbus_master_request(modbus_device_id, ReadInputRegisters, 800, 1, "", MODBUS_UART, modbus_RTU) 'digital input
-				case 133: 'bp01
-					sensor_telemetry_ts = ts
-					modbus_master_request(modbus_device_id, ReadInputRegisters, 300, 1, "", MODBUS_UART, modbus_RTU) 'temperature
-				case else:
-				end select
-
-				'in Low power mode, and not sending cycle, go to sleep after taking sample
-				if operation_mode > 0 then
-					if connect_to_azure_required = NO and sample_timer = 0 then
-						device_awake_timer = 1
-					end if
-				else
+	select case sensor_state
+	case EN_SENSOR_WAITTING_TO_READ:
+		if sample_timer>0 then
+			sample_timer=sample_timer-1
+			if sample_timer = 0 then		
+				read_sensor()
+				'in always on mode refresh the sample_timer with sleep_time
+				if operation_mode = 0 then
 					'when in Always on mode, sample time is same as sleep time
-					sample_timer = sleep_time*120
+					sample_timer = sleep_time*120					
 				end if
-				azure_send_telemetry()
-			else
-				sample_timer = 20
-				#if DEVICE_DEBUG_PRINT
-					device_debug_print("Bad timestampe, skip sensor sampling")
-				#endif					
 			end if
-		end if	
-	end if 	
+		end if
+		
+	case EN_SENSOR_SAMPLE_READ: 'go to sleep in low power mode if not sending cycle
+		if operation_mode = 1 then
+			if connect_to_azure_required = NO then
+				device_awake_timer = 1
+			end if
+		else
+			sensor_state = EN_SENSOR_WAITTING_TO_READ
+		end if
+		azure_send_telemetry()
+		
+	case EN_SENSOR_SAMPLE_SENT: 'go to sleep in low power mode
+		if operation_mode = 1 then
+			device_awake_timer = 1
+		else
+			sensor_state = EN_SENSOR_WAITTING_TO_READ
+		end if
+		
+	case EN_SENSOR_READ_ERROR:
+		sample_timer = 10
+		sensor_read_count = sensor_read_count + 1
+		if sensor_read_count > 3 then
+			device_add_event("Sensor not connected or sensor does not reply.")
+		end if
+		sensor_state = EN_SENSOR_WAITTING_TO_READ
+		
+	case EN_SESNOR_TS_ERROR:	
+		sample_timer = 20
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print("Bad timestampe, skip sensor sampling")
+		#endif
+		sensor_state = EN_SENSOR_WAITTING_TO_READ
+		
+	end select
+
 end sub
 
 sub device_migrating()
@@ -1450,6 +1448,51 @@ sub execute_special_command()
 	stg_set("CMD",0,"")
 end sub
 
+sub read_sensor()
+
+	dim daycounts, mincounts as word
+	dim seconds as byte		
+	dim ts as string(36)		
+	
+	'check the timestampe, if it's invalid, don't sample, but sample again in 2 sec
+	rtc.getdata(daycounts,mincounts,seconds)
+	if daycounts>0 then
+		time_to_str(ts,daycounts,mincounts,seconds)
+		ts=ts+".000Z"
+		
+		select case sensor_type
+		case 0:
+			read_onboard_t_h_sensor(ts)	
+		case 1:
+			read_onboard_t_h_co2_sensor(ts)			
+		case 128: 'bp02
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadInputRegisters, 400, 1, "", MODBUS_UART, modbus_RTU) 'temperature
+			modbus_master_request(modbus_device_id, ReadInputRegisters, 404, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+		case 129: 'modbus soil
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 2, "", MODBUS_UART, modbus_RTU) 'humidity + temperature 
+		case 130: 'bp05
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadInputRegisters, 700, 1, "", MODBUS_UART, modbus_RTU) 'flood
+		case 131: 'bp03
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadInputRegisters, 500, 1, "", MODBUS_UART, modbus_RTU) 'ambient light
+		case 132: 'bp06
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadInputRegisters, 800, 1, "", MODBUS_UART, modbus_RTU) 'digital input
+		case 133: 'bp01
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadInputRegisters, 300, 1, "", MODBUS_UART, modbus_RTU) 'temperature
+		case else:
+		end select	
+	else
+		sensor_state = EN_SESNOR_TS_ERROR
+	end if
+end sub
+
+
+
 sub delay_ms(ms as dword)
 #if PLATFORM_ID=TPP2W or PLATFORM_ID=TPP2N or PLATFORM_ID=TPP3W or PLATFORM_ID=TPP3N
 	dim ax,bx as word
@@ -1476,3 +1519,4 @@ sub device_debug_print(byref data as string)
 	#endif
 end sub
 #endif
+

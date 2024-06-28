@@ -1,0 +1,32 @@
+Changelog of OSS APP
+	-	Date of change:27/06/2024
+	-	New revision of OSS APP: AZR2.04.00
+	-	Previous revision of OSS APP: AZR2.03.02 - 24/06/2024
+	-	The reason for change: 
+			-- Add a setting and allow user to select for cellular technology (CTEC)
+			-- Fix the bug that device goto sleep before taking sensor reading.
+
+	-	Files changed:
+			-- boot.tbs: User select cell tech
+			-- device.tbs: Rewrite device sleep logic
+			-- cell.tbh: User select cell tech
+			-- cell.tbs: User select cell tech
+			-- luis.xtxt: User select cell tech
+			-- setting.xtxt: User select cell tech
+
+	-   Release files built:  
+			--2_04_00/OSS_Azure_APP0.tpc
+			--2_04_00/OSS_Azure_APP1.tpc
+			--2_04_00/OSS_Azure_FW_2-04-00.bin
+			--2_04_00/OSS_Azure_FW_2-04-00.tcu
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_022.hex
+			--OSS_SNS_PIC_FW_012.hex
+
+	- Level of change:Major
+	- Risk assessment and cons: 
+		If user selected a unsuitable cell tech, cell communication might not work.
+	- Deprecated Features: 
+			

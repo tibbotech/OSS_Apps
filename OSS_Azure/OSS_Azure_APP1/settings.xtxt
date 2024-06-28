@@ -18,8 +18,8 @@
 >>RCN	E	W	1	1	65535	A	1	Number of Records start to send
 >>UPD	E	B	1	0	255	A	255	Update step
 >>BTAG	E	S	1	2	2	A	~~	BLE nTag ID
->>GAN	E	S	1	0	24	I	internet.iot	LTE, AP name
->>GUR	E	S	1	0	16	I	myusername@realm	LTE, User name
+>>GAN	E	S	1	0	24	I	onomondo	LTE, AP name
+>>GUR	E	S	1	0	16	I	^	LTE, User name
 >>GPW	E	S	1	0	16	I	^	LTE, Password
 >>STPY	E	B	1	0	255	A	0	Sensor Type
 >>MBID	E	B	1	0	255	A	0	Modbus device ID
@@ -35,9 +35,10 @@
 >>CCID	E	S	1	0	22	A	^	ICCID
 >>MAC	E	D	1	6	6	A	0.0.0.0.0.0	MAC address
 >>AWK	E	B	1	2	4	A	2	Maximum awake time(min)
+>>CTEC	E	B	1	0	4	A	0	Cell communication tech
 #define STG_DESCRIPTOR_FILE "settings.xtxt"
 #define STG_TIMESTAMP 1
-#define STG_MAX_NUM_SETTINGS 37
+#define STG_MAX_NUM_SETTINGS 38
 #define STG_RAM_ARRAY_SIZE 123
 #define STG_MAX_SETTING_NAME_LEN 4
 #define STG_MAX_SETTING_VALUE_LEN 128

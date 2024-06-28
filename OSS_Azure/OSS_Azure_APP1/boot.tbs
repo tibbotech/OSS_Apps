@@ -13,6 +13,9 @@ dim config_bt_name as string(16) = "BT-OSS-APP1"
 dim CELL__AT_APN as string(24) = "internet.iot"			'<-- CHANGE THIS AS NEEDED
 dim CELL__MYUSERNAME as string(16)  = "myusername@realm"	'<-- CHANGE THIS AS NEEDED
 dim CELL__MYPASSWORD as string(16)  = ""					'<-- CHANGE THIS AS NEEDED
+dim CELL__AT_CNMP as string(16)
+dim CELL__AT_CMNB as string(16)
+
 dim sensor_type as byte
 dim operation_mode as byte '0: always on, 1: low power mode
 
@@ -21,7 +24,7 @@ declare sub sensor_init()
 declare sub pic_init()
 declare sub check_and_upgrade_supr_pic()
 declare sub check_and_upgrade_sns_pic()
-
+declare sub init_cell_tech()
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
 declare modbus_device_id as byte
@@ -30,7 +33,7 @@ declare command_issued as no_yes
 sub boot()
     'sys.debugmode = PL_SYS_DBG_SERIAL
 	'sys.debugmode = PL_SYS_DBG_NET
-	
+
     'Fd(flash disk) setup
     '================================================================
     if fd.mount<>PL_FD_STATUS_OK then
@@ -210,6 +213,7 @@ sub boot()
 		if comm_mode=0 then
 			current_interface = PL_SOCK_INTERFACE_WLN
 		else
+			init_cell_tech()
 			current_interface = PL_SOCK_INTERFACE_PPP
 			cell__start(CELL__SIMCARD_PIN, CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD)
 		end if
@@ -280,6 +284,10 @@ fw203:
 				goto fw204
 			else if w1>=203 and w1<204 then
 fw204:
+				stg_set("CTEC",0,"0")
+				goto fw205
+			else if w1>=204 and w1<205 then
+fw205:
 			end if
 		else
 			stg_restore_multiple(EN_STG_INIT_MODE_NORMAL)
@@ -382,7 +390,7 @@ sub sensor_init()
 	select case sensor_type
 	
 	case 0, 1:	'temp_hum / temp_hum_co2
-		if sensor_type = 0 then sample_timer = 10
+		if sensor_type = 0 then sample_timer = 15
 		if sensor_type = 1 then sample_timer = 40
 		init_i2c_sensor()
 		check_and_upgrade_sns_pic()
@@ -555,3 +563,37 @@ sub pic_init()
 	end if
 end sub
 
+sub init_cell_tech()
+	dim ctech as string(1)
+	dim cmnb as string(2) '0:cat_m1, 1:nb_iot, 2: both
+	dim cnmp as string(2) '2:automatic, 13:gsm only, 38:lte only, 51:gsm and lte only
+	
+	ctech = stg_get("CTEC",0)
+	select case ctech
+	case "0": 'CAT_M1
+		cmnb = "1"
+		cnmp = "38"
+		
+	case "1": 'NB-IOT
+		cmnb = "2"
+		cnmp = "38"	
+		
+	case "2": 'CAT_M1/NB-IOT
+		cmnb = "3"
+		cnmp = "38"
+
+	case "3": '2G/3G
+		cmnb = "3"
+		cnmp = "13"
+	
+	case "4": 'Auto 
+		cmnb = "3"
+		cnmp = "2"
+	
+	case else:
+		cmnb = "1"
+		cnmp = "38"		
+	end select
+	CELL__AT_CNMP = CELL__AT_PLUS + "CNMP" + "=" + cnmp
+	CELL__AT_CMNB = CELL__AT_PLUS + "CMNB" + "=" + cmnb
+end sub

@@ -13,9 +13,10 @@
 	#define CELL__PING_IP "8.8.8.8"
 #endif
 
-#ifndef CELL_BANDTYPE
-	#define CELL_BANDTYPE "3"	'<----- CHANGE THIS AS NEEDED (1: CAT-M, 2: NB-Iot, 3: CAT-M and NB-IoT)
-#endif
+'remove and making it user define
+'#ifndef CELL_BANDTYPE
+'	#define CELL_BANDTYPE "3"	'<----- CHANGE THIS AS NEEDED (1: CAT-M, 2: NB-Iot, 3: CAT-M and NB-IoT)
+'#endif
 
 
 #ifndef CELL_IO_EXTENDER
@@ -399,8 +400,8 @@ const CELL__AT_SLED = CELL__AT_PLUS + "SLEDS=3,65535,0"
 const CELL__ATE1 = "ATE1"
 const CELL__AT_CGMM = CELL__AT_PLUS + "CGMM"
 const CELL__AT_CBC = CELL__AT_PLUS + "CBC"
-const CELL__AT_CNMP_INPUT = "2"
-const CELL__AT_CNMP = CELL__AT_PLUS + "CNMP" + "=" + CELL__AT_CNMP_INPUT
+'const CELL__AT_CNMP_INPUT = "38"
+'const CELL__AT_CNMP = CELL__AT_PLUS + "CNMP" + "=" + CELL__AT_CNMP_INPUT
 const CELL__AT_IPR_INPUT = "115200"	'Local Baud Rate
 const CELL__AT_IPR = CELL__AT_PLUS + "IPR" + "=" + CELL__AT_IPR_INPUT
 const CELL__AT_IFC_INPUT = "2,2"	'Local FLow Control (RTS and CTS)
@@ -418,7 +419,8 @@ const CELL__AT_CGDCONT_CID_INPUT = "1"	'Context ID
 const CELL__AT_CGDCONT_PDP_INPUT = "IP"	'Packet Data Protocol
 #define CELL__AT_CGDCONT_INPUT ( CELL__AT_CGDCONT_CID_INPUT + "," + CELL__QUOTMARK + CELL__AT_CGDCONT_PDP_INPUT + CELL__QUOTMARK + "," + CELL__QUOTMARK + cell__apn + CELL__QUOTMARK )
 #define CELL__AT_CGDCONT (CELL__AT_PLUS + "CGDCONT" + "=" + CELL__AT_CGDCONT_INPUT)
-#define CELL__AT_CMNB (CELL__AT_PLUS + "CMNB" + "=" + CELL_BANDTYPE)
+'remove and making it user define
+'#define CELL__AT_CMNB (CELL__AT_PLUS + "CMNB" + "=" + CELL_BANDTYPE)
 #define CELL__AT_CPIN (CELL__AT_PLUS + "CPIN" + "=" + cell__pin)
 
 '#define CELL__AT_CSTT (CELL__AT_PLUS + "CSTT" + "=" + CELL__QUOTMARK + cell__apn + CELL__QUOTMARK)
