@@ -15,7 +15,7 @@ dim CELL__MYUSERNAME as string(16)  = "myusername@realm"	'<-- CHANGE THIS AS NEE
 dim CELL__MYPASSWORD as string(16)  = ""					'<-- CHANGE THIS AS NEEDED
 dim CELL__AT_CNMP as string(16)
 dim CELL__AT_CMNB as string(16)
-
+dim SYS_SOCK_DEBUGPRINT as byte
 dim sensor_type as byte
 dim operation_mode as byte '0: always on, 1: low power mode
 
@@ -90,6 +90,8 @@ sub boot()
 	CELL__MYUSERNAME = stg_get("GUR",0)
 	CELL__MYPASSWORD = stg_get("GPW",0)
 	operation_mode = stg_get("OPMD",0)
+	SYS_SOCK_DEBUGPRINT = val(stg_get("DBMD",0))
+	
     '-----------------------------------------------------------------
 	
     dim f as byte
@@ -138,8 +140,10 @@ sub boot()
 	dim msb as word = asc(left(scid,1))
 	dim lsb as word = asc(right(scid,1))
 	dim cid as word = msb*256+lsb
-	
 	stg_set("CID",0,str(cid))
+	
+	sleep_time=val(stg_get("SPT",0))
+	device_awake_timer = val(stg_get("AWK",0))*120
 	
 	if config_mode = YES then
 		'Bluetooth setup
@@ -158,37 +162,33 @@ sub boot()
 		'-----------------------------------------------------------------
 		luis_start(config_bt_name)
 		luis_bt_enabled = true
-		device_awake_timer=1200
 		exit sub
 	end if
 	
 	upgrade_app_fw_init()
-	connect_to_azure_required = need_to_connect()
 	'-----------------------------------------------------------------
 	
     'WM2000 Wi-Fi setup
-    '================================================================               
-	'stg_set("MODE",0,"1")
+    '================================================================     
+	connect_to_azure_required = need_to_connect()
 	comm_mode=val(stg_get("MODE",0))
-	
-	if connect_to_azure_required=YES then
-		'if sock debugprint is on, autoconnect no matter what comm mode is
-		#if SYS_SOCK_DEBUGPRINT
 
-			if wln.autoconnect<>YES or wln.autodhcp<>YES then	
-				wln.autodhcp=YES
-				wln.autoconnect=YES
-				sys.reboot 
-			end if		
-		
-			sock.num=SYS_DPRINT_SOCK_NUM
-			sock.txbuffrq(5)
-			sys.buffalloc()
-			sock.protocol=PL_SOCK_PROTOCOL_TCP
-			sock.targetip=SYS_DPRINT_TARGET_IP  'changes as see fit
-			sock.targetport=SYS_DPRINT_TARGET_PORT
-			
-		#else
+	'if sock debugprint is on, autoconnect no matter what comm mode is	
+	if SYS_SOCK_DEBUGPRINT>0 then
+		if wln.autoconnect<>YES or wln.autodhcp<>YES then	
+			wln.autodhcp=YES
+			wln.autoconnect=YES
+			sys.reboot 
+		end if		
+	
+		sock.num=SYS_DPRINT_SOCK_NUM
+		sock.txbuffrq(5)
+		sys.buffalloc()
+		sock.protocol=PL_SOCK_PROTOCOL_TCP
+		sock.targetip=stg_get("DBIP",0)  'changes as see fit
+		sock.targetport=val(stg_get("DBPR",0))
+	else
+		if connect_to_azure_required=YES then
 			if comm_mode = 0 and wln.autoconnect = NO then
 				wln.autoconnect = YES
 				sys.reboot()
@@ -197,9 +197,11 @@ sub boot()
 			if comm_mode = 1 and wln.autoconnect = YES and (sys.runmode =PL_SYS_MODE_RELEASE or sys.debugmode = PL_SYS_DBG_SERIAL) then
 				wln.autoconnect = NO
 				sys.reboot()
-			end if		
-		#endif	
+			end if
+		end if
+	end if
 	
+	if connect_to_azure_required=YES then	
 		'DNS setup
 		'================================================================
 		DNS_socket=sock_get("DNS")
@@ -207,9 +209,6 @@ sub boot()
 		'-----------------------------------------------------------------
 	
 		http_start()
-		
-		device_awake_timer = val(stg_get("AWK",0))
-		device_awake_timer = device_awake_timer*120
 		if comm_mode=0 then
 			current_interface = PL_SOCK_INTERFACE_WLN
 		else
@@ -222,7 +221,6 @@ sub boot()
 	if upgrade_state <> 255 then
 		device_awake_timer = device_awake_timer*2
 	end if
-	sleep_time=val(stg_get("SPT",0))
 
 '	if sys.resettype=PL_SYS_RESET_TYPE_EXTERNAL then
 '		device_add_event("reset due to power loss")		
@@ -284,10 +282,17 @@ fw203:
 				goto fw204
 			else if w1>=203 and w1<204 then
 fw204:
-				stg_set("CTEC",0,"0")
+				stg_set("CTEC",0,"0") 'cellular tech
 				goto fw205
 			else if w1>=204 and w1<205 then
 fw205:
+				stg_set("DBIP",0,"0.0.0.0") 'debugprint ip
+				stg_set("DBPR",0,"1001") 'debugprint port
+				stg_set("BTNM",0,"")  'ble name
+				stg_set("DBMD",0,"0") 'debugprint mode
+				goto fw206
+			else if w1>=205 and w1<204 then
+fw206:
 			end if
 		else
 			stg_restore_multiple(EN_STG_INIT_MODE_NORMAL)
@@ -304,17 +309,44 @@ sub sensor_level_shift_on()
     io.state = HIGH
 end sub
 
-sub alternate_debugprint(byref s as string)
+sub alternate_debugprint(byref source as string, byref msg as string)
+	
 	#if SYS_EVENT_DEBUGPRINT
-		device_add_event(s)
+		device_add_event(msg)
 	#endif
-	#if SYS_SOCK_DEBUGPRINT
-		dim b as byte=sock.num
-		sock.num=SYS_DPRINT_SOCK_NUM
-		sock.setdata(s)
-		sock.send()
-		sock.num=b
-	#endif
+
+	select case SYS_SOCK_DEBUGPRINT
+	case 0:
+		exit sub
+	case 1:
+		if source <> "STG" then
+			exit sub
+		end if
+	case 2:
+		if source <> "MQTT" then
+			exit sub
+		end if	
+	case 3:
+		if source <> "DNS" and source <> "HTTP" then
+			exit sub
+		end if	
+	case 4:
+		if source <> "CELL" then
+			exit sub
+		end if
+	case 5:
+		if source <> "AZR" then
+			exit sub
+		end if
+	case 6:	
+	end select
+	
+	dim b as byte=sock.num
+	sock.num=SYS_DPRINT_SOCK_NUM
+	sock.setdata(msg)
+	sock.send()
+	sock.num=b
+	
 end sub
 
 sub init_i2c_sensor()
@@ -418,8 +450,22 @@ sub read_ntag()
 		if parameter <> "\x00\x00" then
 			config_mode = YES
 			config_bt_name=parameter+"-"+stg_get("DVNM",0)
+			if sys.runmode = PL_SYS_MODE_RELEASE then
+				if wln.autoconnect = YES then
+					stg_set("BTNM",0,parameter)
+					wln.autoconnect = NO
+					sys.reboot()
+				end if				
+			end if
 		end if
-	case else:		
+	case else:	
+		parameter = stg_get("BTNM",0)
+		if parameter <> "" then
+			config_mode = YES
+			config_bt_name=parameter+"-"+stg_get("DVNM",0)
+			stg_set("BTNM",0,"")
+		end if
+		
 	end select
 end sub
 

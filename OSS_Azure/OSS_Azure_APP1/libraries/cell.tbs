@@ -297,17 +297,17 @@ dim cell__at_cmd_storArray_numof_cmds as word
 	'Print out message
         #if CELL__DEBUGPRINT_SERPORT_ISENABLED 
             cell__debugprint_thru_serport(print_data)
-            #else
-            #if CELL__DEBUGPRINT_UDP_ISENABLED
-                cell__debugprint_thru_udp(print_data)
-                #else
-                
-				#if SYS_SOCK_DEBUGPRINT or SYS_EVENT_DEBUGPRINT
-					alternate_debugprint(print_data + CELL__CRLF)
-				#else
-					sys.debugprint(print_data + CELL__CRLF)
+        #else
+			#if CELL__DEBUGPRINT_UDP_ISENABLED
+				cell__debugprint_thru_udp(print_data)
+			#else
+				dim s as string	
+				s = print_data + CELL__CRLF
+				callback_cell_debugprint(s)
+				#if CELL__DEBUG_PRINT = 2
+					sys.debugprint(s)
 				#endif
-            #endif
+			#endif
         #endif
     end sub
 #endif

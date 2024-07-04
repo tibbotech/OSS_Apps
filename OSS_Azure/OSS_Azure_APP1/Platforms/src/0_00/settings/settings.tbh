@@ -164,5 +164,8 @@ declare sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as by
 'Callback procedure, similar to callback_stg_post_set, but only called when there is actual changes on the eeprom.
 'this callback is added along with the eeprom protection feature, where writing to eeprom only when writing value is differ from stored value
 'Procedure body has to be created elsewhere in the project (externally with respect to the library).
+
+declare sub callback_stg_debugprint(byref debug_msg as string)
+
 '--------------------------------------------------------------------------------
 declare stg_timestamp as struct_stg_timestamp

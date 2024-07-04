@@ -59,3 +59,4 @@ declare sub callback_dns_answer_acquired(return_type as en_dns_return_type, byre
 declare sub callback_dns_ok()
 declare sub callback_dns_pre_buffrq(num_of_pages_required as byte)
 declare sub callback_dns_buff_released()
+declare sub callback_dns_debugprint(byref debug_msg as string)

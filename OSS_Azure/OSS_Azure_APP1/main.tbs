@@ -107,10 +107,10 @@ sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as strin
 		end if
 	end if
 	
-	#if SYS_SOCK_DEBUGPRINT
+	if SYS_SOCK_DEBUGPRINT>0 then
 		sock.num = SYS_DPRINT_SOCK_NUM
 		sock.connect()
-	#endif
+	end if
 end sub
 
 sub on_sock_data_sent()

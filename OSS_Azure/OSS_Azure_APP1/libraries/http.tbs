@@ -8,11 +8,13 @@ dim http_chunk_length as dword = 0
 dim http_last_domain as string = ""
 
 sub http_debugprint(byref print_data as string) 
+	dim s as string
 	
-	#if HTTP_DEBUG_PRINT 
-		sys.debugprint(HTTP_STAMP + left(print_data,HTTP_MAX_DATA_LENGTH) + HTTP_CR_LF)
+	s = HTTP_STAMP + left(print_data,HTTP_MAX_DATA_LENGTH) + HTTP_CR_LF
+	callback_http_debugprint(s)
+	#if HTTP_DEBUG_PRINT = 2
+		sys.debugprint(s)
 	#endif
-
 end sub
 
 sub http_start()

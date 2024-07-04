@@ -1,24 +1,26 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="AZR2.04.00"
+const OSS_APP_FW_VER="AZR2.05.02"
 const OSS_SUPR_FW_VER = "022"
 const OSS_SNS_FW_VER = "012"
 #define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_022.hex"
 #define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_012.hex"
-#define LUIS_CONFIG_FILE "luis.xtxt"
 
-#define STG_DEBUG_PRINT 0
-#define MQTT_DEBUG_PRINT 0
+includepp "settings.xtxt"
+includepp "filenum.xtxt"
+includepp "tables.xtxt"
+
+'XXX_DEBUG_PRINT value 0: don't print, 1: send to other output (tcp etc...) 2: 1+print to output pane
+#define STG_DEBUG_PRINT 1
+#define MQTT_DEBUG_PRINT 1
 #define LUIS_DEBUG_PRINT 0
-#define DNS_DEBUG_PRINT 0
+#define DNS_DEBUG_PRINT 1
 #define HTTP_DEBUG_PRINT 1
 #define CELL__DEBUG_PRINT 1
-#define AZURE_DEBUG_PRINT 0
+#define AZURE_DEBUG_PRINT 1
 #define DEVICE_DEBUG_PRINT 1
 #define SYS_EVENT_DEBUGPRINT 0
-#define SYS_SOCK_DEBUGPRINT 0
 #define SYS_DPRINT_SOCK_NUM 10
-#define SYS_DPRINT_TARGET_IP "192.168.1.120"
-#define SYS_DPRINT_TARGET_PORT 1001
+#define LUIS_CONFIG_FILE "luis.xtxt"
 
 #define WLN_AVAILABLE 1
 
@@ -137,10 +139,7 @@ declare cell__reset_setto_off as low_high
 #endif
 
 'INCLUDES------------------------------------------------------------
-includepp "settings.xtxt"
-includepp "filenum.xtxt"
-includepp "tables.xtxt"
-includepp "luis.xtxt"
+
 include "settings\settings.tbh"
 include "sock\sock.tbh"
 include "dns\dns.tbh"
@@ -193,6 +192,7 @@ declare sample_timer as word
 declare battery_level as byte
 declare operation_mode as byte '0: always on, 1: low power mode
 declare sensor_state as en_sensor_states
+declare SYS_SOCK_DEBUGPRINT as byte
 
 declare sub device_add_event(byref event_msg as string)
 declare sub connect_to_firmware_server()
@@ -210,7 +210,7 @@ declare sub upgrade_app_fw_init()
 declare sub delay_ms(ms as dword)
 declare sub enter_LVP_mode()
 declare sub exit_LVP_mode()
-declare sub alternate_debugprint(byref s as string)
+declare sub alternate_debugprint(byref source as string, byref msg as string)
 #if DEVICE_DEBUG_PRINT
 	declare sub device_debug_print(byref data as string)
 #endif

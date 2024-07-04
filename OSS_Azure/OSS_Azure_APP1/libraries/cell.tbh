@@ -2367,3 +2367,5 @@ declare sub cell__gps_proc_sys_timer()
 declare sub cell__proc_on_ser_data_arrival()
 '<b>METHOD. </b><br><br>
 'Processes data arriving via the data serial port.
+
+declare sub callback_cell_debugprint(byref debug_msg as string)

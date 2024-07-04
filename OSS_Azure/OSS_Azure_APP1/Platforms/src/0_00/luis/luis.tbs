@@ -82,7 +82,14 @@ function luis_start(byref bt_name as string) as en_luis_status_codes
 			bt.rxbuffrq(LUIS_BT_RX_BUF_SIZE)
 			sys.buffalloc()
 			bt.enable()
+
 		end if
+	end if
+	
+	if sys.runmode = PL_SYS_MODE_RELEASE then
+		while wln.task<>PL_WLN_TASK_IDLE
+		wend
+		wln.disable()
 	end if
 	
 	luis_chunk_size=bt.txfree

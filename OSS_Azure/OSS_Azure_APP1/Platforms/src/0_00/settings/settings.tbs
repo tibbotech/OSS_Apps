@@ -1878,6 +1878,12 @@ end sub
 '------------------------------------------------------------------------------
 #if STG_DEBUG_PRINT
 sub stg_debugprint(byref print_data as string)
-	sys.debugprint(STG_STAMP+print_data+STG_CR_LF)
+	dim s as string
+	
+	s = STG_STAMP+print_data+STG_CR_LF
+	callback_stg_debugprint(s)
+	#if STG_DEBUG_PRINT = 2
+		sys.debugprint(s)
+	#endif
 end sub
 #endif

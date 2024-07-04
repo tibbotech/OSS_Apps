@@ -1,0 +1,49 @@
+Changelog of OSS APP
+	-	Date of change:03/07/2024
+	-	New revision of OSS APP: AZR2.05.02
+	-	Previous revision of OSS APP: AZR2.04.00 - 27/06/2024
+	-	The reason for change: 
+			-- Enhance debugprint over TCP
+			-- Fix unstable BLE connection due to autoconnect
+			-- Fix device takes too long to go into sleep in configuration mode
+			-- Fix cloud property being updated two times.
+			-- Send MAC even in the Cellular comm. mode
+			-- In LUIS change 'LTE' to 'Cellular'
+	-	Files changed:
+			-- global.tbh: Debugprint over TCP
+			-- boot.tbs: Debugprint over TCP, Fix unstable BLE connection, Fix taking too long to sleep.
+			-- device.tbs: Debugprint over TCP, Fix cloud property being updated two times, Send MAC in Cellular.
+			-- main.tbs: Debugprint over TCP
+			-- settings.tbs: Debugprint over TCP
+			-- settings.tbh: Debugprint over TCP
+			-- azure.tbs: Debugprint over TCP
+			-- azure.tbh: Debugprint over TCP
+			-- http.tbs: Debugprint over TCP
+			-- http.tbh: Debugprint over TCP
+			-- dns.tbs: Debugprint over TCP
+			-- dns.tbh: Debugprint over TCP
+ 			-- mqtt.tbs: Debugprint over TCP
+			-- mqtt.tbh: Debugprint over TCP
+			-- cell.tbh: Debugprint over TCP
+			-- cell.tbs: Debugprint over TCP
+			-- luis.tbs: Fix unstable BLE connection. 
+			-- luis.xtxt: Debugprint over TCP, Rename 'LTE' to 'Cellular'
+			-- setting.xtxt: Debugprint over TCP
+
+	-   Release files built:  
+			--2-05-02/OSS_Azure_APP0.tpc
+			--2-05-02/OSS_Azure_APP1.tpc
+			--2-05-02/OSS_Azure_FW_2-05-02.bin
+			--2-05-02/OSS_Azure_FW_2-05-02.tcu
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_022.hex
+			--OSS_SNS_PIC_FW_012.hex
+
+	- Level of change:Major
+	- Risk assessment and cons: 
+		To be able to choose debugprint at runtime, all debugprint code has to be built into the binary on compilation.
+		It might slow down the device a bit, and it increase the the APP1 binary over 10%
+	- Deprecated Features: 
+			

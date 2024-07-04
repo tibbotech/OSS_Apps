@@ -109,5 +109,5 @@ declare sub callback_http_headers_complete()
 declare sub callback_http_request_complete()
 declare sub callback_http_request_failed(error_message as string)
 declare sub callback_http_send_headers()
-
+declare sub callback_http_debugprint(byref debug_msg as string)
 declare http_request_item as http_request_type

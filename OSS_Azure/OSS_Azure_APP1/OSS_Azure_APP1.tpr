@@ -331,13 +331,11 @@ location=project
 path=settings.xtxt
 type=xtext
 format=STG_lib_configurator
-condition=
 locked=no
 location=project
 [file46]
 path=luis.xtxt
 type=xtext
 format=LUIS_configurator
-condition=
 locked=no
 location=project

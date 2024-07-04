@@ -632,10 +632,12 @@ end function
 
 #if AZURE_DEBUG_PRINT
 	sub azure_debugprint(byref print_data as string)
-		#if SYS_SOCK_DEBUGPRINT or SYS_EVENT_DEBUGPRINT
-			alternate_debugprint("AZURE> "+print_data+"\x0d\x0a")
-		#else
-			sys.debugprint("AZURE> "+print_data+"\x0d\x0a")
+		dim s as string	
+		s = "AZURE> "+print_data+"\x0d\x0a"
+		callback_azure_debugprint(s)
+		#if AZURE_DEBUG_PRINT = 2
+			sys.debugprint(s)
 		#endif
+
 	end sub
 #endif	

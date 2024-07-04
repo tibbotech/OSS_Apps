@@ -107,6 +107,7 @@ declare sub callback_mqtt_notif(byref topic as string,byref data as string,remai
 '<b>data</b> - Data received
 '<b>length</b> - Total number of bytes remaining to be received. When this value is 0, the entire packet has been sent.
 
+declare sub callback_mqtt_debugprint(byref debug_msg as string)
 
 #if MQTT_LARGE_PACKETS 
 

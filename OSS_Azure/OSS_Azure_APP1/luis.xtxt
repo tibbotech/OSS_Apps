@@ -12,10 +12,10 @@ I=DH;T=INT;C=STATIC;D=Wi-Fi DHCP;O=Disable/0/Enable/1;xIndex=10;S=MODE==1?"i":"e
 I=IP;T=STRING;C=EDIT;D=Wi-Fi IP;S=MODE==1||DH==1?"i":"e";xIndex=11;
 I=GI;T=STRING;C=EDIT;D=Wi-Fi Gateway;S=MODE==1||DH==1?"i":"e";xIndex=12;
 I=NM;T=STRING;C=EDIT;D=Wi-Fi Netmask;S=MODE==1||DH==1?"i":"e";xIndex=13;
-I=GAN;T=STRING;D=LTE APN;C=EDIT;V=none;S=MODE==0?"i":"e";xIndex=14;
-I=GUR;T=STRING;D=LTE Username;C=EDIT;V=none;S=MODE==0?"i":"e";xIndex=15;
-I=GPW;T=STRING;D=LTE Password;C=EDIT;V=none;S=MODE==0?"i":"e";xIndex=16;
-I=CTEC;T=BYTE;D=Cellular Comm. Technology;C=STATIC;V=none;S=MODE==0?"i":"e";O=CAT-M1 (recommended)/0/NB-IOT/1/CAT-M1\\NB-IOT/2/2G\\3G/3/Auto (not reommended)/4;xIndex=17;
+I=GAN;T=STRING;D=Cellular APN;C=EDIT;V=none;S=MODE==0?"i":"e";xIndex=14;
+I=GUR;T=STRING;D=Cellular Username;C=EDIT;V=none;S=MODE==0?"i":"e";xIndex=15;
+I=GPW;T=STRING;D=Cellular Password;C=EDIT;V=none;S=MODE==0?"i":"e";xIndex=16;
+I=CTEC;T=BYTE;D=Cellular Technology;C=STATIC;V=none;S=MODE==0?"i":"e";O=CAT-M1 (recommended)/0/NB-IoT/1/CAT-M1\\NB-IoT/2/2G\\3G/3/Auto (not reommended)/4;xIndex=17;
 I=AZE;D=Cloud-Azure;T=GROUP;
 I=DPSS;T=STRING;C=EDIT;D=DPS Server;xIndex=19;
 I=SCID;T=STRING;C=EDIT;D=ID Scope;xIndex=20;
@@ -29,4 +29,7 @@ I=SPT;T=INT;C=EDIT;D=Sensor Sampling Time (min);V=SPT<1?"Sampling Time cannont b
 I=RCN;T=INT;C=EDIT;D=No. of Samples to Aggregate;V=RCN<1?"No. of Samples to Aggregate cannont be 0":"";S=1==1?"i":"e";xIndex=28;
 I=ADV;D=Advanced;T=GROUP;
 I=CMD;T=STRING;D=Special Command;C=EDIT;xIndex=30;
+I=DBMD;T=BYTE;D=Diagnostics;C=STATIC;S=none;O=Disabled/0/Settings/1/MQTT/2/DNS\\HTTP/3/Cellular/4/Azure/5/All/6;xIndex=31;
+I=DBIP;T=STRING;D=Diagnostics Server IP;C=EDIT;xIndex=32;S=DBMD==0?"i":"e";
+I=DBPR;T=WORD;D=Diagnostics Server Port;C=EDIT;xIndex=33;S=DBMD==0?"i":"e";
 @@STG_RefPath=settings.xtxt

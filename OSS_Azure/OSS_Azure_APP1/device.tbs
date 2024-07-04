@@ -2,6 +2,7 @@ include "global.tbh"
 
 const CELL__SIMCARD_PIN = CELL__QUESTMARK	'<-- CHANGE THIS AS NEEDED
 const FAIL_CONN_COUNT_MAX = 3
+const CR_LF=chr(13)+chr(10)
 
 enum en_device_migrate_states
 	EN_DEVICE_MIGRATE_IDLE,
@@ -157,17 +158,22 @@ sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref
 	
 	'use stg_timestamp.ts_milsec as a flag to detect if the setting has been changed
 	'set it to 0 after change occured
-	stg_timestamp.ts_milsec = 0
-	stg_set_ts(stg_name_or_num)
-	
 	select case stg_name_or_num
 		case "DVID","SCID","PKEY":
 			if config_mode = YES then credential_changed = YES
-		case "FWV", "CID", "MNUM", "DVNT", "TZ", "DVNM", "MODE", "OPMD", "STPY", "MBID", "RCN", "SPT", "AWK":
+		case "FWV", "CID", "MNUM", "DVNM", "MODE", "OPMD", "STPY", "MBID": 'device side settings
 			property_modified = YES
+			stg_timestamp.ts_milsec = 0
+			stg_set_ts(stg_name_or_num)
+	
+		case "RCN", "SPT", "AWK", "DVNT", "TZ": 'server side settings
 		case else
 		
 	end select
+end sub
+
+sub callback_stg_debugprint(byref debug_msg as string)
+	alternate_debugprint("STG", debug_msg)
 end sub
 
 function callback_stg_vm_read(address as word) as byte
@@ -225,6 +231,10 @@ end sub
 
 sub callback_dns_buff_released()
     
+end sub
+
+sub callback_dns_debugprint(byref debug_msg as string)
+	alternate_debugprint("DNS", debug_msg)
 end sub
         
 sub callback_http_request_failed(error_message as string)
@@ -299,6 +309,10 @@ sub callback_http_send_headers()
 	end if 
 end sub
 
+sub callback_http_debugprint(byref debug_msg as string)
+	alternate_debugprint("HTTP", debug_msg)
+end sub
+
 sub callback_http_request_complete()
     if upgrade_state = 255 then
 		azure_http_request_complete()
@@ -341,6 +355,10 @@ sub callback_mqtt_notif(byref topic as string,byref data as string,remaining_byt
     azure_proc_mqtt_msg(topic,data)	
 end sub
 
+sub callback_mqtt_debugprint(byref debug_msg as string)
+	alternate_debugprint("MQTT", debug_msg)
+end sub
+
 sub callback_mqtt_sub_ok()
 	azure_fail_to_connect_count = 0
 	if device_migrate_state <>EN_DEVICE_MIGRATE_IDLE then
@@ -375,6 +393,10 @@ sub callback_azure_provision_failed()
 	if device_migrate_state <>EN_DEVICE_MIGRATE_IDLE then
 		device_migrate_state = EN_DEVICE_MIGRATE_FAILED
 	end if
+end sub
+
+sub callback_azure_debugprint(byref debug_msg as string)
+	alternate_debugprint("AZR", debug_msg)
 end sub
 
 sub callback_azure_command_triggered(byref command as string, byref param as string, rid as string)
@@ -594,6 +616,10 @@ end sub
                 
 
 sub cell__callback_ppp_ping_failed()
+end sub
+
+sub callback_cell_debugprint(byref debug_msg as string)
+	alternate_debugprint("CELL", debug_msg)
 end sub
 
 sub cell__callback_ppp_link_established()
@@ -1253,13 +1279,14 @@ end sub
 sub update_server_properties()
 
 	if property_modified = YES then
-		if comm_mode = 0 then
-			update_stg_ts_and_send_azure("MAC")
-			update_stg_ts_and_send_azure("IP")
-		else
+		if comm_mode = 1 then
 			update_stg_ts_and_send_azure("IMEI")
 			update_stg_ts_and_send_azure("CCID")
+		else
+			update_stg_ts_and_send_azure("IP")
 		end if
+		
+		update_stg_ts_and_send_azure("MAC")
 		update_stg_ts_and_send_azure("FWV")
 		update_stg_ts_and_send_azure("CID")	
 		update_stg_ts_and_send_azure("MNUM")
@@ -1511,11 +1538,12 @@ end sub
 
 #if DEVICE_DEBUG_PRINT
 sub device_debug_print(byref data as string)
-
-	#if SYS_SOCK_DEBUGPRINT or SYS_EVENT_DEBUGPRINT
-		alternate_debugprint(MQTT_STAMP+data+MQTT_CR_LF)
-	#else
-		sys.debugprint(data+"\r\n")
+	dim s as string	
+	s = "Device> "+data+CR_LF
+	alternate_debugprint("DEV", s)
+	
+	#if DEVICE_DEBUG_PRINT = 2
+		sys.debugprint(s)
 	#endif
 end sub
 #endif

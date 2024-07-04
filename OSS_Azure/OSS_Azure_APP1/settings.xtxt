@@ -14,7 +14,7 @@
 >>PKEY	E	S	1	0	64	I	^	Primary key
 >>EPT	E	W	1	0	65535	A	0	Sampling period (sec)
 >>SPT	E	W	1	1	65535	A	1	Sleep time (min)
->>XXX1	E	W	1	1	65535	A	2	ABANDON
+>>DBPR	E	W	1	1	65535	A	1001	debug port
 >>RCN	E	W	1	1	65535	A	1	Number of Records start to send
 >>UPD	E	B	1	0	255	A	255	Update step
 >>BTAG	E	S	1	2	2	A	~~	BLE nTag ID
@@ -36,9 +36,12 @@
 >>MAC	E	D	1	6	6	A	0.0.0.0.0.0	MAC address
 >>AWK	E	B	1	2	4	A	2	Maximum awake time(min)
 >>CTEC	E	B	1	0	4	A	0	Cell communication tech
+>>DBIP	E	D	1	4	4	A	0.0.0.0	Debug IP
+>>BTNM	E	S	1	0	2	A	^	BT Name
+>>DBMD	E	B	1	0	6	A	^	0
 #define STG_DESCRIPTOR_FILE "settings.xtxt"
 #define STG_TIMESTAMP 1
-#define STG_MAX_NUM_SETTINGS 38
+#define STG_MAX_NUM_SETTINGS 41
 #define STG_RAM_ARRAY_SIZE 123
 #define STG_MAX_SETTING_NAME_LEN 4
 #define STG_MAX_SETTING_VALUE_LEN 128
