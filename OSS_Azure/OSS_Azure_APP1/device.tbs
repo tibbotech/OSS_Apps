@@ -43,6 +43,7 @@ dim command_issued as no_yes = NO
 dim sensor_read_count as byte = 0 
 dim sensor_state as en_sensor_states
 dim number_of_fld as byte
+dim field_counter as byte = 0
 
 declare sub device_sampling()
 declare sub device_migrating()
@@ -62,12 +63,13 @@ declare sub update_server_properties()
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
 
-declare sub proc_modbus_soil(byref request_item as modbus_request_item, byref reply as string)
+declare sub proc_modbus_jx(byref request_item as modbus_request_item, byref reply as string)
 declare sub proc_modbus_bp(byref request_item as modbus_request_item, byref reply as string)
 
 declare sub co2_calibration()
 declare sub execute_special_command()
 declare sub read_sensor()
+declare sub decimal_point_converter(byref value as string, decimal as byte)
 
 sub device_proc_timer()	
 	'deduct device_awake_timer only when device is not doing upgrade and in Low power mode	
@@ -984,7 +986,7 @@ read_again:
 	if temp_invalid = YES then device_add_event("Sensor value out of range [temp]: " + temp)
 	if humd_invalid = YES then device_add_event("Sensor value out of range [humd]: " + humd)
 	if co2_invalid = YES then device_add_event("Sensor value out of range [co2]: " + str_co2)
-	
+	sensor_state = EN_SENSOR_SAMPLE_READ 
 end sub
 ' This function is to read the sensor board that has a local MCU on it and T/H sensor is populated on it but CO2 sensor is NOT populated on it
 sub read_onboard_t_h_sensor(byref ts as string)
@@ -1059,6 +1061,7 @@ read_again:
 	
 	if temp_invalid = YES then device_add_event("Sensor value out of range [temp]: " + temp)
 	if humd_invalid = YES then device_add_event("Sensor value out of range [humd]: " + humd)
+	sensor_state = EN_SENSOR_SAMPLE_READ 
 end sub
 
 sub pic_write(addr as byte, byref data as string)
@@ -1107,7 +1110,6 @@ function add_telemetry(byref telemetry_name as string, byref telemetry_value as 
 	add_telemetry=tbl_field_sg("value",telemetry_value,EN_TBL_SET)
 	if add_telemetry<>EN_TBL_STATUS_OK then exit function	
 	add_telemetry=tbl_record_add("")
-	sensor_state = EN_SENSOR_SAMPLE_READ 
 end function
 
 function need_to_connect() as no_yes
@@ -1123,18 +1125,8 @@ function need_to_connect() as no_yes
 		exit function
 	end if
 	
-	select case sensor_type
-	case 130,131,132,133:
-		number_of_fld = 1
-	case 0, 128, 129: 
-		number_of_fld = 2
-	case 1: 
-		number_of_fld = 3
-	case else:	
-	end select
-	
 	'in power saving mode log battery level
-	if operation_mode = 1 then number_of_fld = number_of_fld+1
+	if operation_mode = 1 then number_of_fld = number_of_fld + 1
 	
 	tbl_select("Azure","Azure")
 	tbl_get_num_records(active_rec_num,NO)
@@ -1194,45 +1186,114 @@ sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref
 
 	if request_item.device_id = modbus_device_id then
 		select case sensor_type
-		case 128, 130, 131, 132, 133: proc_modbus_bp(request_item, reply)
-		case 129: proc_modbus_soil(request_item, reply)
+		case 128, 130, 131, 132, 133: 
+			proc_modbus_bp(request_item, reply)
+		case 129, 134, 135, 136, 137:
+			proc_modbus_jx(request_item, reply)
 		end select
 		sensor_read_count = 0
+		field_counter = field_counter+1
 		
 		'in power saving mode log battery level
 		if operation_mode = 1 then
-			'for mulitple fields sensor, count back number of fields and add the BAT_LVL at then end
-			number_of_fld = number_of_fld -1
-			if number_of_fld = 1 then
+			'for mulitple fields sensor, count back number of fields and add the BAT_LVL at then end	
+			if number_of_fld - field_counter = 1 then
 				add_telemetry("BAT_LVL",str(battery_level),sensor_telemetry_ts)
+				sensor_state = EN_SENSOR_SAMPLE_READ
+				field_counter = 0
+			end if
+		else
+			if number_of_fld = 0 then
+				sensor_state = EN_SENSOR_SAMPLE_READ 
+				field_counter = 0
 			end if
 		end if
 	end if
 end sub
 
-sub proc_modbus_soil(byref request_item as modbus_request_item, byref reply as string)
+sub proc_modbus_jx(byref request_item as modbus_request_item, byref reply as string)
 	dim bytes as byte(255) = reply
-	dim humd, temp as string(36)
-	dim tbl_result as en_tbl_status_codes	
+	dim str_tmp as string(36) = ""
+	dim tbl_result as en_tbl_status_codes
+	dim signed_tmp as integer
+	dim telemetry_name as string(16)
+	dim decimal as byte = 0
 	
-	if request_item.start_register=2 then
-		dim SOIL_Humidity_val as word = modbus_read_word(bytes,0)
-		dim SOIL_Temperature_val as short = modbus_read_word(bytes,2)
-		temp=stri(SOIL_Temperature_val)
-		if SOIL_Temperature_val<>0 then temp=left(temp,len(temp)-1)+"."+right(temp,1)
-		
-		humd=str(SOIL_Humidity_val)
-		if SOIL_Humidity_val<>0 then humd=left(humd,len(humd)-1)+"."+right(humd,1)		
-
-		#if DEVICE_DEBUG_PRINT
-			device_debug_print(temp+"C ")		
-			device_debug_print(humd+" RH")
-		#endif
-		
-		tbl_result = add_telemetry("temperature",temp,sensor_telemetry_ts)
-		tbl_result = add_telemetry("humidity",humd,sensor_telemetry_ts)
-		
-	end if	
+	signed_tmp = modbus_read_word(bytes,0)
+	str_tmp = stri(signed_tmp)
+	
+	select case sensor_type
+	case 133:
+		select case request_item.start_register
+		case 2:
+			telemetry_name = "humidity"
+			decimal = 1		
+		case 3:
+			telemetry_name = "temperature"
+			decimal = 1
+		case else:
+			exit sub
+		end select
+	case 134:
+		select case request_item.start_register
+		case 6:
+			telemetry_name = "pH"
+			decimal = 2
+		case 18:
+			telemetry_name = "humidity"
+			decimal = 1
+		case 19:
+			telemetry_name = "temperature"
+			decimal = 1
+		case 21:
+			telemetry_name = "conductivity"
+		case 30:
+			telemetry_name = "nitrogen"
+		case 31:
+			telemetry_name = "phosphorus"
+		case 32:
+			telemetry_name = "potassium"
+		case else:		
+		end select
+	case 135:
+		select case request_item.start_register
+		case 0:
+			telemetry_name = "humidity"
+			decimal = 1
+		case 1:
+			telemetry_name = "temperature"
+			decimal = 1
+		case 6:
+			telemetry_name = "H2S"
+			decimal = 1
+		case else:
+		end select
+	case 136:
+		select case request_item.start_register
+		case 0:
+			telemetry_name = "humidity"
+			decimal = 1
+		case 1:
+			telemetry_name = "temperature"
+			decimal = 1
+		case 8:
+			telemetry_name = "UV"
+			decimal = 1
+		case else:
+		end select
+	case 137:
+		if request_item.start_register = 0 then
+			telemetry_name = "noise"
+			decimal = 1
+		end if
+	case else
+		exit sub
+	end select
+	decimal_point_converter(str_tmp,decimal)
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print(telemetry_name + ">> "+ str_tmp)
+	#endif	
+	add_telemetry(telemetry_name,str_tmp,sensor_telemetry_ts)
 end sub
 
 sub proc_modbus_bp(byref request_item as modbus_request_item, byref reply as string)
@@ -1241,6 +1302,7 @@ sub proc_modbus_bp(byref request_item as modbus_request_item, byref reply as str
 	dim tbl_result as en_tbl_status_codes
 	dim signed_tmp as integer
 	dim telemetry_name as string(16)
+	dim decimal as byte = 0
 
 	signed_tmp = modbus_read_word(bytes,0)
 	str_tmp = stri(signed_tmp)
@@ -1248,15 +1310,15 @@ sub proc_modbus_bp(byref request_item as modbus_request_item, byref reply as str
 	select case request_item.start_register
 	case 300: 'bp01 temperature
 		telemetry_name = "temperature"
-		str_tmp=left(str_tmp,len(str_tmp)-2)+"."+right(str_tmp,2)
+		decimal = 2
 		
 	case 400: 'bp02 temperature
 		telemetry_name = "temperature"
-		str_tmp=left(str_tmp,len(str_tmp)-1)+"."+right(str_tmp,1)
+		decimal = 1
 		
 	case 404: 'bp02 humidity
 		telemetry_name = "humidity"
-		str_tmp=left(str_tmp,len(str_tmp)-1)+"."+right(str_tmp,1)
+		decimal = 1
 
 	case 500: 'bp03 light
 		telemetry_name = "Light"
@@ -1270,9 +1332,10 @@ sub proc_modbus_bp(byref request_item as modbus_request_item, byref reply as str
 	case else:
 		exit sub
 	end select
-		#if DEVICE_DEBUG_PRINT
-			device_debug_print(telemetry_name + ">> "+ str_tmp)
-		#endif	
+	decimal_point_converter(str_tmp,decimal)
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print(telemetry_name + ">> "+ str_tmp)
+	#endif	
 	add_telemetry(telemetry_name,str_tmp,sensor_telemetry_ts)
 end sub
 
@@ -1349,9 +1412,10 @@ sub device_sampling()
 			end if
 		end if
 		
-	case EN_SENSOR_SAMPLE_READ: 'go to sleep in low power mode if not sending cycle
+	case EN_SENSOR_SAMPLE_READ: 
 		if operation_mode = 1 then
 			if connect_to_azure_required = NO then
+			'go to sleep in low power mode if not sending cycle
 				device_awake_timer = 1
 			end if
 		else
@@ -1498,7 +1562,8 @@ sub read_sensor()
 			modbus_master_request(modbus_device_id, ReadInputRegisters, 404, 1, "", MODBUS_UART, modbus_RTU) 'humidity
 		case 129: 'modbus soil
 			sensor_telemetry_ts = ts
-			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 2, "", MODBUS_UART, modbus_RTU) 'humidity + temperature 
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 3, 1, "", MODBUS_UART, modbus_RTU) 'temperature 
 		case 130: 'bp05
 			sensor_telemetry_ts = ts
 			modbus_master_request(modbus_device_id, ReadInputRegisters, 700, 1, "", MODBUS_UART, modbus_RTU) 'flood
@@ -1511,6 +1576,28 @@ sub read_sensor()
 		case 133: 'bp01
 			sensor_telemetry_ts = ts
 			modbus_master_request(modbus_device_id, ReadInputRegisters, 300, 1, "", MODBUS_UART, modbus_RTU) 'temperature
+		case 134: 
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 6, 1, "", MODBUS_UART, modbus_RTU) 'pH
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 18, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 19, 1, "", MODBUS_UART, modbus_RTU) 'temperature 
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 21, 1, "", MODBUS_UART, modbus_RTU) 'conductivity
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 30, 1, "", MODBUS_UART, modbus_RTU) 'nitrogen
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 31, 1, "", MODBUS_UART, modbus_RTU) 'phosphorus
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 32, 1, "", MODBUS_UART, modbus_RTU) 'potassium
+		case 135:
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 0, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 1, 1, "", MODBUS_UART, modbus_RTU) 'temperature 		
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 6, 1, "", MODBUS_UART, modbus_RTU) 'Hydrogen sulfide
+		case 136:
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 0, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 1, 1, "", MODBUS_UART, modbus_RTU) 'temperature 		
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 8, 1, "", MODBUS_UART, modbus_RTU) 'UV
+		case 137:
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 0, 1, "", MODBUS_UART, modbus_RTU) 'noise		
 		case else:
 		end select	
 	else
@@ -1548,3 +1635,23 @@ sub device_debug_print(byref data as string)
 end sub
 #endif
 
+sub decimal_point_converter(byref value as string, decimal as byte)
+	dim negative as no_yes = NO
+	dim value_len as byte
+	dim i as byte
+	
+	if decimal = 0 then exit sub
+	if left(value,1) = "-" then 
+		negative = YES
+		value = right(value, len(value)-1)
+	end if
+	value_len = len(value)
+	if value_len > decimal then
+		value=left(value,value_len-decimal)+"."+right(value,decimal)
+	else
+		value = "0."+strgen(decimal-value_len,"0")+value
+	end if
+	if negative = YES then
+		value = "-"+value
+	end if
+end sub

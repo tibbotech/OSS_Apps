@@ -1,0 +1,30 @@
+Changelog of OSS APP
+	-	Date of change:11/07/2024
+	-	New revision of OSS APP: AZR2.05.03
+	-	Previous revision of OSS APP: AZR2.05.02 - 03/07/2024
+	-	The reason for change: 
+			-- Add Sensors SOIL-TRCGQ, UV, NOISE, H2S
+			-- Send notification before sleep in Configuration mode
+
+	-	Files changed:
+			-- boot.tbs: New sensors
+			-- device.tbs: New sensors
+			-- main.tbs: BLE sleep notification
+			-- luis.xtxt: New sensors
+
+	-   Release files built:  
+			--2-05-03/OSS_Azure_APP0.tpc
+			--2-05-03/OSS_Azure_APP1.tpc
+			--2-05-03/OSS_Azure_FW_2-05-03.bin
+			--2-05-03/OSS_Azure_FW_2-05-03.tcu
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_022.hex
+			--OSS_SNS_PIC_FW_012.hex
+
+	- Level of change:Major
+	- Risk assessment and cons: 
+		Some of the sensors need to be further testing (UV, NOISE, H2S)
+	- Deprecated Features: 
+			

@@ -1,5 +1,5 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="AZR2.05.02"
+const OSS_APP_FW_VER="AZR2.05.03"
 const OSS_SUPR_FW_VER = "022"
 const OSS_SNS_FW_VER = "012"
 #define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_022.hex"
@@ -15,9 +15,9 @@ includepp "tables.xtxt"
 #define LUIS_DEBUG_PRINT 0
 #define DNS_DEBUG_PRINT 1
 #define HTTP_DEBUG_PRINT 1
-#define CELL__DEBUG_PRINT 1
+#define CELL__DEBUG_PRINT 2
 #define AZURE_DEBUG_PRINT 1
-#define DEVICE_DEBUG_PRINT 1
+#define DEVICE_DEBUG_PRINT 2
 #define SYS_EVENT_DEBUGPRINT 0
 #define SYS_DPRINT_SOCK_NUM 10
 #define LUIS_CONFIG_FILE "luis.xtxt"

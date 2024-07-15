@@ -23,7 +23,7 @@ I=DVID;T=STRING;C=EDIT;D=Device ID;xIndex=21;
 I=PKEY;T=STRING;C=PASSWORD;D=Primary Key;xIndex=22;
 I=SEN;D=Sensors;T=GROUP;
 I=OPMD;T=BYTE;D=Operation Mode;C=STATIC;O=Always On/0/Low-Power Mode/1;xIndex=24;
-I=STPY;T=BYTE;D=Sensor Type;C=STATIC;V=none;S=none;O=01- T\\RH/0/02-T\\RH\\CO2/1/M-BP01(Amebient Temp)/133/M-BP02(T\\RH)/128/M-BP03(Ambient Light)/131/M-BP05(Flood\\Leak)/130/M-BP06(Digital Input)/132/M-SOIL(JXBS-3001-TR-RS)/129;xIndex=25;
+I=STPY;T=BYTE;D=Sensor Type;C=STATIC;V=none;S=none;O=01- T\\RH/0/02-T\\RH\\CO2/1/M-BP01(Amebient Temp)/133/M-BP02(T\\RH)/128/M-BP03(Ambient Light)/131/M-BP05(Flood\\Leak)/130/M-BP06(Digital Input)/132/M-SOIL(JXBS-3001-TR-RS)/129/M-SOIL(JXBS-3001-TRCGQ-RS)/134/M-H2S100PPM(JXBS-3005-H2S-RS)/135/M-UV(JXBS-3001-UV-RS)/136/M-NOISE(JXBS-3001-ZS-RS)/137;xIndex=25;
 I=MBID;T=BYTE;D=Modbus Device ID;C=EDIT;V=none;S=STPY<127?"i":"e";xIndex=26;
 I=SPT;T=INT;C=EDIT;D=Sensor Sampling Time (min);V=SPT<1?"Sampling Time cannont be 0":"";xIndex=27;S=1==1?"i":"e";
 I=RCN;T=INT;C=EDIT;D=No. of Samples to Aggregate;V=RCN<1?"No. of Samples to Aggregate cannont be 0":"";S=1==1?"i":"e";xIndex=28;

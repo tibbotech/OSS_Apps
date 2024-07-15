@@ -47,6 +47,15 @@ sub on_sys_timer()
 		if device_awake_timer>0 then
 			device_awake_timer=device_awake_timer-1
 		else
+			if bt.connected = YES then
+				bt.setdata("\x02Z"+str(sleep_time)+"\x0d")
+				bt.send()
+				'wait for data to be sent or maximum 3 seconds
+				dim ts as dword = sys.timercount32
+				while bt.newtxlen > 0 and ts < sys.timercount32+6 
+				wend
+			end if
+			
 			device_sleep()
 		end if	
 		exit sub
