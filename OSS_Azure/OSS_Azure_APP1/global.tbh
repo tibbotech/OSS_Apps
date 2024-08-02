@@ -1,5 +1,5 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="AZR2.05.03"
+const OSS_APP_FW_VER="AZR2.05.04"
 const OSS_SUPR_FW_VER = "022"
 const OSS_SNS_FW_VER = "012"
 #define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_022.hex"

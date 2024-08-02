@@ -398,8 +398,10 @@ sub init_modbus_sensor()
 	select case sensor_type
 	case 128, 130, 131, 132, 133:
 		ser.baudrate=PL_SER_BAUD_38400 '38400 for the BP01,BP02,BP03,BP04,BP05
-	case 129, 134, 135, 136, 137:
+	case 129, 134, 135, 136, 137, 138:
 		ser.baudrate=PL_SER_BAUD_9600 '9600 for JXBS sensors
+	case 139:
+		ser.baudrate=PL_SER_BAUD_4800
 	end select
    
     ser.interface=PL_SER_SI_HALFDUPLEX
@@ -422,7 +424,7 @@ sub sensor_init()
 	sensor_type = val(stg_get("STPY",0))
 	
 	select case sensor_type
-	case 130,131,132,133,137:
+	case 130,131,132,133,137,138:
 		number_of_fld = 1
 	case 0, 128, 129: 
 		number_of_fld = 2
@@ -430,6 +432,8 @@ sub sensor_init()
 		number_of_fld = 7
 	case 1, 135, 136: 
 		number_of_fld = 3
+	case 139:
+		number_of_fld = 5
 	case else:	
 	end select	
 	
@@ -440,7 +444,7 @@ sub sensor_init()
 		init_i2c_sensor()
 		check_and_upgrade_sns_pic()
 		
-	case 128, 129, 130, 131, 132, 133, 134, 135, 136, 137: 'modbus sensor
+	case 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139: 'modbus sensor
 		sample_timer = 4
 		init_modbus_sensor()
 		

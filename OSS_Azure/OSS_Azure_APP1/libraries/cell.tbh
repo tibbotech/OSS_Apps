@@ -312,6 +312,8 @@ const CELL__CONNECT = "CONNECT"
 const CELL__CONNECT_BAUDRATE = CELL__CONNECT + CELL__SPACE + CELL__SER_PORT_BAUDRATE
 const CELL__CGREG_0_1 = "CGREG: 0,1"
 const CELL__CGREG_0_5 = "CGREG: 0,5"
+const CELL__CEREG_0_1 = "CEREG: 0,1"
+const CELL__CEREG_0_5 = "CEREG: 0,5"
 const CELL__CGREG_ANY = CELL__PLUS + "CGREG:"
 
 const CELL__RDY_CRLF = CELL__RDY + CELL__CR +CELL__LF
@@ -427,6 +429,7 @@ const CELL__AT_CGDCONT_PDP_INPUT = "IP"	'Packet Data Protocol
 'const CELL__AT_CIICR = CELL__AT_PLUS + "CIICR"
 
 const CELL__AT_CGREG_Q = CELL__AT_PLUS + "CGREG" + CELL__QUESTMARK
+const CELL__AT_CEREG_Q = CELL__AT_PLUS + "CEREG" + CELL__QUESTMARK
 const CELL__AT_CGATT_INPUT = CELL__QUESTMARK
 const CELL__AT_CGATT = CELL__AT_PLUS + "CGATT" + CELL__AT_CGATT_INPUT
 const CELL__AT_CGACT_INPUT = CELL__QUESTMARK
@@ -490,7 +493,7 @@ const CELL__AT_CGDATA = CELL__AT_PLUS + "CGDATA" + "=" + CELL__AT_CGDATA_INPUT
 	const CELL__PPP_PROTO_CHAP_STR = chr(&hC2) + chr(&h23)
 
 
-	'LCP-----------------------------------------------------------------
+	'LCP Configuration Options -----------------------------------------------------------------
 	'-----------------------+-----------------------------------------------+-------------------+
 	' Configuration Options |	Configuration Options Name			  		| Total Size (Byte) |
 	'-----------------------+-----------------------------------------------+-------------------+

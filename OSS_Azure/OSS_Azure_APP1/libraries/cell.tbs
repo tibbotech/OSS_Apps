@@ -207,6 +207,16 @@ dim cell__at_cmd_storArray_numof_cmds as word
     #define CELL__AT_REPLIED_WITH_CGREG_0_5 ( instr(1, cell__reply, CELL__CGREG_0_5, 1) <> 0 )
 #endif
 
+
+#ifndef CELL__AT_REPLIED_WITH_CEREG_0_1
+    #define CELL__AT_REPLIED_WITH_CEREG_0_1 ( instr(1, cell__reply, CELL__CEREG_0_1, 1) <> 0 )
+#endif
+
+#ifndef CELL__AT_REPLIED_WITH_CEREG_0_5
+    #define CELL__AT_REPLIED_WITH_CEREG_0_5 ( instr(1, cell__reply, CELL__CEREG_0_5, 1) <> 0 )
+#endif
+
+
 #ifndef CELL__AT_REPLIED_WITH_CGREG_ANY
     #define CELL__AT_REPLIED_WITH_CGREG_ANY ( instr(1, cell__reply, CELL__CGREG_ANY, 1) <> 0 )
 #endif
@@ -220,6 +230,10 @@ dim cell__at_cmd_storArray_numof_cmds as word
 
 #ifndef CELL__AT_CMD_CONTAINS_CGREG
     #define CELL__AT_CMD_CONTAINS_CGREG ( instr(1, cell__at_cmd, CELL__AT_CGREG_Q, 1) <> 0 )
+#endif
+
+#ifndef CELL__AT_CMD_CONTAINS_CEREG
+    #define CELL__AT_CMD_CONTAINS_CEREG ( instr(1, cell__at_cmd, CELL__AT_CEREG_Q, 1) <> 0 )
 #endif
 
 #ifndef CELL__AT_CMD_CONTAINS_CGPADDR
@@ -1881,7 +1895,7 @@ sub cell__at_cmd_exec(byref atcmd as string,
 
 	'--------------------------------------------------------------------
 	'Check if AT-command `AT+CQREQ?` was executed?
-	if (CELL__AT_CMD_CONTAINS_CGREG) then	'answer=yes
+	if (CELL__AT_CMD_CONTAINS_CGREG or CELL__AT_CMD_CONTAINS_CEREG) then	'answer=yes
 		if cell__at_cmd_exec_retry_param > 0 then	'currently at-retry in progress
 			'Choose the appropriate maximum timeot
 			'REMARK: 
@@ -2113,7 +2127,7 @@ sub cell__at_parse_message(next_pwr_phase as en_cell__op_pwr_phases, next_at_pha
 				cell__callback_after_switching_from_CMD_to_DATA()
 			#endif
 
-		else if (CELL__AT_CMD_CONTAINS_CGREG) then	'AT+CGREG command was executed
+		else if (CELL__AT_CMD_CONTAINS_CGREG or CELL__AT_CMD_CONTAINS_CEREG) then	'AT+CGREG command was executed
 			'REMARK: it is preferable for CGREG to have the value `CGREG: 0,1`.
 			'But should this NOT be the case, ...
 			'...for example the value is `CGREG: 0,2` instead of `CGREG: 0,1`,...
@@ -2123,9 +2137,11 @@ sub cell__at_parse_message(next_pwr_phase as en_cell__op_pwr_phases, next_at_pha
 			'3. IPCP NEGO
 			'4. PING
 			'5. PPP CONNECTION
-			if NOT (CELL__AT_REPLIED_WITH_CGREG_0_1 or CELL__AT_REPLIED_WITH_CGREG_0_5) then	'match was NOT found
+			if NOT (CELL__AT_REPLIED_WITH_CGREG_0_1 or CELL__AT_REPLIED_WITH_CGREG_0_5 or CELL__AT_REPLIED_WITH_CEREG_0_1 or CELL__AT_REPLIED_WITH_CEREG_0_5) then	'match was NOT found
+			'if NOT (CELL__AT_REPLIED_WITH_CEREG_0_1 or CELL__AT_REPLIED_WITH_CEREG_0_5) then	'match was NOT found
 				'Retry executing & parsing AT+CGREG? for a specified number of times...
 				'... by running `cell__at_parse_message_retry`
+
 				cell__at_parse_message_retry(next_pwr_phase, next_at_phase, next_ppp_phase, next_gps_phase, PHASE_PARSE_IDLE)
 			else	'match was found
 				'In case `CGREG: 0,1` has been replied, then set boolean to back to false
@@ -2504,7 +2520,7 @@ sub cell__at_parse_message_retry(next_pwr_phase as en_cell__op_pwr_phases, next_
 		'***IMPORTANT: update start-timecounter
         cell__starttime = sys.timercount
 
-		if ( CELL__AT_CMD_CONTAINS_CGREG OR CELL__AT_CMD_CONTAINS_TRIPLEPLUS OR CELL__AT_CMD_CONTAINS_ATO ) then
+		if ( CELL__AT_CMD_CONTAINS_CGREG OR CELL__AT_CMD_CONTAINS_CEREG OR CELL__AT_CMD_CONTAINS_TRIPLEPLUS OR CELL__AT_CMD_CONTAINS_ATO ) then
 			GOTO EXEC_AND_RETRY_HANDLER
 		else
 			#if CELL__DEBUGPRINT_AT_ISENABLED
@@ -2526,7 +2542,7 @@ sub cell__at_parse_message_retry(next_pwr_phase as en_cell__op_pwr_phases, next_
 
 EXEC_AND_RETRY_HANDLER:
 
-		if ( CELL__AT_CMD_CONTAINS_CGREG OR CELL__AT_CMD_CONTAINS_TRIPLEPLUS OR CELL__AT_CMD_CONTAINS_ATO ) then
+		if ( CELL__AT_CMD_CONTAINS_CGREG OR CELL__AT_CMD_CONTAINS_CGREG OR CELL__AT_CMD_CONTAINS_TRIPLEPLUS OR CELL__AT_CMD_CONTAINS_ATO ) then
 			cell__at_retry_exec_and_parse_max = CELL__AT_CGREG_EXEC_RETRY_MAX
 		else
 			cell__at_retry_exec_and_parse_max = CELL__AT_CMD_EXEC_RETRY_MAX
@@ -2546,7 +2562,7 @@ EXEC_AND_RETRY_HANDLER:
 				cell__debugprint_at_phase(PHASE_AT_CMD_EXEC_RETRY, cell__at_cmd, CELL__EMPTYSTRING)
 			#endif
 		
-			if ( CELL__AT_CMD_CONTAINS_CGREG ) then	'AT+CGREG? was executed
+			if ( CELL__AT_CMD_CONTAINS_CGREG OR CELL__AT_CMD_CONTAINS_CEREG ) then	'AT+CGREG? was executed
 				'REMARK: it is preferable for CGREG to have the value `CGREG: 0,1`.
 				'But should this NOT be the case, ...
 				'...for example the value is `CGREG: 0,2` instead of `CGREG: 0,1`,...
@@ -2577,7 +2593,7 @@ EXEC_AND_RETRY_HANDLER:
 			end if
 			
 		else	'max. number of EXEC & PARSE retries EXCEEDED
-			if (CELL__AT_CMD_CONTAINS_CGREG) then
+			if (CELL__AT_CMD_CONTAINS_CGREG OR CELL__AT_CMD_CONTAINS_CEREG) then
 				if (cell__at_cgreg_dblchk_isEnabled = true) then	'
 					cell__at_cgreg_dblchk_isEnabled = false
 					
@@ -4981,10 +4997,18 @@ sub cell__at_proc_sys_timer()
 		case PHASE_AT_CGREG:
 			cell__at_cgreg_dblchk_isEnabled = true
 		
-			cell__at_cmd_exec(CELL__AT_CGREG_Q,
-								PHASE_PWR_DONOT_CHANGE, PHASE_AT_CGATT,
-									PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
-										PHASE_PARSE_AT_MESSAGE)
+			if instr(1,cell__at_cmd, CELL__AT_CGREG_Q,1) > 0 then
+				cell__at_cmd_exec(CELL__AT_CEREG_Q,
+									PHASE_PWR_DONOT_CHANGE, PHASE_AT_CGATT,
+										PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
+											PHASE_PARSE_AT_MESSAGE)				
+			else
+				cell__at_cmd_exec(CELL__AT_CGREG_Q,
+									PHASE_PWR_DONOT_CHANGE, PHASE_AT_CGATT,
+										PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
+											PHASE_PARSE_AT_MESSAGE)			
+			end if
+	
 		
 		case PHASE_AT_CGATT:
 			if CELL__SIM_MODEL_IS_7000 then
@@ -5029,11 +5053,18 @@ sub cell__at_proc_sys_timer()
 										PHASE_PARSE_AT_MESSAGE)
 
 		case PHASE_AT_CGREG_DBLCHK:
-			cell__at_cmd_exec(CELL__AT_CGREG_Q,
-								PHASE_PWR_DONOT_CHANGE, PHASE_AT_CGDATA,
-									PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
-										PHASE_PARSE_AT_MESSAGE)			
-
+			if instr(1,cell__at_cmd, CELL__AT_CGREG_Q,1) > 0 then
+				cell__at_cmd_exec(CELL__AT_CEREG_Q,
+									PHASE_PWR_DONOT_CHANGE, PHASE_AT_CGDATA,
+										PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
+											PHASE_PARSE_AT_MESSAGE)			
+			else
+				cell__at_cmd_exec(CELL__AT_CGREG_Q,
+									PHASE_PWR_DONOT_CHANGE, PHASE_AT_CGDATA,
+										PHASE_PPP_DONOT_CHANGE, PHASE_GPS_DONOT_CHANGE,
+											PHASE_PARSE_AT_MESSAGE)			
+			end if
+			
 		case PHASE_AT_CGDATA:
 			'NOTE: You cannot use one serial-port for PPP and GPS at the same time!!!
 			cell__at_cmd_exec(CELL__AT_CGDATA,

@@ -35,7 +35,7 @@ sub on_sys_timer()
 	end if
 	
 	if config_mode = YES then
-		if credential_changed = YES then
+ 		if credential_changed = YES then
 			dim i as byte
 			for i = 1 to STG_MAX_NUM_SETTINGS 
 				stg_timestamp.ts_milsec = 0
@@ -44,11 +44,13 @@ sub on_sys_timer()
 			stg_set("HUBN",0,"")
 			credential_changed = NO
 		end if	
-		if device_awake_timer>0 then
-			device_awake_timer=device_awake_timer-1
+		if device_awake_timer > 0  then
+			if operation_mode > 0 then
+				device_awake_timer=device_awake_timer-1
+			end if
 		else
 			if bt.connected = YES then
-				bt.setdata("\x02Z"+str(sleep_time)+"\x0d")
+				bt.setdata("\x02Z"+str(sleep_time)+","+stg_get("AWK",0)+"\x0d")
 				bt.send()
 				'wait for data to be sent or maximum 3 seconds
 				dim ts as dword = sys.timercount32
