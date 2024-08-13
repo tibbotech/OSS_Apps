@@ -485,11 +485,13 @@ const CELL__AT_CGDATA = CELL__AT_PLUS + "CGDATA" + "=" + CELL__AT_CGDATA_INPUT
 	const CELL__PPP_PROTO_IP = &h0021	'Internet Protocol
 	const CELL__PPP_PROTO_IPCP = &h8021	'Internet Protocol Control Protocol
 	const CELL__PPP_PROTO_LCP = &hC021	'Link Control Protocol
-	const CELL__PPP_PROTO_PAP=&hC023	'Password Authentication Protocol
+	'const CELL__PPP_PROTO_PAP=&hC023	'Password Authentication Protocol
+	const CELL__PPP_PROTO_PAP=&hC223	'Password Authentication Protocol
 	const CELL__PPP_PROTO_CHAP=&hC223	'Challenge Handshake Authentication Protocol
 
 	const CELL__PPP_PROTO_LCP_STR = chr(&hC0) + chr(&h21)
-	const CELL__PPP_PROTO_PAP_STR = chr(&hc0) + chr(&h23)
+	'const CELL__PPP_PROTO_PAP_STR = chr(&hc0) + chr(&h23)
+	const CELL__PPP_PROTO_PAP_STR = chr(&hc2) + chr(&h23)
 	const CELL__PPP_PROTO_CHAP_STR = chr(&hC2) + chr(&h23)
 
 
@@ -566,8 +568,9 @@ const CELL__AT_CGDATA = CELL__AT_PLUS + "CGDATA" + "=" + CELL__AT_CGDATA_INPUT
 	'+------+	+----------------------------------+--------------------+----------------------------------+
 	'| Data | = | Configuration Option Type (0x03) | Data-length (0x04) | Authen. Protocol (0xC023) = PAP  |
 	'+------+	+----------------------------------+--------------------+----------------------------------+
-	const CELL__PPP_LCP_OPTION_PAP_STR = chr(&h03) + chr(&h04) + chr(&hc0) + chr(&h23)	'Authentication Protocol (<span style="color: gray;">0x0304 C023</span>) (<span style="color: gray;">note: 0xC023=PAP</span>)
-
+	'const CELL__PPP_LCP_OPTION_PAP_STR = chr(&h03) + chr(&h04) + chr(&hc0) + chr(&h23)	'Authentication Protocol (<span style="color: gray;">0x0304 C023</span>) (<span style="color: gray;">note: 0xC023=PAP</span>)
+	const CELL__PPP_LCP_OPTION_PAP_STR = chr(&h03) + chr(&h05) + chr(&hc2) + chr(&h23) + chr(&h05) 'Authentication Protocol (<span style="color: gray;">0x0304 C023</span>) (<span style="color: gray;">note: 0xC023=PAP</span>)
+	
 	'QUALITY CONTROL
 	'+------+	+----------------------------------+--------------------+---------------------------+
 	'| Data | = | Configuration Option Type (0x04) | Data-length (0x04) | Quality Control  (0xC025) |
@@ -598,7 +601,7 @@ const CELL__AT_CGDATA = CELL__AT_PLUS + "CGDATA" + "=" + CELL__AT_CGDATA_INPUT
 	'	CONFREJ is expected from the peer for `CELL__PPP_LCP_OPTION_MRU_STR` and `CELL__PPP_LCP_OPTION_QP_STR`
 	'	CONFNAK is expected from the peer for `CELL__PPP_LCP_OPTION_PAP_STR`
 	const CELL__PPP_LCP_CONFREQ_DATA_STR = CELL__PPP_LCP_OPTION_MRU_STR + CELL__PPP_LCP_OPTION_ACCM_STR + CELL__PPP_LCP_OPTION_PAP_STR + CELL__PPP_LCP_OPTION_QP_STR
-
+	'const CELL__PPP_LCP_CONFREQ_DATA_STR = CELL__PPP_LCP_OPTION_MRU_STR + CELL__PPP_LCP_OPTION_ACCM_STR + chr(&hc0) + chr(&h23) + CELL__PPP_LCP_OPTION_QP_STR
 
 
 	'IPCP----------------------------------------------------------------

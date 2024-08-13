@@ -326,6 +326,24 @@ dim cell__at_cmd_storArray_numof_cmds as word
     end sub
 #endif
 
+sub print_ppp_msg(byref msg as string, dir as byte)
+	dim i as byte
+	dim ss as string = ""
+	for i = 1 to len(msg)
+		dim w as word = asc(mid(msg,i,1))
+		dim s as string = hex(w)
+		s = right(s, len(s)-2)
+		if w < 15 then s = "0"+s
+		ss = ss +s +" "
+	next i
+	ss = ss + "\x0a"
+	if dir = 0 then
+		ss = "incoming: " + ss
+	else
+		ss = "outgoing: " + ss
+	end if
+	sys.debugprint(ss)
+end sub
 
 'START FUNCTION------------------------------------------------------
 function cell__start(byref pin as string(CELL__16b_LEN), byref apn as string, 
@@ -2859,6 +2877,7 @@ end sub
 			'		Configure-ACK:		0x02 = 2
 			'		Configure-NAK:		0x03 = 3
 			'		Configure-REJECT:	0x04 = 4
+			'		Configure_DISREQ:   0x0B = 11
 			'		Echo-REQ:			0x09 = 9
 			'		Reserved:			0x0C = 12
 			'	ppp_id (1 byte) = Identifier
@@ -2887,7 +2906,8 @@ end sub
 												+ data_packet_format
         end if	
 
-
+		print_ppp_msg(ppp_packet_format, 1)
+		
 		'Update variable `cell__ppp_sender`
         if ppp_code = PPP_CONFREQ then 
             cell__ppp_sender = ppp_packet_format
@@ -2921,7 +2941,6 @@ end sub
 		'| Flag | Address | Control | Protocol |				Information				  | FCS | Flag |
 		'+------+---------+---------+----------+------------------------------------------+-----+------+ 
         ppp_packet_format = chr(CELL__PPP_FLAG) + ppp_packet_format + chr(CELL__PPP_FLAG)
-
 
 		'Set data and send
         ser.setdata(ppp_packet_format)
@@ -3147,6 +3166,8 @@ end sub
 									
 		'Parse the received message
         cell__reply = cell__ppp_parse_message_func()
+		
+		print_ppp_msg(cell__reply, 0)
 
         if cell__reply = CELL__EMPTYSTRING then	'parsed message is EMPTY
 			cell__ppp_parse_message__retry()	'retry parsing the received message again
@@ -3424,12 +3445,12 @@ NEXT_FOR_HANDLER:
 			
 		'Handle *Peer*'s data based on *Peer*'s code
         select case ppp_peer_code
-            case PPP_PEER_CONFACK:
+            case PPP_PEER_CONFACK: '02
 				'*Peer* has answered with a CONFACK to the *Sender*'s CONFREQ.
 				'Therefore this boolean can be set to YES
 				cell__ppp_sender_confreq_isAck = true
 
-            case PPP_PEER_CONFNAK:
+            case PPP_PEER_CONFNAK: '03
 				'*Peer* has answered with a CONFNAK to the *Sender*'s CONFREQ.
 				'Therefore change the `ppp_sender_data` to the values as specified in the *Peer*'s CONFNAK 
 				cell__ppp_substitute_data(ppp_sender_data, ppp_peer_data, PPP_CONFNAK)
@@ -3439,7 +3460,7 @@ NEXT_FOR_HANDLER:
 				cell__ppp_send_data(CELL__PPP_PROTO_LCP, PPP_CONFREQ, cell__ppp_sender_id, ppp_sender_data,
 										next_pwr_phase, next_at_phase, next_ppp_phase, next_gps_phase, next_parse_phase)
 
-            case PPP_PEER_CONFREJ:
+            case PPP_PEER_CONFREJ: '04
 				'*Peer* has answered with a CONFREJ to the *Sender*'s CONFREQ.
 				'Therefore remove the Rejected values as specified in the *Peer*'s CONFREJ from the `ppp_sender_data`
 				cell__ppp_substitute_data(ppp_sender_data, ppp_peer_data, PPP_CONFREJ)
@@ -3449,7 +3470,7 @@ NEXT_FOR_HANDLER:
 				cell__ppp_send_data(CELL__PPP_PROTO_LCP, PPP_CONFREQ, cell__ppp_sender_id, ppp_sender_data,
 										next_pwr_phase, next_at_phase, next_ppp_phase, next_gps_phase, next_parse_phase)
 									
-            case PPP_PEER_DISREQ:
+            case PPP_PEER_DISREQ: '0B
 				'*Peer* has answered with a DISCARD RREQUEST to the *Sender*'s CONFREQ.
 				'In this case do NOTHING.
 				#if CELL__DEBUG_PRINT		
@@ -3458,7 +3479,7 @@ NEXT_FOR_HANDLER:
 				
 				cell__callback_ppp_lcp_disreq_from_peer()	'CALLBACK
 
-            case PPP_PEER_CONFREQ:
+            case PPP_PEER_CONFREQ: '01
 				'*Peer* has sent a CONFREQ.
 				'Therefore process the parsed LCP CONFREQ message from the *Peer*
 				ppp_sender_code = cell__ppp_proc_parsed_lcp_confreq_message_result(ppp_peer_data, cell__ppp_confrej_str)
@@ -3585,21 +3606,21 @@ NEXT_FOR_HANDLER:
 			'Data length of 1 packet is not greater than the total data length (of all packets combined)
 			'Handle each data packet based on its Config Option
             select case config_option_type
-                case CONFIG_OPTION_MRU:
+                case CONFIG_OPTION_MRU: '01
 					'DO NOTHING
 					'	In subroutine `gprs_ppp_lcp_parse_message()` a CONFACK will be sent once
 					'	sender and peer has come to an agreement. In this case, the data field 
 					'	of the peer (`cell__reply`) will be used. This would mean that the 
 					'	MRU is already included in the peer's data-field.					
 				
-                case CONFIG_OPTION_ACCM:	'Async Control Character Map
+                case CONFIG_OPTION_ACCM: '02	'Async Control Character Map
 					'DO NOTHING
 					'	In subroutine `gprs_ppp_lcp_parse_message()` a CONFACK will be sent once
 					'	sender and peer has come to an agreement. In this case, the data field 
 					'	of the peer (`cell__reply`) will be used. This would mean that the 
 					'	ACCM is already included in the peer's data-field.
 					
-                case CONFIG_OPTION_AUTH:	'Authentication Protocol
+                case CONFIG_OPTION_AUTH: '03	'Authentication Protocol
 					if NOT AUTHEN_PROTOCOL_IS_PAP then
 
 						cell__ppp_proc_parsed_lcp_confreq_message_result = PPP_SENDER_CONFNAK	'output with Configure NAK
@@ -3608,8 +3629,10 @@ NEXT_FOR_HANDLER:
 					end if
 					
 					cell__ppp_pap_isRequired = true
-
-                case CONFIG_OPTION_MAGIC:	'Magic Number
+					cell__ppp_proc_parsed_lcp_confreq_message_result = PPP_SENDER_CONFACK
+					exit function
+					
+                case CONFIG_OPTION_MAGIC: '05	'Magic Number
 					'DO NOTHING
 					'	In subroutine `gprs_ppp_lcp_parse_message()` a CONFACK will be sent once
 					'	sender and peer has come to an agreement. In this case, the data field 
@@ -3619,7 +3642,7 @@ NEXT_FOR_HANDLER:
 					'		 MUST BE unique. If the magic-number of both the sender and peer are the same, 
 					'		the session terminates because of the loopback that is detected.
 					
-                case CONFIG_OPTION_PFC:	'Protocol-Field-COmpression
+                case CONFIG_OPTION_PFC: '07	'Protocol-Field-COmpression
 					confrej_str = confrej_str + CELL__PPP_LCP_OPTION_PFC_STR	'append PFC data to the `rejected string`
 			
                 case CONFIG_OPTION_ACFC:	'Address and Control Field Compression
@@ -3696,7 +3719,7 @@ NEXT_FOR_HANDLER:
 
 		'Handle *Peer*'s data based on the *Sender*'s code
         select case ppp_peer_code
-            case PPP_PEER_CONFACK:
+            case PPP_PEER_CONFACK, PPP_PEER_CONFNAK:
 				'*Peer* has answered with a CONFACK to the *Sender*'s CONFREQ.
 				'In this case do NOT send anything to *Peer*.
 
@@ -3713,7 +3736,7 @@ NEXT_FOR_HANDLER:
 				'CALLBACK
 				cell__callback_ppp_pap_successful()
 				
-            case PPP_PEER_CONFNAK, PPP_PEER_CONFREJ, PPP_PEER_DISREQ:
+            case PPP_PEER_CONFREJ, PPP_PEER_DISREQ:
 				'PRINT
 				#if CELL__DEBUG_PRINT		
 					cell__debugprint_ppp_phase(PHASE_PPP_PAP_NEGO_FAILED, CELL__EMPTYSTRING)
@@ -3725,6 +3748,16 @@ NEXT_FOR_HANDLER:
 				'CALLBACK
 				cell__callback_ppp_pap_nego_failed()
 				
+			case PPP_PEER_CONFREQ: '01 CHAP Challenge 
+				dim chanllenge_len as byte = asc(mid(cell__reply, 7,1))
+				dim ppp_challenge as string = mid(cell__reply, 8, chanllenge_len)
+				dim hash_input as string = cell__username + cell__password + ppp_challenge
+				dim ppp_sender_data as string
+				cell__ppp_sender_id = asc(mid(cell__reply, 4,1))
+				ppp_sender_data = md5(hash_input,"",MD5_FINISH,len(hash_input))
+				ppp_sender_data = chr(len(ppp_sender_data))+ppp_sender_data+cell__username
+				cell__ppp_send_data(CELL__PPP_PROTO_CHAP, 2 , cell__ppp_sender_id, ppp_sender_data,
+									next_pwr_phase, next_at_phase, next_ppp_phase, next_gps_phase, next_parse_phase)				
         end select
 
 		'Enable Fast-Load (if needed)
