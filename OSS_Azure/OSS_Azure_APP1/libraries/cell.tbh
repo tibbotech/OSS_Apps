@@ -4,6 +4,9 @@
 #ifndef CELL__DEBUG_PRINT
 	#define CELL__DEBUG_PRINT 0
 #endif
+#ifndef CELL__DEBUG_PRINT_PPP_PACKET
+	#define CELL__DEBUG_PRINT_PPP_PACKET 1
+#endif
 
 #ifndef CELLULAR_AVAILABLE
 	#define CELLULAR_AVAILABLE 1	
@@ -485,13 +488,11 @@ const CELL__AT_CGDATA = CELL__AT_PLUS + "CGDATA" + "=" + CELL__AT_CGDATA_INPUT
 	const CELL__PPP_PROTO_IP = &h0021	'Internet Protocol
 	const CELL__PPP_PROTO_IPCP = &h8021	'Internet Protocol Control Protocol
 	const CELL__PPP_PROTO_LCP = &hC021	'Link Control Protocol
-	'const CELL__PPP_PROTO_PAP=&hC023	'Password Authentication Protocol
-	const CELL__PPP_PROTO_PAP=&hC223	'Password Authentication Protocol
+	const CELL__PPP_PROTO_PAP=&hC023	'Password Authentication Protocol
 	const CELL__PPP_PROTO_CHAP=&hC223	'Challenge Handshake Authentication Protocol
 
 	const CELL__PPP_PROTO_LCP_STR = chr(&hC0) + chr(&h21)
-	'const CELL__PPP_PROTO_PAP_STR = chr(&hc0) + chr(&h23)
-	const CELL__PPP_PROTO_PAP_STR = chr(&hc2) + chr(&h23)
+	const CELL__PPP_PROTO_PAP_STR = chr(&hc0) + chr(&h23)
 	const CELL__PPP_PROTO_CHAP_STR = chr(&hC2) + chr(&h23)
 
 
@@ -568,8 +569,8 @@ const CELL__AT_CGDATA = CELL__AT_PLUS + "CGDATA" + "=" + CELL__AT_CGDATA_INPUT
 	'+------+	+----------------------------------+--------------------+----------------------------------+
 	'| Data | = | Configuration Option Type (0x03) | Data-length (0x04) | Authen. Protocol (0xC023) = PAP  |
 	'+------+	+----------------------------------+--------------------+----------------------------------+
-	'const CELL__PPP_LCP_OPTION_PAP_STR = chr(&h03) + chr(&h04) + chr(&hc0) + chr(&h23)	'Authentication Protocol (<span style="color: gray;">0x0304 C023</span>) (<span style="color: gray;">note: 0xC023=PAP</span>)
-	const CELL__PPP_LCP_OPTION_PAP_STR = chr(&h03) + chr(&h05) + chr(&hc2) + chr(&h23) + chr(&h05) 'Authentication Protocol (<span style="color: gray;">0x0304 C023</span>) (<span style="color: gray;">note: 0xC023=PAP</span>)
+	const CELL__PPP_LCP_OPTION_PAP_STR = chr(&h03) + chr(&h04) + chr(&hc0) + chr(&h23)	'Authentication Protocol (<span style="color: gray;">0x0304 C023</span>) (<span style="color: gray;">note: 0xC023=PAP</span>)
+	const CELL__PPP_LCP_OPTION_CHAP_STR = chr(&h03) + chr(&h05) + chr(&hc2) + chr(&h23) + chr(&h05) 'Authentication Protocol (<span style="color: gray;">0x0305 C223 05</span>) (<span style="color: gray;">note: 0xC223=CHAP</span>)
 	
 	'QUALITY CONTROL
 	'+------+	+----------------------------------+--------------------+---------------------------+
@@ -601,8 +602,6 @@ const CELL__AT_CGDATA = CELL__AT_PLUS + "CGDATA" + "=" + CELL__AT_CGDATA_INPUT
 	'	CONFREJ is expected from the peer for `CELL__PPP_LCP_OPTION_MRU_STR` and `CELL__PPP_LCP_OPTION_QP_STR`
 	'	CONFNAK is expected from the peer for `CELL__PPP_LCP_OPTION_PAP_STR`
 	const CELL__PPP_LCP_CONFREQ_DATA_STR = CELL__PPP_LCP_OPTION_MRU_STR + CELL__PPP_LCP_OPTION_ACCM_STR + CELL__PPP_LCP_OPTION_PAP_STR + CELL__PPP_LCP_OPTION_QP_STR
-	'const CELL__PPP_LCP_CONFREQ_DATA_STR = CELL__PPP_LCP_OPTION_MRU_STR + CELL__PPP_LCP_OPTION_ACCM_STR + chr(&hc0) + chr(&h23) + CELL__PPP_LCP_OPTION_QP_STR
-
 
 	'IPCP----------------------------------------------------------------
 	'-----------------------+----------------------------+-------------------+
@@ -870,6 +869,10 @@ const CELL__AT_CGDATA = CELL__AT_PLUS + "CGDATA" + "=" + CELL__AT_CGDATA_INPUT
 		PHASE_PPP_PAP_NEGOTIATION,
 		PHASE_PPP_PAP_NEGO_SUCCESS,
 		PHASE_PPP_PAP_NEGO_FAILED,
+		
+		PHASE_PPP_CHAP_NEGOTIATION,
+		PHASE_PPP_CHAP_NEGO_SUCCESS,
+		PHASE_PPP_CHAP_NEGO_FAILED,		
 
 		PHASE_PPP_IPCP_NEGOTIATION,
 		PHASE_PPP_IPCP_CONNECT,
@@ -1218,13 +1221,13 @@ declare sub cell__callback_at_reply_contains_error()
 	'<b>METHOD. </b><br><br>
 	'Callback to notify that the number of PPP reconnection attempts has exceeded the maximum allowed quota.
 
-	declare sub cell__callback_ppp_pap_successful()
+	declare sub cell__callback_ppp_auth_successful(auth_proto_code as word)
 	'<b>METHOD. </b><br><br>
-	'Callback to notify that PAP negotiation was successful.
+	'Callback to notify that AUTH (PAP/CHAP) negotiation was successful.
 
-	declare sub cell__callback_ppp_pap_nego_failed()
+	declare sub cell__callback_ppp_auth_nego_failed(auth_proto_code as word)
 	'<b>METHOD. </b><br><br>
-	'Callback to notify that PAP negotiation was unsuccessful.
+	'Callback to notify that AUTH (PAP/CHAP) negotiation was unsuccessful.
 
 	declare sub cell__callback_ppp_ipcp_successful()
 	'<b>METHOD. </b><br><br>
@@ -2089,7 +2092,7 @@ declare sub cell__at_send_multiple_commands_without_timeout(byref atcmd as strin
 									byref peer_data as string(CELL__128b_LEN), 
 										code as en_cell__op_ppp_codes)
 	'<b>METHOD. </b><br><br>
-	'Replaces one data value (<font color="gray">e.g., CHAP: 0x0304 C223</font>) with another (<font color="gray">e.g., PAP: 0x0304 C023</font>).<br><br>
+	'Replaces one data value (<font color="gray">e.g., CHAP: 0x0305 C223 05</font>) with another (<font color="gray">e.g., PAP: 0x0304 C023</font>).<br><br>
 	'<b>Input parameters:</b>
 	'<ul>
 		'<li>ppp_sender_data<font color="magenta"> - </font><i>Sender's data packet (<font color="gray">config options + data length + data content</font>)</i></li>
@@ -2100,6 +2103,7 @@ declare sub cell__at_send_multiple_commands_without_timeout(byref atcmd as strin
 	declare sub cell__ppp_parse_message(next_pwr_phase as en_cell__op_pwr_phases, next_at_phase as en_cell__op_at_phases, 
 												next_ppp_phase as en_cell__op_ppp_phases,
 													next_gps_phase as en_cell__op_gps_phases, next_parse_phase as en_cell__op_parse_phases)
+													
 	'<b>METHOD. </b><br><br>
 	'Parses and processes a message received from peer.<br><br>
 	'<b>Input parameters:</b>
@@ -2168,6 +2172,9 @@ declare sub cell__at_send_multiple_commands_without_timeout(byref atcmd as strin
 	'</ul>
 	'<b>Remarks:</b><br><br>
 	'It is possible to fast send & receive by enabling boolean <span style="color: dodgerblue;">CELL__PPP_FAST_LOAD</span>.<br><br>
+	declare sub cell__ppp_proc_parsed_chap_message(next_pwr_phase as en_cell__op_pwr_phases, next_at_phase as en_cell__op_at_phases, 
+											next_ppp_phase as en_cell__op_ppp_phases, next_gps_phase as en_cell__op_gps_phases,
+												next_parse_phase as en_cell__op_parse_phases)
 	
 	declare sub cell__ppp_proc_parsed_pap_message(next_pwr_phase as en_cell__op_pwr_phases, next_at_phase as en_cell__op_at_phases, 
 											next_ppp_phase as en_cell__op_ppp_phases, next_gps_phase as en_cell__op_gps_phases,

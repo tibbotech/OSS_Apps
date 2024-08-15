@@ -29,7 +29,6 @@ dim cell__status_revpol as no_yes
 dim cell__pwrkey_revpol as no_yes
 dim cell__reset_revpol as no_yes
 dim cell__shdn_revpol as no_yes
-dim cell__pwr_object_state as string(CELL__32b_LEN)
 
 dim cell__status_setto_on as low_high
 dim cell__status_setto_off as low_high
@@ -93,7 +92,6 @@ dim cell__rxlen as word	'receive buffer length
 dim cell__apn as string(CELL__16b_LEN)
 dim cell__username as string(CELL__16b_LEN)	'PAP username
 dim cell__password as string(CELL__16b_LEN)	'PAP password
-dim cell__pap_credentials as string(CELL__32b_LEN)	'PAP username and password
 dim cell__pin as string(CELL__16b_LEN)
 
 #if CELL__PPP_MODE_ISENABLED
@@ -117,7 +115,7 @@ dim cell__pin as string(CELL__16b_LEN)
     dim cell__ppp_sender as string(CELL__128b_LEN)	'PPP Packet Format (<span style="color: gray;">Code + Identifier + Length + Data Field</span>)
     dim cell__ppp_confrej_str as string(CELL__128b_LEN)	'rejected data
     dim cell__ppp_sender_id as byte	'Identifier used by the sender in a CONFREQ
-    dim cell__ppp_pap_isRequired as boolean
+    dim cell__ppp_required_auth as word
     dim cell__ppp_sender_confreq_isAck as boolean
     dim cell__ppp_peer_confreq_isAck as boolean
     dim cell__ppp_peer_ip as string(CELL__4b_LEN)	'remote ip-address to be used by the peer
@@ -325,25 +323,25 @@ dim cell__at_cmd_storArray_numof_cmds as word
         #endif
     end sub
 #endif
-
-sub print_ppp_msg(byref msg as string, dir as byte)
-	dim i as byte
-	dim ss as string = ""
-	for i = 1 to len(msg)
-		dim w as word = asc(mid(msg,i,1))
-		dim s as string = hex(w)
-		s = right(s, len(s)-2)
-		if w < 15 then s = "0"+s
-		ss = ss +s +" "
-	next i
-	ss = ss + "\x0a"
-	if dir = 0 then
-		ss = "incoming: " + ss
-	else
-		ss = "outgoing: " + ss
-	end if
-	sys.debugprint(ss)
-end sub
+#if CELL__DEBUG_PRINT_PPP_PACKET
+	sub print_ppp_msg(byref msg as string, dir as byte)
+		dim i as byte
+		dim ss as string = ""
+		for i = 1 to len(msg)
+			dim w as word = asc(mid(msg,i,1))
+			dim s as string = hex(w)
+			s = right(s, len(s)-2)
+			if w < 15 then s = "0"+s
+			ss = ss +s +" "
+		next i
+		if dir = 0 then
+			ss = "incoming: " + ss
+		else
+			ss = "outgoing: " + ss
+		end if
+		cell__debugprint(ss)
+	end sub
+#endif
 
 'START FUNCTION------------------------------------------------------
 function cell__start(byref pin as string(CELL__16b_LEN), byref apn as string, 
@@ -352,7 +350,6 @@ function cell__start(byref pin as string(CELL__16b_LEN), byref apn as string,
     cell__apn = apn
     cell__username = username
     cell__password = password
-    cell__pap_credentials = chr(len(cell__username)) + cell__username + chr(len(cell__password)) + cell__password
 	
 	'Set pin-code
     cell__pin = pin
@@ -418,7 +415,6 @@ function cell__stop(next_pwr_phase as en_cell__op_pwr_phases, next_at_phase as e
     cell__apn = CELL__EMPTYSTRING
     cell__username = CELL__EMPTYSTRING
     cell__password = CELL__EMPTYSTRING
-    cell__pap_credentials CELL__EMPTYSTRING
     cell__pin = CELL__EMPTYSTRING
 	
 	'Reset boolean
@@ -869,6 +865,11 @@ end sub
             case PHASE_PPP_PAP_NEGO_FAILED:
 				body = "[PAP] NEGOTIATION...FAILED"
 
+			case PHASE_PPP_CHAP_NEGO_SUCCESS:
+				body = "[CHAP] NEGOTIATION... SUCCESSFUL"
+            case PHASE_PPP_CHAP_NEGO_FAILED:
+				body = "[CHAP] NEGOTIATION...FAILED"
+
             case PHASE_PPP_IPCP_RCV_IP: 
 				body = "[IPCP] RECEIVED REMOTE IP:"
             case PHASE_PPP_IPCP_NEGO_SUCCESS:
@@ -1148,7 +1149,8 @@ end sub
     	'Define varables
         dim pwr_object_str as string(CELL__16b_LEN)
         dim state_ison_str as string(CELL__4b_LEN)
-
+		dim cell__pwr_object_state as string(CELL__32b_LEN)
+		
         select case pwr_object 
             case STATUS:
 				if rev_polarity = NO then
@@ -1341,7 +1343,7 @@ end sub
         cell__ppp_retry_param = 0 'PPP
 
 		'Booleans (yes/no)
-        cell__ppp_pap_isRequired = true
+        cell__ppp_required_auth = 0
         cell__ppp_sender_confreq_isAck = false
         cell__ppp_sender_confreq_isAck = false
 		
@@ -2905,9 +2907,9 @@ end sub
 											+ chr(ppp_length SHR 8) + chr(ppp_length AND &hff) 
 												+ data_packet_format
         end if	
-
+#if CELL__DEBUG_PRINT_PPP_PACKET
 		print_ppp_msg(ppp_packet_format, 1)
-		
+#endif		
 		'Update variable `cell__ppp_sender`
         if ppp_code = PPP_CONFREQ then 
             cell__ppp_sender = ppp_packet_format
@@ -3166,9 +3168,9 @@ end sub
 									
 		'Parse the received message
         cell__reply = cell__ppp_parse_message_func()
-		
+#if CELL__DEBUG_PRINT_PPP_PACKET		
 		print_ppp_msg(cell__reply, 0)
-
+#endif
         if cell__reply = CELL__EMPTYSTRING then	'parsed message is EMPTY
 			cell__ppp_parse_message__retry()	'retry parsing the received message again
         end if
@@ -3194,6 +3196,9 @@ end sub
 				
             case CELL__PPP_PROTO_IP:
 				cell__ppp_proc_parsed_ping_message(next_pwr_phase, next_at_phase, next_ppp_phase, next_gps_phase, next_parse_phase)
+			
+			case CELL__PPP_PROTO_CHAP:
+				cell__ppp_proc_parsed_chap_message(next_pwr_phase, next_at_phase, next_ppp_phase, next_gps_phase, next_parse_phase)
 				
             case else:
 			
@@ -3503,7 +3508,7 @@ NEXT_FOR_HANDLER:
 						'Set all booleans to YES
 						cell__ppp_sender_confreq_isAck = true
 						cell__ppp_peer_confreq_isAck = true
-						cell__ppp_pap_isRequired = true
+						cell__ppp_required_auth = CELL__PPP_PROTO_PAP
 
 						'*Sender* will send a CONFACK using the unchanged `ppp_peer_data' for FINAL CONFIRMATION.
 						'Do not forget to use the *Peer*'s ID, because otherwise the *Peer* wouldn't know what the *Sender* is talking about.
@@ -3577,7 +3582,8 @@ NEXT_FOR_HANDLER:
 
 		'Define Macros
         #define DATA_LENGTH_IS_ACCEPTABLE ( parsed_message_copy_len <= len(parsed_message_copy) )	'data-length of each data does NOT exceed the length of all data
-        #define AUTHEN_PROTOCOL_IS_PAP ( authen_protocol = CELL__PPP_PROTO_PAP )	'Authentical Protocol matches PAP
+        #define IS_ALLOWED_AUTHEN_PROTOCOL ( authen_protocol = CELL__PPP_PROTO_PAP OR authen_protocol = CELL__PPP_PROTO_CHAP )	'Authentical Protocol matches PAP / CHAP
+		'#define IS_ALLOWED_AUTHEN_PROTOCOL ( authen_protocol = CELL__PPP_PROTO_PAP )	'Authentical Protocol matches PAP
         #define DATA_ISNOT_EMPTY ( parsed_message_copy <> CELL__EMPTYSTRING )
 
 		'Set initial values
@@ -3621,16 +3627,16 @@ NEXT_FOR_HANDLER:
 					'	ACCM is already included in the peer's data-field.
 					
                 case CONFIG_OPTION_AUTH: '03	'Authentication Protocol
-					if NOT AUTHEN_PROTOCOL_IS_PAP then
+					if NOT IS_ALLOWED_AUTHEN_PROTOCOL then
 
 						cell__ppp_proc_parsed_lcp_confreq_message_result = PPP_SENDER_CONFNAK	'output with Configure NAK
 							
 						exit function
 					end if
 					
-					cell__ppp_pap_isRequired = true
+					cell__ppp_required_auth = authen_protocol 'it's either pap or chap
+					
 					cell__ppp_proc_parsed_lcp_confreq_message_result = PPP_SENDER_CONFACK
-					exit function
 					
                 case CONFIG_OPTION_MAGIC: '05	'Magic Number
 					'DO NOTHING
@@ -3685,14 +3691,21 @@ NEXT_FOR_HANDLER:
 		
 		'Set next phase to transit to (e.g. PHASE_PPP_PAP_NEGOTIATION or PHASE_PPP_IPCP_NEGOTIATION)
 		'ALL other phases should be set to IDLE
- 		if cell__ppp_pap_isRequired = true then 'PAP is NOT required
+ 		if cell__ppp_required_auth = CELL__PPP_PROTO_PAP then 'PAP is required
 			if next_ppp_phase = PHASE_PPP_DETERMINED_BY_SYSTEM then	'only continue if next_ppp_phase is set to `PHASE_PPP_DETERMINED_BY_SYSTEM`
 				next_ppp_phase = PHASE_PPP_PAP_NEGOTIATION	'set phase to PHASE_PPP_PAP_NEGOTIATION
 			end if													
-		else	'PAP is required
-			if next_ppp_phase = PHASE_PPP_DETERMINED_BY_SYSTEM then	'only continue if next_ppp_phase is set to `PHASE_PPP_DETERMINED_BY_SYSTEM`
-				next_ppp_phase = PHASE_PPP_IPCP_NEGOTIATION	'set phase to PHASE_PPP_IPCP_NEGOTIATION				
-			end if	
+		else	'CHAP is required wait for CHAP challenge
+			if cell__ppp_required_auth = CELL__PPP_PROTO_CHAP then
+				next_parse_phase = PHASE_PARSE_PPP_MESSAGE
+				next_ppp_phase = PHASE_PPP_IDLE
+				cell__update_op_next_phases(next_pwr_phase, next_at_phase, next_ppp_phase, next_gps_phase, next_parse_phase)
+				exit sub
+			else
+				if next_ppp_phase = PHASE_PPP_DETERMINED_BY_SYSTEM then	'only continue if next_ppp_phase is set to `PHASE_PPP_DETERMINED_BY_SYSTEM`
+					next_ppp_phase = PHASE_PPP_IPCP_NEGOTIATION	'set phase to PHASE_PPP_IPCP_NEGOTIATION				
+				end if
+			end if
 		end if
 		
 		'Set next-phase where to transit to
@@ -3707,6 +3720,63 @@ NEXT_FOR_HANDLER:
         #endif
     end sub
 
+    sub cell__ppp_proc_parsed_chap_message(next_pwr_phase as en_cell__op_pwr_phases, next_at_phase as en_cell__op_at_phases, 
+        next_ppp_phase as en_cell__op_ppp_phases, next_gps_phase as en_cell__op_gps_phases,
+        next_parse_phase as en_cell__op_parse_phases)
+		'Define Variables
+        dim ppp_protocoltype_lhex as word = asc(left(cell__reply, 1))*256	'protocol-type (left hex value)
+        dim ppp_protocoltype_rhex as word = asc(mid(cell__reply, 2, 1))	'protocol-type (right hex value)
+        dim ppp_protocoltype as word = ppp_protocoltype_lhex + ppp_protocoltype_rhex	'protocol-type (complete)
+        dim ppp_peer_code as byte = asc(mid(cell__reply, 3, 1))	'peer's code value
+
+		'Handle *Peer*'s data based on the *Sender*'s code
+        select case ppp_peer_code
+            case 3: '03 CHAP success
+				'*Peer* has answered with a CONFACK to the *Sender*'s CONFREQ.
+				'In this case do NOT send anything to *Peer*.
+
+				'PRINT
+				#if CELL__DEBUG_PRINT	
+					cell__debugprint_ppp_phase(PHASE_PPP_CHAP_NEGO_SUCCESS, CELL__EMPTYSTRING)
+				#endif
+				next_ppp_phase = PHASE_PPP_IPCP_NEGOTIATION
+				'Set next phase to transit to (e.g. PHASE_PPP_IPCP_NEGOTIATION)
+				'ALL other phases should be set to IDLE
+				'IMPORTANT: make sure to set thee `next_parse_phase` to `PHASE_PARSE_IDLE`, otherwise we will have an endless LOOP!!!
+				cell__update_op_next_phases(next_pwr_phase, next_at_phase, next_ppp_phase, next_gps_phase, PHASE_PARSE_IDLE)
+
+				'CALLBACK
+				cell__callback_ppp_auth_successful(ppp_protocoltype)
+				
+            case 4: '04 failed
+				'PRINT
+				#if CELL__DEBUG_PRINT		
+					cell__debugprint_ppp_phase(PHASE_PPP_CHAP_NEGO_FAILED, CELL__EMPTYSTRING)
+				#endif
+					
+				'Set all next-phases to IDLE
+				cell__update_op_next_phases(PHASE_PWR_IDLE, PHASE_AT_IDLE, PHASE_PPP_IDLE, PHASE_GPS_IDLE, PHASE_PARSE_IDLE)
+
+				'CALLBACK
+				cell__callback_ppp_auth_nego_failed(ppp_protocoltype)
+				
+			case 1: '01 CHAP Challenge 
+				dim chanllenge_len as byte = asc(mid(cell__reply, 7,1))
+				dim ppp_challenge as string = mid(cell__reply, 8, chanllenge_len)
+				dim hash_input as string = cell__username + cell__password + ppp_challenge
+				dim ppp_sender_data as string
+				cell__ppp_sender_id = asc(mid(cell__reply, 4,1))
+				ppp_sender_data = md5(hash_input,"",MD5_FINISH,len(hash_input))
+				ppp_sender_data = chr(len(ppp_sender_data))+ppp_sender_data+cell__username
+				cell__ppp_send_data(CELL__PPP_PROTO_CHAP, 2 , cell__ppp_sender_id, ppp_sender_data,
+									next_pwr_phase, next_at_phase, next_ppp_phase, next_gps_phase, next_parse_phase)				
+        end select
+
+		'Enable Fast-Load (if needed)
+        #if CELL__PPP_FAST_LOAD_ISENABLED
+            cell__ppp_proc_sys_timer()
+        #endif
+    end sub
 
     sub cell__ppp_proc_parsed_pap_message(next_pwr_phase as en_cell__op_pwr_phases, next_at_phase as en_cell__op_at_phases, 
         next_ppp_phase as en_cell__op_ppp_phases, next_gps_phase as en_cell__op_gps_phases,
@@ -3719,7 +3789,7 @@ NEXT_FOR_HANDLER:
 
 		'Handle *Peer*'s data based on the *Sender*'s code
         select case ppp_peer_code
-            case PPP_PEER_CONFACK, PPP_PEER_CONFNAK:
+            case PPP_PEER_CONFACK:
 				'*Peer* has answered with a CONFACK to the *Sender*'s CONFREQ.
 				'In this case do NOT send anything to *Peer*.
 
@@ -3734,9 +3804,9 @@ NEXT_FOR_HANDLER:
 				cell__update_op_next_phases(next_pwr_phase, next_at_phase, next_ppp_phase, next_gps_phase, PHASE_PARSE_IDLE)
 
 				'CALLBACK
-				cell__callback_ppp_pap_successful()
+				cell__callback_ppp_auth_successful(ppp_protocoltype)
 				
-            case PPP_PEER_CONFREJ, PPP_PEER_DISREQ:
+            case PPP_PEER_CONFNAK, PPP_PEER_CONFREJ, PPP_PEER_DISREQ:
 				'PRINT
 				#if CELL__DEBUG_PRINT		
 					cell__debugprint_ppp_phase(PHASE_PPP_PAP_NEGO_FAILED, CELL__EMPTYSTRING)
@@ -3746,18 +3816,8 @@ NEXT_FOR_HANDLER:
 				cell__update_op_next_phases(PHASE_PWR_IDLE, PHASE_AT_IDLE, PHASE_PPP_IDLE, PHASE_GPS_IDLE, PHASE_PARSE_IDLE)
 
 				'CALLBACK
-				cell__callback_ppp_pap_nego_failed()
+				cell__callback_ppp_auth_nego_failed(ppp_protocoltype)
 				
-			case PPP_PEER_CONFREQ: '01 CHAP Challenge 
-				dim chanllenge_len as byte = asc(mid(cell__reply, 7,1))
-				dim ppp_challenge as string = mid(cell__reply, 8, chanllenge_len)
-				dim hash_input as string = cell__username + cell__password + ppp_challenge
-				dim ppp_sender_data as string
-				cell__ppp_sender_id = asc(mid(cell__reply, 4,1))
-				ppp_sender_data = md5(hash_input,"",MD5_FINISH,len(hash_input))
-				ppp_sender_data = chr(len(ppp_sender_data))+ppp_sender_data+cell__username
-				cell__ppp_send_data(CELL__PPP_PROTO_CHAP, 2 , cell__ppp_sender_id, ppp_sender_data,
-									next_pwr_phase, next_at_phase, next_ppp_phase, next_gps_phase, next_parse_phase)				
         end select
 
 		'Enable Fast-Load (if needed)
@@ -5179,6 +5239,8 @@ sub cell__ppp_proc_sys_timer()
 												PHASE_GPS_DONOT_CHANGE, PHASE_PARSE_PPP_MESSAGE)
 
             case PHASE_PPP_PAP_NEGOTIATION:
+				dim cell__pap_credentials as string(CELL__32b_LEN)	'PAP username and password
+				cell__pap_credentials = chr(len(cell__username)) + cell__username + chr(len(cell__password)) + cell__password
 				cell__ppp_send_data(CELL__PPP_PROTO_PAP, PPP_CONFREQ,  cell__ppp_sender_id, cell__pap_credentials,
 										PHASE_PWR_DONOT_CHANGE, PHASE_AT_DONOT_CHANGE, 
 											PHASE_PPP_IPCP_NEGOTIATION, 

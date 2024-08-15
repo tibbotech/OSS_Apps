@@ -597,10 +597,10 @@ end sub
 sub cell__callback_ppp_retry_exceeded()
 end sub
 
-sub cell__callback_ppp_pap_successful()
+sub cell__callback_ppp_auth_successful(auth_proto_code as word)
 end sub
 
-sub cell__callback_ppp_pap_nego_failed()
+sub cell__callback_ppp_auth_nego_failed(auth_proto_code as word)
 end sub
 
 sub cell__callback_ppp_ipcp_successful()
@@ -1585,9 +1585,7 @@ sub read_sensor()
 			sensor_telemetry_ts = ts
 			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 1, "", MODBUS_UART, modbus_RTU) 'humidity
 			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 3, 1, "", MODBUS_UART, modbus_RTU) 'temperature 
-			dim request_item as modbus_request_item
-			dim s as string
-			callback_modbus_slave_reply(request_item, s)
+
 		case 130: 'bp05
 			sensor_telemetry_ts = ts
 			modbus_master_request(modbus_device_id, ReadInputRegisters, 700, 1, "", MODBUS_UART, modbus_RTU) 'flood
