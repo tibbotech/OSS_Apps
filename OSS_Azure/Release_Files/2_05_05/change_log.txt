@@ -1,0 +1,34 @@
+Changelog of OSS APP
+	-	Date of change:16/08/2024
+	-	New revision of OSS APP: AZR2.05.05
+	-	Previous revision of OSS APP: AZR2.05.03 - 11/07/2024
+	-	The reason for change: 
+			-- Add Sensors Air, Rain
+			-- Add support for CGREG and CEREG
+			-- Add support for CHAP
+
+	-	Files changed:
+			-- cell.tbs: support for CGREG and CEREG, support for CHAP
+			-- cell.tbh: support for CGREG and CEREG, support for CHAP
+			-- boot.tbs: New sensors
+			-- device.tbs: New sensors
+			-- main.tbs: BLE sleep notification 
+			-- luis.xtxt: New sensors
+
+	-   Release files built:  
+			--2-05-05/OSS_Azure_APP0.tpc
+			--2-05-05/OSS_Azure_APP1.tpc
+			--2-05-05/OSS_Azure_FW_2-05-05.bin
+			--2-05-05/OSS_Azure_FW_2-05-05.tcu
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_022.hex
+			--OSS_SNS_PIC_FW_012.hex
+
+	- Level of change:Major
+	- Risk assessment and cons: 
+		Some of the sensors need to be further testing (Air, Rain)
+		Known issue with BLE not working after going into sleep.
+	- Deprecated Features: 
+			

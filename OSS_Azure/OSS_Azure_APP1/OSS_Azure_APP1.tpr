@@ -4,7 +4,7 @@ platform=WM2000
 src_lib_ver=0_00
 name=OSS_Azure_APP1
 output=OSS_Azure_APP1.tpc
-debug=on
+debug=off
 defines= 
 transport=udp_winpcap
 [address1]
@@ -335,13 +335,6 @@ condition=
 locked=no
 location=project
 [file46]
-path=OSS_SUPR_PIC_FW_023.hex
-type=binary
-format=
-condition=
-locked=no
-location=project
-[file47]
 path=luis.html
 type=htmlc
 format=65001
