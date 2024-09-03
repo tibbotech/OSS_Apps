@@ -1,8 +1,8 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="AZR2.05.05"
-const OSS_SUPR_FW_VER = "022"
+const OSS_APP_FW_VER="AZR2.05.06"
+const OSS_SUPR_FW_VER = "024"
 const OSS_SNS_FW_VER = "012"
-#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_022.hex"
+#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_024.hex"
 #define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_012.hex"
 
 includepp "settings.xtxt"
@@ -11,12 +11,12 @@ includepp "tables.xtxt"
 
 'XXX_DEBUG_PRINT value 0: don't print, 1: send to other output (tcp etc...) 2: 1+print to output pane
 #define STG_DEBUG_PRINT 1
-#define MQTT_DEBUG_PRINT 1
+#define MQTT_DEBUG_PRINT 2
 #define LUIS_DEBUG_PRINT 0
 #define DNS_DEBUG_PRINT 1
-#define HTTP_DEBUG_PRINT 1
+#define HTTP_DEBUG_PRINT 2
 #define CELL__DEBUG_PRINT 2
-#define AZURE_DEBUG_PRINT 1
+#define AZURE_DEBUG_PRINT 2
 #define DEVICE_DEBUG_PRINT 2
 #define SYS_EVENT_DEBUGPRINT 0
 #define SYS_DPRINT_SOCK_NUM 10

@@ -1,0 +1,25 @@
+Changelog of OSS APP
+	-	Date of change:16/08/2024
+	-	New revision of OSS APP: AZR2.05.05
+	-	Previous revision of OSS APP: AZR2.05.03 - 16/08/2024
+	-	The reason for change: 
+			-- new PIC firmware
+
+	-	Files changed:
+			none		
+		
+	-   Release files built:  
+			--2-05-06/OSS_Azure_APP0.tpc
+			--2-05-06/OSS_Azure_APP1.tpc
+			--2-05-06/OSS_Azure_FW_2-05-06.bin
+			--2-05-06/OSS_Azure_FW_2-05-06.tcu
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_01_02.bin
+			--OSS_SUPR_PIC_FW_024.hex
+			--OSS_SNS_PIC_FW_012.hex
+
+	- Level of change:Major
+	- Risk assessment and cons: 
+	- Deprecated Features: 
+			
