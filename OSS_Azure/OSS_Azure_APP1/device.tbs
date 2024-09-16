@@ -90,7 +90,7 @@ sub device_proc_timer()
 	else
 		device_migrating()
 	end if
-	device_sampling()
+	if sys.debugmode <> PL_SYS_DBG_SERIAL then device_sampling()
 	execute_special_command()
 end sub
 

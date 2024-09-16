@@ -6,7 +6,7 @@ name=OSS_Azure_APP1
 output=OSS_Azure_APP1.tpc
 debug=off
 defines= 
-transport=serial
+transport=udp_broadcast
 [address1]
 platform=WM2000
 transport=udp_winpcap
@@ -18,7 +18,7 @@ address=COM7:921600
 [address3]
 platform=WM2000
 transport=udp_broadcast
-address=156.101.249.58.64.101
+address=156.101.249.68.115.105
 [file1]
 path=main.tbs
 type=basic
@@ -335,7 +335,7 @@ condition=
 locked=no
 location=project
 [file46]
-path=OSS_SUPR_PIC_FW_024.hex
+path=OSS_SUPR_PIC_FW_025.hex
 type=binary
 format=
 locked=no

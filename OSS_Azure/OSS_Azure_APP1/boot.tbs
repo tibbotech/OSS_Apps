@@ -128,14 +128,14 @@ sub boot()
 	mcp23017_line_set(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,HIGH,TBT00_3_S5_CHANNEL)
 	
 	read_ntag()
-	turn_sensor3v3_on()
+	if sys.debugmode <> PL_SYS_DBG_SERIAL then turn_sensor3v3_on()
 	'-----------------------------------------------------------------	
 	
 	dim bl as string(1) = pic_read(&h02,1)
 	battery_level = asc(bl)
 	if battery_level > 100 then battery_level=0
 
-	sensor_init()	
+	if sys.debugmode <> PL_SYS_DBG_SERIAL then sensor_init()	
 	
 	dim scid as string(2) = pic_read(&h03,2)
 	dim msb as word = asc(left(scid,1))
