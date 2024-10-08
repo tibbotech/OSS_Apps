@@ -1,0 +1,29 @@
+Changelog of OSS APP
+	-	Date of change:7/10/2024
+	-	New revision of OSS APP: AZR2.05.09
+	-	Previous revision of OSS APP: AZR2.05.08 - 16/09/2024
+	-	The reason for change: 
+			-- New Platform+TiOS
+			-- Correct sensor type typo (Ambient)
+			-- Turn off WiFi in configuration mode
+			-- Fix bug, IP stored in setting didn't get updated when IP renew
+	-	Files changed:
+			-- luis.xtxt: fix typo
+			-- main.tbs: DHCP renew bug
+			-- Platforms/src/0_00/luis/luis.tbs: turn off WiFi when ble is connected.
+		
+	-   Release files built:  
+			--2-05-09/OSS_Azure_APP0.tpc
+			--2-05-09/OSS_Azure_APP1.tpc
+			--2-05-09/OSS_Azure_FW_2-05-9.bin
+			--2-05-09/OSS_Azure_FW_2-05-09.tcu
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_05.bin
+			--OSS_SUPR_PIC_FW_025.hex
+			--OSS_SNS_PIC_FW_012.hex
+
+	- Level of change:Major
+	- Risk assessment and cons: Changing TiOS could lead to unexpected bug, need to be carefully examined.
+	- Deprecated Features: 
+			

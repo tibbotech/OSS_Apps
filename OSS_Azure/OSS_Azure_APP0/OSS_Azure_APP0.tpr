@@ -22,7 +22,7 @@ address=COM5:921600
 [address4]
 platform=WM2000
 transport=udp_winpcap
-address=156.101.249.58.64.101
+address=156.101.249.68.115.105
 [address5]
 platform=WM2000
 transport=udp_broadcast

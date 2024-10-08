@@ -93,10 +93,10 @@ sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as strin
 		sys.reboot
 	end if
 
-	#if DEV_DEBUG_PRINT
-		dev_debugprint("WLN DHCP OK ("+ip+")")
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print("WLN DHCP OK (IP:"+ip+", GI:"+gateway_ip+", NM:"+ netmask +")")
 	#endif
-
+		
 	if wln.ip<>ip then
 		sock.inconenabledmaster=NO
 		close_interface_sockets(PL_SOCK_INTERFACE_WLN)
@@ -104,10 +104,12 @@ sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as strin
 		if gateway_ip<>"" then wln.gatewayip=gateway_ip
 		if netmask<>"" then wln.netmask=netmask
 		sock.inconenabledmaster=YES 
-		
-		stg_set("IP",0,ip)
-		stg_set("GI",0,gateway_ip)
-		stg_set("NM",0,netmask)
+	end if
+ 
+ 	if stg_get("IP",0) <> wln.ip then
+		stg_set("IP",0, wln.ip)
+		stg_set("GI",0,wln.gatewayip)
+		stg_set("NM",0,wln.netmask)		
 	end if
  
 	if config_mode=NO and comm_mode=0 then
