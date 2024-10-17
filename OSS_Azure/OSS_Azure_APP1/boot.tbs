@@ -32,8 +32,6 @@ declare command_issued as no_yes
 declare number_of_fld as byte
 
 sub boot()
-    'sys.debugmode = PL_SYS_DBG_SERIAL
-	'sys.debugmode = PL_SYS_DBG_NET
 
     'Fd(flash disk) setup
     '================================================================
@@ -223,13 +221,10 @@ sub boot()
 		device_awake_timer = device_awake_timer*2
 	end if
 
-'	if sys.resettype=PL_SYS_RESET_TYPE_EXTERNAL then
-'		device_add_event("reset due to power loss")		
-'	end if
     pat.play("B-B-B-",PL_PAT_CANINT)
 	
 	if pic_read(&hA3,1) = "\x00" and stg_get("NWPR",0) = "1" then
-		device_add_event("Password Recovery Success.")
+		device_add_event(EVENT_PASSWORD_RECOVERY_SUCC, "")
 		stg_set("NWPR",0,"0")
 	end if
 	
@@ -300,7 +295,7 @@ fw206:
 			stg_set("FWV",0,OSS_APP_FW_VER)
 		end if
 		stg_set("FWV",0,OSS_APP_FW_VER)
-		device_add_event("Upgrage done! "+OSS_APP_FW_VER)		
+		device_add_event(EVENT_UPGRADE_COMPLETE, OSS_APP_FW_VER)		
 	end if
 end sub
 
@@ -551,9 +546,9 @@ sub check_and_upgrade_sns_pic()
 				device_debug_print("SNS PIC FW upgraded failed!")
 			#endif
 			if ver = "\xFF\xFF\xFF" then
-				device_add_event("Sensor not connected.")
+				device_add_event(EVENT_SENSOR_NOT_FOUND, "")
 			else
-				device_add_event("SNS PIC FW upgrade failed!")
+				device_add_event(EVENT_SENSOR_UPGRADE_FAIL, "")
 			end if
 		else
 			#if DEVICE_DEBUG_PRINT
@@ -591,9 +586,9 @@ sub check_and_upgrade_supr_pic()
 		exit_LVP_mode()
 		
 		if upgrade_success = false then
-			device_add_event("SUPR PIC FW upgraded failed!")
+			device_add_event(EVENT_SUPERVISOR_UPGRADE_FAIL, "")
 		else
-			device_add_event("SUPR PIC FW upgraded!")
+			device_add_event(EVENT_SUPERVISOR_UPGRADE_SUCC, "")
 			sys.reboot()
 		end if
 	end if

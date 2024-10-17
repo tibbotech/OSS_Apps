@@ -203,7 +203,7 @@ sub on_button_released()
 		delay_ms(5)
 		if pic_read(&hA3,1)="\x77" then
 			stg_set("NWPR",0,"1")
-			device_add_event("Password Recovery Requested.")
+			device_add_event(EVENT_PASSWORD_RECOVERY_REQ, "")
 		end if				
 	end if	
 end sub

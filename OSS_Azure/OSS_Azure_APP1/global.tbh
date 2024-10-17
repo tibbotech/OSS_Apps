@@ -1,5 +1,5 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="AZR2.05.09"
+const OSS_APP_FW_VER="AZR2.05.10"
 const OSS_SUPR_FW_VER = "025"
 const OSS_SNS_FW_VER = "012"
 #define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_025.hex"
@@ -167,6 +167,28 @@ enum en_sensor_states
 	EN_SESNOR_TS_ERROR
 end enum
 
+enum en_device_events
+	EVENT_PASSWORD_RECOVERY_REQ,
+	EVENT_PASSWORD_RECOVERY_SUCC,
+	EVENT_UPGRADE_START,
+	EVENT_UPGRADE_FAIL,
+	EVENT_UPGRADE_PART_DOWNLOAD,
+	EVENT_UPGRADE_FULL_DOWNLOAD,
+	EVENT_UPGRADE_COMPLETE,
+	EVENT_SENSOR_INVALID_VALUE,
+	EVENT_SENSOR_TIMEOUT,
+	EVENT_SENSOR_NOT_FOUND,
+	EVENT_SENSOR_UPGRADE_FAIL,
+	EVENT_SUPERVISOR_UPGRADE_FAIL,
+	EVENT_SUPERVISOR_UPGRADE_SUCC,
+	EVENT_MIGRATE_START,
+	EVENT_MIGRATE_SUCC,
+	EVENT_MIGRATE_FAIL,
+	EVENT_MIGRATE_INVALID_KEY,
+	EVENT_ADVANCE_ACCEPTED_CMD,
+	EVENT_ADVANCE_REJECTED_CMD
+end enum
+
 declare interface_ready(MAX_NUM_INTERFACES) as no_yes
 declare current_interface as pl_sock_interfaces
 declare DNS_socket as byte
@@ -194,7 +216,7 @@ declare operation_mode as byte '0: always on, 1: low power mode
 declare sensor_state as en_sensor_states
 declare SYS_SOCK_DEBUGPRINT as byte
 
-declare sub device_add_event(byref event_msg as string)
+declare sub device_add_event(device_event as en_device_events, byref parameter as string)
 declare sub connect_to_firmware_server()
 declare sub connect_to_azure_server()
 declare function mcp23017_line_get2(num as ext_line_name, port as ext_port_name, channel as byte) as enum low_high

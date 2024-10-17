@@ -407,14 +407,14 @@ sub callback_azure_command_triggered(byref command as string, byref param as str
     case "UPGRADE": 'offline command, not expecting response
 		stg_set("DLPT",0,param)
 		stg_set("UPD",0,"0")
-		device_add_event("Upgrade start!")
+		device_add_event(EVENT_UPGRADE_START,"")
 		
 	case "RSTNTGPW":
 		pic_write(&hA3,"\x77")
 		delay_ms(5)
 		if pic_read(&hA3,1)="\x77" then
 			stg_set("NWPR",0,"1")
-			device_add_event("Password Recovery Requested.")
+			device_add_event(EVENT_PASSWORD_RECOVERY_REQ, "")
 		end if
 		
 	case "DEVMIG":
@@ -422,10 +422,10 @@ sub callback_azure_command_triggered(byref command as string, byref param as str
 		if right(new_pkey,1) = "=" then
 			new_scid = get_json_value(param,"SCID")
 			new_dvid = get_json_value(param,"DVID")
-			device_add_event("Device migrate starting, new Device ID: " + new_dvid)
+			device_add_event(EVENT_MIGRATE_START, new_dvid)
 			device_migrate_state = EN_DEVICE_MIGRATE_STARTING
 		else
-			device_add_event("Invalid command paramters.")
+			device_add_event(EVENT_MIGRATE_INVALID_KEY, "")
 			new_pkey = ""
 		end if
     case else: 'by default send response.
@@ -670,12 +670,54 @@ sub device_sleep()
 	sys.sleep(daycounts, mincounts, seconds)  
 end sub
 
-sub device_add_event(byref event_msg as string)
+sub device_add_event(device_event as en_device_events, byref parameter as string)
 	dim daycounts, mincounts as word
 	dim seconds as byte
 	dim tbl_result as en_tbl_status_codes	
 	dim ts as string(36) 
 	dim f as byte
+	dim event_msg as string(64)
+	
+	select case device_event
+	case EVENT_PASSWORD_RECOVERY_REQ:
+		event_msg="NFC password removal requested!"
+	case EVENT_PASSWORD_RECOVERY_SUCC:
+		event_msg="NFC password removed!"
+	case EVENT_UPGRADE_START:
+		event_msg="Over-the-air FW downloading started!"
+	case EVENT_UPGRADE_FAIL:
+		event_msg="FW download failed! retrying.."
+	case EVENT_UPGRADE_PART_DOWNLOAD:
+		event_msg=parameter+ " of FW downloaded!"
+	case EVENT_UPGRADE_FULL_DOWNLOAD:
+		event_msg="FW download completed! flashing firmware…"
+	case EVENT_UPGRADE_COMPLETE:
+		event_msg="Upgrade succeeded! New FW version:"+parameter
+	case EVENT_SENSOR_INVALID_VALUE:
+		event_msg="Reading value out of range! Read "+parameter
+	case EVENT_SENSOR_TIMEOUT:
+		event_msg="Unable to read sensor parameters!"
+	case EVENT_SENSOR_NOT_FOUND:
+		event_msg="Unable to detect the sensor pod or sensor pod did not boot!"
+	case EVENT_SENSOR_UPGRADE_FAIL:
+		event_msg="Sensor pod’s FW upgrade failed! Version mismatch detected!"
+	case EVENT_SUPERVISOR_UPGRADE_FAIL:
+		event_msg="Supervisor MCU’s FW upgrade failed! Version mismatch detected!"
+	case EVENT_SUPERVISOR_UPGRADE_SUCC:
+		event_msg="The FW of the supervisor MCU is upgraded!"
+	case EVENT_MIGRATE_START:
+		event_msg="Device migration started! The destination device ID:"+parameter
+	case EVENT_MIGRATE_SUCC:
+		event_msg="Device migrated! The destination device ID:"+parameter
+	case EVENT_MIGRATE_FAIL:
+		event_msg="Device migration failed!"
+	case EVENT_MIGRATE_INVALID_KEY:
+		event_msg="Invalid primary key! Device migration will not start!"
+	case EVENT_ADVANCE_ACCEPTED_CMD:
+		event_msg="Advance command ("+parameter+") accepted!"
+	case EVENT_ADVANCE_REJECTED_CMD:
+		event_msg="Advance command ("+parameter+") rejected!"
+	end select
 	
 	rand_event_num = rand_event_num+1
 	f=fd.filenum
@@ -767,11 +809,10 @@ sub device_store_app_fw(data as string)
 	'checksum verify
 		if checksum <> part_checksum then
 			if operation_mode = 0 then
-				device_add_event("Upgrade failed, retry..")
+				device_add_event(EVENT_UPGRADE_FAIL, "")
 			else
-				device_add_event("Upgrade failed, retry..")
-				stg_set("UPD",0,"0") 'start over
-				'device_upgrade_start()				
+				device_add_event(EVENT_UPGRADE_FAIL, "")
+				stg_set("UPD",0,"0") 'start over			
 			end if
 			exit sub
 		end if
@@ -780,9 +821,9 @@ sub device_store_app_fw(data as string)
 	end if
 
 	if app_fw_copy_part_to_file() = OK then
-		device_add_event(+str(part_num+1)+"/"+str(total_chuncks)+" downloaded")
+		device_add_event(EVENT_UPGRADE_PART_DOWNLOAD, str(part_num+1)+"/"+str(total_chuncks))
 	else	
-		device_add_event("Upgrade failed, retry..")
+		device_add_event(EVENT_UPGRADE_FAIL, "")
 		stg_set("UPD",0,"0") 'start over		
 	end if
 	'in power saving mode, connect to azure to finish other task
@@ -815,7 +856,7 @@ public sub upgrade_app_fw_init()
 		stg_set("UPD",0,"255")
 		fd.filenum = app_fw_filenum
 		if fd.open(APP_FW_FILE) = PL_FD_STATUS_OK then
-			device_add_event("Download Completed, flashing firmware! ")
+			device_add_event(EVENT_UPGRADE_FULL_DOWNLOAD, "")
 			'keep ACSIP alive
 			mcp23017_line_out_enable(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,yes,TBT00_3_S5_CHANNEL)
 			mcp23017_line_set(PMU_INHIBIT_LINE, PMU_INHIBIT_PORT, LOW, TBT00_3_S5_CHANNEL)
@@ -983,9 +1024,9 @@ read_again:
 		add_telemetry("BAT_LVL",str(battery_level),ts)
 	end if
 	
-	if temp_invalid = YES then device_add_event("Sensor value out of range [temp]: " + temp)
-	if humd_invalid = YES then device_add_event("Sensor value out of range [humd]: " + humd)
-	if co2_invalid = YES then device_add_event("Sensor value out of range [co2]: " + str_co2)
+	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
+	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
+	if co2_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[co2]: " + str_co2)
 	sensor_state = EN_SENSOR_SAMPLE_READ 
 end sub
 ' This function is to read the sensor board that has a local MCU on it and T/H sensor is populated on it but CO2 sensor is NOT populated on it
@@ -1059,8 +1100,8 @@ read_again:
 		add_telemetry("BAT_LVL",str(battery_level),ts)
 	end if
 	
-	if temp_invalid = YES then device_add_event("Sensor value out of range [temp]: " + temp)
-	if humd_invalid = YES then device_add_event("Sensor value out of range [humd]: " + humd)
+	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
+	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
 	sensor_state = EN_SENSOR_SAMPLE_READ 
 end sub
 
@@ -1455,7 +1496,7 @@ sub device_sampling()
 		sample_timer = 10
 		sensor_read_count = sensor_read_count + 1
 		if sensor_read_count > 3 then
-			device_add_event("Sensor not connected or sensor does not reply.")
+			device_add_event(EVENT_SENSOR_TIMEOUT, "")
 		end if
 		sensor_state = EN_SENSOR_WAITTING_TO_READ
 		
@@ -1497,7 +1538,7 @@ sub device_migrating()
 	case EN_DEVICE_MIGRATE_PROVISIONING:
 			
 	case EN_DEVICE_MIGRATE_SUCCESS:
-		device_add_event("Device migrated, new Device ID: " + new_dvid)
+		device_add_event(EVENT_MIGRATE_SUCC, new_dvid)
 		stg_set("DVID",0,new_dvid)
 		stg_set("SCID",0,new_scid)
 		stg_set("PKEY",0,new_pkey)
@@ -1515,7 +1556,7 @@ sub device_migrating()
 		
 	case EN_DEVICE_MIGRATE_FAILED:
 		if azure_fail_to_connect_count >= FAIL_CONN_COUNT_MAX then		
-			device_add_event("Migrate failed, Device ID: "+new_dvid)
+			device_add_event(EVENT_MIGRATE_FAIL, new_dvid)
 			new_dvid = ""
 			new_scid = "" 
 			new_pkey = ""
@@ -1542,6 +1583,7 @@ sub execute_special_command()
 	if command_issued = NO then exit sub
 	dim cmd as string(32) = stg_get("CMD",0)
 	select case cmd
+	
 	case "CACO2:400":
 		if sensor_type = 1 then
 			co2_calibration()
@@ -1550,11 +1592,12 @@ sub execute_special_command()
 			cmd = ""
 		end if
 	case else:
+		device_add_event(EVENT_ADVANCE_REJECTED_CMD,cmd)
 		cmd = ""
 	end select
 	
 	if cmd <> "" then
-		device_add_event("Advance command ("+cmd+")")
+		device_add_event(EVENT_ADVANCE_ACCEPTED_CMD,cmd)
 	end if		
 	command_issued = NO
 	stg_set("CMD",0,"")

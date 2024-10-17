@@ -1,0 +1,29 @@
+Changelog of OSS APP
+	-	Date of change:17/10/2024
+	-	New revision of OSS APP: AZR2.05.10
+	-	Previous revision of OSS APP: AZR2.05.09 - 7/10/2024
+	-	The reason for change: 
+			-- Add new debug mode (None)
+			-- Modify and centralize the text of "Events"
+
+	-	Files changed:
+			-- OSS_Azure_APP0/luis.xtxt: Debugmode (None)
+			-- boot.tbs: Centralize the text for events
+			-- device.tbs: Centralize the text for events
+			-- main.tbs: Centralize the text for events
+
+	-   Release files built:  
+			--2-05-10/OSS_Azure_APP0.tpc
+			--2-05-10/OSS_Azure_APP1.tpc
+			--2-05-10/OSS_Azure_FW_2-05-10.bin
+			--2-05-10/OSS_Azure_FW_2-05-10.tcu
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_05.bin
+			--OSS_SUPR_PIC_FW_025.hex
+			--OSS_SNS_PIC_FW_012.hex
+
+	- Level of change:Major
+	- Risk assessment and cons: 
+	- Deprecated Features: 
+			
