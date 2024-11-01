@@ -167,7 +167,8 @@ end sub
 sub time_to_str(byref ts_str as string(20),	
 	byref time_daycount as word,
 	byref time_mincount as word,
-	byref time_second_byte as byte)
+	byref time_second_byte as byte,
+	with_separators as no_yes)
 	dim time_year_str, time_month_str, time_date_str, time_hour_str, time_minute_str, time_second_str as string(4)
 
 	time_year_str=str(year(time_daycount)+2000)
@@ -192,6 +193,67 @@ sub time_to_str(byref ts_str as string(20),
 	if len(time_month_str) < 2 then 
 		time_month_str="0"+time_month_str 
 	end if
-	ts_str=time_year_str+"-"+time_month_str+"-"+time_date_str+"T"+time_hour_str+":"+time_minute_str+":"+time_second_str
-	
+	if with_separators = YES then
+		ts_str=time_year_str+"-"+time_month_str+"-"+time_date_str+"T"+time_hour_str+":"+time_minute_str+":"+time_second_str
+	else
+		ts_str=time_year_str+time_month_str+time_date_str+time_hour_str+time_minute_str+time_second_str
+	end if
 end sub
+
+'------------------------------------------------------------------------------
+function device_rtc_get_serialized(wdaycount as word, wmincount as word, bsec as byte) as dword
+'calculate number of seconds from 2000-01-01 00:00:00
+	dim dw1 as dword
+	
+	if (wdaycount+wmincount+bsec) = 0 then
+		rtc.getdata(wdaycount,wmincount,bsec)
+	end if
+	device_rtc_get_serialized=wdaycount
+	device_rtc_get_serialized=device_rtc_get_serialized*86400
+	dw1=wmincount
+	dw1=dw1*60
+	device_rtc_get_serialized=device_rtc_get_serialized+dw1+bsec
+
+end function
+
+sub device_serialized_to_time(ts as dword, byref wdaycount as word, byref wmincount as word, byref bsec as byte)
+'convert time in seconds since 2000-01-01 00:00:00 to daycount, mincount and second	
+	wdaycount = ts / 86400 'num of sec in a day is 86400
+	ts = ts mod 86400
+	wmincount = ts / 60
+	bsec = ts mod 60 
+end sub
+
+'------------------------------------------------------------------------------
+function string_to_dword(s_addr as string(4)) as dword
+'convert a 4-bytes string to a word value
+	dim b1, b2, b3, b4 as dword
+	
+	b1=asc(mid(s_addr,1,1))
+	b2=asc(mid(s_addr,2,1))
+	b3=asc(mid(s_addr,3,1))
+	b4=asc(mid(s_addr,4,1))
+	
+	string_to_dword=b1*16777216
+	string_to_dword=string_to_dword+(b2*65536)
+	string_to_dword=string_to_dword+(b3*256)
+	string_to_dword=string_to_dword+b4
+end function
+
+'------------------------------------------------------------------------------
+function dword_to_string(dw as dword) as string(4)
+	dim b1, b2, b3, b4 as dword
+	
+	b1=dw/16777216
+	b1=b1 mod 256
+	
+	b2=dw/65536
+	b2=b2 mod 256
+	
+	b3=dw/256
+	b3=b3 mod 256
+	
+	b4=dw mod 256
+	dword_to_string=chr(b1)+chr(b2)+chr(b3)+chr(b4)
+	
+end function

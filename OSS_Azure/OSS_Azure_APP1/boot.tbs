@@ -51,7 +51,16 @@ sub boot()
         if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
     end if
 	
-    'Setting Library Initialization	
+	dim i, rec_num as word
+	dim ts as string
+	tbl_select("SysTS","SysTS")
+	tbl_get_num_records(rec_num,NO)
+	for i = rec_num to MAXIMUM_TS_NUM-1
+		tbl_field_sg("TS","0",EN_TBL_SET)
+		tbl_record_add("")
+	next i
+	
+	'Setting Library Initialization	
     '================================================================
     dim stg_init_code as en_stg_status_codes
     dim stg_name as string(STG_MAX_SETTING_NAME_LEN)
@@ -141,9 +150,27 @@ sub boot()
 	dim cid as word = msb*256+lsb
 	stg_set("CID",0,str(cid))
 	
+	'---------timers--------------------------------------------------
 	sleep_time=val(stg_get("SPT",0))
 	device_awake_timer = val(stg_get("AWK",0))*120
+
+    dim prev_sensor_read_ts as dword
+	dim current_ts as dword
 	
+	tbl_select("SysTS","SysTS")
+	tbl_record_sg(EN_TS_LAST_SAMPLED,EN_TBL_GET)
+	tbl_field_sg("TS",ts,EN_TBL_GET)
+	current_ts = device_rtc_get_serialized(0,0,0)
+	prev_sensor_read_ts = lval(ts)
+	next_sensor_read_ts = prev_sensor_read_ts + (sleep_time*60)
+		
+	'if at boot up time is already bigger than the time for next read, at the boot up delay the make sure sensor has time to boot properly before read
+'	if sys.runmode = PL_SYS_MODE_DEBUG or current_ts > next_sensor_read_ts then
+'		next_sensor_read_ts = current_ts + boot_up_delay
+'	end if
+	if  current_ts > next_sensor_read_ts then
+		next_sensor_read_ts = current_ts + boot_up_delay
+	end if	
 	if config_mode = YES then
 		'Bluetooth setup
 		'================================================================
@@ -183,7 +210,8 @@ sub boot()
 		sock.num=SYS_DPRINT_SOCK_NUM
 		sock.txbuffrq(5)
 		sys.buffalloc()
-		sock.protocol=PL_SOCK_PROTOCOL_TCP
+		'sock.protocol=PL_SOCK_PROTOCOL_TCP
+		sock.protocol=PL_SOCK_PROTOCOL_UDP
 		sock.targetip=stg_get("DBIP",0)  'changes as see fit
 		sock.targetport=val(stg_get("DBPR",0))
 	else
@@ -308,7 +336,7 @@ end sub
 sub alternate_debugprint(byref source as string, byref msg as string)
 	
 	#if SYS_EVENT_DEBUGPRINT
-		device_add_event(msg)
+		device_add_event(EVENT_DEBUG_INFO, msg)
 	#endif
 
 	select case SYS_SOCK_DEBUGPRINT
@@ -434,18 +462,22 @@ sub sensor_init()
 	
 	select case sensor_type
 	case 0, 1:	'temp_hum / temp_hum_co2
-		if sensor_type = 0 then sample_timer = 15
-		if sensor_type = 1 then sample_timer = 40
+		if sensor_type = 0 then boot_up_delay = 8
+		if sensor_type = 1 then boot_up_delay = 30
 		init_i2c_sensor()
 		check_and_upgrade_sns_pic()
 		
 	case 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139: 'modbus sensor
-		sample_timer = 4
+		boot_up_delay = 10
 		init_modbus_sensor()
 		
 	case else:
 		exit sub
 	end select
+	
+	sensor_state = EN_SENSOR_WAITTING_TO_READ
+	'in power saving mode log battery level
+	if operation_mode = 1 then number_of_fld = number_of_fld + 1	
 end sub
 
 sub read_ntag()

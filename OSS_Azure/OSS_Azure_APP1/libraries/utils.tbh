@@ -2,3 +2,7 @@ declare function math_pow(base as integer, exp as integer) as real
 declare function math_hex_to_float(num as string) as real
 declare sub base64_encode(byref input_str as string, input_len as byte, byref result as string)
 declare sub base64_decode(byref input as string, byref result as string)
+declare function device_rtc_get_serialized(wdaycount as word, wmincount as word, bsec as byte) as dword
+declare function string_to_dword(s_addr as string(4)) as dword
+declare function dword_to_string(dw as dword) as string(4)
+declare sub device_serialized_to_time(ts as dword, byref wdaycount as word, byref wmincount as word, byref bsec as byte)

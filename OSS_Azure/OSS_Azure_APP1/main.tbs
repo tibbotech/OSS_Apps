@@ -45,7 +45,7 @@ sub on_sys_timer()
 			credential_changed = NO
 		end if	
 		if device_awake_timer > 0  then
-			if operation_mode > 0 then
+			if operation_mode = 1 then 'power saving mode
 				device_awake_timer=device_awake_timer-1
 			end if
 		else

@@ -11,14 +11,14 @@ includepp "tables.xtxt"
 
 'XXX_DEBUG_PRINT value 0: don't print, 1: send to other output (tcp etc...) 2: 1+print to output pane
 #define STG_DEBUG_PRINT 1
-#define MQTT_DEBUG_PRINT 2
+#define MQTT_DEBUG_PRINT 1
 #define LUIS_DEBUG_PRINT 0
 #define DNS_DEBUG_PRINT 1
-#define HTTP_DEBUG_PRINT 2
-#define CELL__DEBUG_PRINT 2
-#define AZURE_DEBUG_PRINT 2
-#define DEVICE_DEBUG_PRINT 2
-#define SYS_EVENT_DEBUGPRINT 0
+#define HTTP_DEBUG_PRINT 1
+#define CELL__DEBUG_PRINT 1
+#define AZURE_DEBUG_PRINT 1
+#define DEVICE_DEBUG_PRINT 1
+#define SYS_EVENT_DEBUGPRINT 0 'save as telemetry
 #define SYS_DPRINT_SOCK_NUM 10
 #define LUIS_CONFIG_FILE "luis.xtxt"
 
@@ -64,6 +64,8 @@ const SENSOR_CONTROL_PIN = PL_IO_NUM_5 ' this one selects i2c (low) or RS485 (hi
 const HIH6130_WRITE_ADDR=&h4E
 const HIH6130_READ_ADDR=&h4F
 
+const MAXIMUM_TS_NUM=5
+'const BASELINE_TS = 783046200 '2024-10-24 00:00:00
 'SET DESIRED CELL-MODE-----------------------------------------------
 #define CELL_IO_EXTENDER 1
 #define CELL__PPP_MODE_ISENABLED	1
@@ -158,6 +160,9 @@ include "libraries\cell.tbh"
 include "libraries\modbus.tbh"
 include "PIC_LVP.tbh"
 'DECLARATIONS--------------------------------------------------------
+enum en_ts_type
+	EN_TS_LAST_SAMPLED = 0
+end enum
 
 enum en_sensor_states
 	EN_SENSOR_WAITTING_TO_READ,
@@ -186,7 +191,8 @@ enum en_device_events
 	EVENT_MIGRATE_FAIL,
 	EVENT_MIGRATE_INVALID_KEY,
 	EVENT_ADVANCE_ACCEPTED_CMD,
-	EVENT_ADVANCE_REJECTED_CMD
+	EVENT_ADVANCE_REJECTED_CMD,
+	EVENT_DEBUG_INFO
 end enum
 
 declare interface_ready(MAX_NUM_INTERFACES) as no_yes
@@ -210,11 +216,12 @@ declare CELL__MYPASSWORD as string(16)
 declare CELL__AT_CNMP as string(16)
 declare CELL__AT_CMNB as string(16)
 declare sensor_type as byte
-declare sample_timer as word
+declare boot_up_delay as byte
 declare battery_level as byte
 declare operation_mode as byte '0: always on, 1: low power mode
 declare sensor_state as en_sensor_states
 declare SYS_SOCK_DEBUGPRINT as byte
+declare next_sensor_read_ts as dword
 
 declare sub device_add_event(device_event as en_device_events, byref parameter as string)
 declare sub connect_to_firmware_server()
@@ -233,6 +240,8 @@ declare sub delay_ms(ms as dword)
 declare sub enter_LVP_mode()
 declare sub exit_LVP_mode()
 declare sub alternate_debugprint(byref source as string, byref msg as string)
+declare sub set_timestamp(ts_type as en_ts_type, ts as dword)
+
 #if DEVICE_DEBUG_PRINT
 	declare sub device_debug_print(byref data as string)
 #endif

@@ -1633,7 +1633,12 @@ public function tbl_record_delete(byref rec_num as word) as en_tbl_status_codes
 		if tbl_active_rc_sg(tbl_selected_active_rc,EN_TBL_SET)<>PL_FD_STATUS_OK then goto fd_error
 		if fd.setdata(TBL_DELETE_FLAG)<>PL_FD_STATUS_OK then goto fd_error
 		#if TBL_ADJUST_LIST_WHEN_FULL=0
-			if tbl_adjust_size()<>EN_TBL_STATUS_OK then goto fd_error
+			if tbl_adjust_size()<>EN_TBL_STATUS_OK then 
+				goto fd_error
+			end if
+			if fd.filesize = 0 then
+				if tbl_active_rc_sg(0,EN_TBL_SET)<>PL_FD_STATUS_OK then goto fd_error
+			end if
 		#endif
 		if fd.transactioncommit<>PL_FD_STATUS_OK then goto fd_error
 		callback_tbl_modified(tbl_selected_file_name,EN_TBL_MODIFIED_DELETE)

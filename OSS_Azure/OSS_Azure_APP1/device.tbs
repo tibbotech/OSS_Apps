@@ -15,7 +15,7 @@ end enum
 dim credential_changed as no_yes = NO
 dim azure_fail_to_connect_count as byte = 0
 dim azure_current_url as string
-dim sample_timer as word
+dim boot_up_delay as byte = 0
 dim sensor_channel as byte
 dim pic_channel as byte
 dim device_awake_timer as word
@@ -42,8 +42,9 @@ dim rand_event_num as byte
 dim command_issued as no_yes = NO
 dim sensor_read_count as byte = 0 
 dim sensor_state as en_sensor_states
-dim number_of_fld as byte
+dim number_of_fld as byte = 0
 dim field_counter as byte = 0
+dim next_sensor_read_ts as dword
 
 declare sub device_sampling()
 declare sub device_migrating()
@@ -51,7 +52,8 @@ declare function get_json_value(byref json_str as string, byref attribute as str
 declare sub time_to_str(byref ts_str as string(20),	
 	byref time_daycount as word,
 	byref time_mincount as word,
-	byref time_second_byte as byte)
+	byref time_second_byte as byte,
+	with_separators as no_yes)
 
 declare sub device_sleep()
 declare sub device_store_app_fw(data as string)
@@ -73,7 +75,7 @@ declare sub decimal_point_converter(byref value as string, decimal as byte)
 
 sub device_proc_timer()	
 	'deduct device_awake_timer only when device is not doing upgrade and in Low power mode	
-	if operation_mode > 0 then
+	if operation_mode = 1 then
 		if device_awake_timer>0 then
 			device_awake_timer=device_awake_timer-1
 			if device_awake_timer = 0 then
@@ -388,6 +390,7 @@ end sub
 sub callback_azure_rtc_correction(daycounts as word, mincounts as word, seconds as byte)
 	'if rtc was reseted, take another sample with corrected timestample
 	sensor_state = EN_SENSOR_WAITTING_TO_READ
+	
 end sub
 
 sub callback_azure_provision_failed()
@@ -435,11 +438,37 @@ sub callback_azure_command_triggered(byref command as string, byref param as str
 end sub     
 
 sub callback_azure_device_assigned(byref assigned_hub as string)
+	dim wdaycount, wmincount as word
+	dim bsec as byte
+	
+	rtc.getdata(wdaycount,wmincount,bsec)
+	stg_timestamp.ts_daycount = wdaycount
+	stg_timestamp.ts_mincount = wmincount
+	stg_timestamp.ts_seconds = bsec
+	stg_timestamp.ts_milsec = 0
+	
 	stg_set("HUBN",0,assigned_hub)
+	
+	stg_timestamp.ts_daycount = 0
+	stg_timestamp.ts_mincount = 0
+	stg_timestamp.ts_seconds = 0
 end sub
 
 sub callback_azure_get_assigned_hub(byref assigned_hub as string)
+	dim last_rtc_updated as dword
+	
 	assigned_hub = stg_get("HUBN",0)
+	
+	'check if it has been more than 5 days since device connect to provision server for rtc update
+	if (stg_timestamp.ts_daycount+stg_timestamp.ts_mincount+stg_timestamp.ts_seconds) = 0 then
+		stg_set("HUBN",0,"")
+	else
+		last_rtc_updated = device_rtc_get_serialized(stg_timestamp.ts_daycount,stg_timestamp.ts_mincount,stg_timestamp.ts_seconds)
+		if 	(last_rtc_updated + 432000) < device_rtc_get_serialized(0,0,0) then
+			 stg_set("HUBN",0,"")
+		end if	
+	end if
+	
 end sub
         
 sub callback_azure_conn_timeout()
@@ -465,12 +494,19 @@ sub callback_azure_on_telemetry_sent()
 	if active_rec_num > 0 then
 		azure_send_telemetry()
 	else
-		sensor_state = EN_SENSOR_SAMPLE_SENT
 		if operation_mode = 0 then 
+			sensor_state = EN_SENSOR_SAMPLE_SENT
+
 			upgrade_state = val(stg_get("UPD",0))
 			if upgrade_state <> 255 then
 				connect_to_firmware_server()
 			end if
+		else
+			'in low-power mode, do not switch case if sample haven't been taken
+			if sensor_state <> EN_SENSOR_WAITTING_TO_READ then
+				sensor_state = EN_SENSOR_SAMPLE_SENT
+
+			end if 		
 		end if
 	end if
 																																																
@@ -487,6 +523,7 @@ end sub
 
 sub callback_azure_on_disconnected()
 	pat.play("-",PL_PAT_CANINT)
+	
 end sub
 
 sub callback_azure_update_twin_version(byref ver as string)
@@ -649,15 +686,8 @@ sub device_sleep()
 	if sleep_time=0 then
 		exit sub
 	end if
+	
 	mqtt_disconnect()
-	rtc.getdata(daycounts,mincounts,seconds)
-	if sleep_time>1440 then
-		sleep_time=sleep_time-1440
-		daycounts=daycounts+1
-	end if
-	mincounts=mincounts+sleep_time
-	daycounts=daycounts+(mincounts/1440)
-	mincounts=mincounts mod 1440
 	turn_sensor3v3_off()
 	
 	if sensor_type > 127 then
@@ -667,7 +697,41 @@ sub device_sleep()
 	if comm_mode = 0 then
 		wln.autoconnect = need_to_connect()
 	end if
-	sys.sleep(daycounts, mincounts, seconds)  
+	
+'------------------------------------------------------	
+'device sleeps until next read substract the time for sensor to boot properly	
+	dim next_boot_ts as dword
+	dim current_ts as dword
+	
+	rtc.getdata(daycounts, mincounts, seconds)
+	current_ts = device_rtc_get_serialized(daycounts, mincounts, seconds)
+	next_boot_ts = next_sensor_read_ts - boot_up_delay
+
+	#if DEVICE_DEBUG_PRINT
+		dim ts as string
+		
+		time_to_str(ts,daycounts,mincounts, seconds,YES)
+		device_debug_print("Now:" + ts)
+	#endif
+	
+'if current time is already exceed the time for next read, wake up in 1 cycle time from now
+	if next_boot_ts <=  current_ts then
+		next_boot_ts = current_ts + (sleep_time*60)
+	end if
+
+	device_serialized_to_time(next_boot_ts, daycounts, mincounts, seconds)
+	
+	#if DEVICE_DEBUG_PRINT
+		
+		time_to_str(ts,daycounts,mincounts, seconds,YES)
+		device_debug_print("Sleep till:" + ts)
+	#endif
+	
+	if sys.runmode = PL_SYS_MODE_RELEASE then
+		sys.sleep(daycounts, mincounts, seconds)  
+	else 
+		sys.halt()
+	end if
 end sub
 
 sub device_add_event(device_event as en_device_events, byref parameter as string)
@@ -717,12 +781,14 @@ sub device_add_event(device_event as en_device_events, byref parameter as string
 		event_msg="Advance command ("+parameter+") accepted!"
 	case EVENT_ADVANCE_REJECTED_CMD:
 		event_msg="Advance command ("+parameter+") rejected!"
+	case EVENT_DEBUG_INFO:
+		event_msg=parameter
 	end select
 	
 	rand_event_num = rand_event_num+1
 	f=fd.filenum
 	rtc.getdata(daycounts,mincounts,seconds)
-	time_to_str(ts,daycounts,mincounts,seconds)
+	time_to_str(ts,daycounts,mincounts,seconds,YES)
 	
 	ts=ts+"."+str(rand_event_num)+"Z"	
 	
@@ -937,6 +1003,7 @@ read_again:
 		
 	if data0 <> 0 then
 		sensor_state = EN_SENSOR_READ_ERROR
+
 		exit sub
 	end if
 '----------------------------
@@ -1001,7 +1068,7 @@ read_again:
 	end if
 	
 	#if DEVICE_DEBUG_PRINT
-		device_debug_print(temp+"C "+humd+"% "+str_co2)
+		device_debug_print(temp+"C "+humd+"% "+str_co2+" "+ts)
 	#endif
 
 	if temp_invalid = YES or humd_invalid = YES or co2_invalid = YES then
@@ -1018,7 +1085,7 @@ read_again:
 	if temp_invalid = NO then add_telemetry("temperature",temp,ts)
 	if humd_invalid = NO then add_telemetry("humidity",humd,ts)
 	if co2_invalid = NO then add_telemetry("co2",str_co2,ts)
-	
+
 	'in power saving mode log battery level
 	if operation_mode = 1 then
 		add_telemetry("BAT_LVL",str(battery_level),ts)
@@ -1027,7 +1094,8 @@ read_again:
 	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
 	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
 	if co2_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[co2]: " + str_co2)
-	sensor_state = EN_SENSOR_SAMPLE_READ 
+	sensor_state = EN_SENSOR_SAMPLE_READ
+
 end sub
 ' This function is to read the sensor board that has a local MCU on it and T/H sensor is populated on it but CO2 sensor is NOT populated on it
 sub read_onboard_t_h_sensor(byref ts as string)
@@ -1079,7 +1147,7 @@ read_again:
 	end if
 	
 	#if DEVICE_DEBUG_PRINT
-		device_debug_print(temp+"C "+humd+"% ")
+		device_debug_print(temp+"C "+humd+"% "+ts)
 	#endif
 
 	if temp_invalid = YES or humd_invalid = YES then
@@ -1094,7 +1162,7 @@ read_again:
 
 	if temp_invalid = NO then add_telemetry("temperature",temp,ts)
 	if humd_invalid = NO then add_telemetry("humidity",humd,ts)
-	
+
 	'in power saving mode log battery level
 	if operation_mode = 1 then
 		add_telemetry("BAT_LVL",str(battery_level),ts)
@@ -1103,6 +1171,7 @@ read_again:
 	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
 	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
 	sensor_state = EN_SENSOR_SAMPLE_READ 
+
 end sub
 
 sub pic_write(addr as byte, byref data as string)
@@ -1166,9 +1235,11 @@ function need_to_connect() as no_yes
 		exit function
 	end if
 	
-	'in power saving mode log battery level
-	if operation_mode = 1 then number_of_fld = number_of_fld + 1
-	
+	if sys.runmode = PL_SYS_MODE_DEBUG and sys.debugmode = PL_SYS_DBG_NET then
+		need_to_connect=YES 
+		exit function
+	end if
+		
 	tbl_select("Azure","Azure")
 	tbl_get_num_records(active_rec_num,NO)
 	active_rec_num=active_rec_num/number_of_fld
@@ -1221,6 +1292,7 @@ end function
 
 sub callback_modbus_slave_reply_timeout(byref request_item as modbus_request_item)
 	sensor_state = EN_SENSOR_READ_ERROR
+
 end sub
 
 sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref reply as string)
@@ -1241,11 +1313,13 @@ sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref
 			if number_of_fld - field_counter = 1 then
 				add_telemetry("BAT_LVL",str(battery_level),sensor_telemetry_ts)
 				sensor_state = EN_SENSOR_SAMPLE_READ
+
 				field_counter = 0
 			end if
 		else
-			if number_of_fld = 0 then
+			if number_of_fld - field_counter = 0 then
 				sensor_state = EN_SENSOR_SAMPLE_READ 
+
 				field_counter = 0
 			end if
 		end if
@@ -1353,7 +1427,7 @@ sub proc_modbus_jx(byref request_item as modbus_request_item, byref reply as str
 	end select
 	decimal_point_converter(str_tmp,decimal)
 	#if DEVICE_DEBUG_PRINT
-		device_debug_print(telemetry_name + ">> "+ str_tmp)
+		device_debug_print(telemetry_name + ">> "+ str_tmp + " "+sensor_telemetry_ts)
 	#endif	
 	add_telemetry(telemetry_name,str_tmp,sensor_telemetry_ts)
 end sub
@@ -1396,7 +1470,7 @@ sub proc_modbus_bp(byref request_item as modbus_request_item, byref reply as str
 	end select
 	decimal_point_converter(str_tmp,decimal)
 	#if DEVICE_DEBUG_PRINT
-		device_debug_print(telemetry_name + ">> "+ str_tmp)
+		device_debug_print(telemetry_name + ">> "+ str_tmp  + " "+sensor_telemetry_ts)
 	#endif	
 	add_telemetry(telemetry_name,str_tmp,sensor_telemetry_ts)
 end sub
@@ -1462,16 +1536,8 @@ sub device_sampling()
 
 	select case sensor_state
 	case EN_SENSOR_WAITTING_TO_READ:
-		if sample_timer>0 then
-			sample_timer=sample_timer-1
-			if sample_timer = 0 then		
-				read_sensor()
-				'in always on mode refresh the sample_timer with sleep_time
-				if operation_mode = 0 then
-					'when in Always on mode, sample time is same as sleep time
-					sample_timer = sleep_time*120					
-				end if
-			end if
+		if device_rtc_get_serialized(0,0,0) >= next_sensor_read_ts then
+			read_sensor()
 		end if
 		
 	case EN_SENSOR_SAMPLE_READ: 
@@ -1482,31 +1548,34 @@ sub device_sampling()
 			end if
 		else
 			sensor_state = EN_SENSOR_WAITTING_TO_READ
+
 		end if
 		azure_send_telemetry()
 		
-	case EN_SENSOR_SAMPLE_SENT: 'go to sleep in low power mode
+	case EN_SENSOR_SAMPLE_SENT: 
+	'in low power mode check if sample has been taken, if not wait for read, otherwise go to sleep
 		if operation_mode = 1 then
 			device_awake_timer = 1
 		else
 			sensor_state = EN_SENSOR_WAITTING_TO_READ
+
 		end if
 		
 	case EN_SENSOR_READ_ERROR:
-		sample_timer = 10
+		next_sensor_read_ts=device_rtc_get_serialized(0,0,0)+5
 		sensor_read_count = sensor_read_count + 1
 		if sensor_read_count > 3 then
 			device_add_event(EVENT_SENSOR_TIMEOUT, "")
 		end if
 		sensor_state = EN_SENSOR_WAITTING_TO_READ
-		
+
 	case EN_SESNOR_TS_ERROR:	
-		sample_timer = 20
+		next_sensor_read_ts=device_rtc_get_serialized(0,0,0)+10
 		#if DEVICE_DEBUG_PRINT
 			device_debug_print("Bad timestampe, skip sensor sampling")
 		#endif
 		sensor_state = EN_SENSOR_WAITTING_TO_READ
-		
+
 	end select
 
 end sub
@@ -1587,7 +1656,7 @@ sub execute_special_command()
 	case "CACO2:400":
 		if sensor_type = 1 then
 			co2_calibration()
-			sample_timer = 30
+			next_sensor_read_ts=device_rtc_get_serialized(0,0,0)+15
 		else
 			cmd = ""
 		end if
@@ -1612,7 +1681,9 @@ sub read_sensor()
 	'check the timestampe, if it's invalid, don't sample, but sample again in 2 sec
 	rtc.getdata(daycounts,mincounts,seconds)
 	if daycounts>0 then
-		time_to_str(ts,daycounts,mincounts,seconds)
+		set_timestamp(EN_TS_LAST_SAMPLED,device_rtc_get_serialized(0,0,0))
+		
+		time_to_str(ts,daycounts,mincounts,seconds,YES)
 		ts=ts+".000Z"
 		
 		select case sensor_type
@@ -1675,9 +1746,10 @@ sub read_sensor()
 			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 4, 1, "", MODBUS_UART, modbus_RTU) 'PM1.0
 		
 		case else:
-		end select	
+		end select
 	else
 		sensor_state = EN_SESNOR_TS_ERROR
+
 	end if
 end sub
 
@@ -1731,3 +1803,18 @@ sub decimal_point_converter(byref value as string, decimal as byte)
 		value = "-"+value
 	end if
 end sub
+
+sub set_timestamp(ts_type as en_ts_type, ts as dword)
+	dim w as word
+	
+	tbl_select("SysTS","SysTS")
+	tbl_field_sg("TS",lstr(ts),EN_TBL_SET)
+	w = ts_type
+	tbl_record_edit(w)
+	
+	'update the time for the next sensor read
+	if ts_type = EN_TS_LAST_SAMPLED then 
+		next_sensor_read_ts = ts + (sleep_time*60)
+	end if
+end sub
+

@@ -2,10 +2,12 @@
 >>time	S	20	24	2000-00-00T00:00:00Z	Timestamp
 >>type	S	0	24	^	Telemetry Type
 >>value	S	0	64	^	Telemetry Value
+==SysTS	10	T	0	System timestamps
+>>TS	U	0	4294967294	0	serialized timestamp
 #define TBL_DESCRIPTOR_FILE "tables.xtxt"
 #define TBL_MAX_TABLE_NAME_LEN 5
 #define TBL_MAX_FIELD_NAME_LEN 5
 #define TBL_MAX_FIELD_VALUE_LEN 65
 #define TBL_MAX_RECORD_SIZE 128
-#define TBL_MAX_NUM_TABLES 1
-#define TBL_MAX_TOTAL_NUM_FIELDS 3
+#define TBL_MAX_NUM_TABLES 2
+#define TBL_MAX_TOTAL_NUM_FIELDS 4
