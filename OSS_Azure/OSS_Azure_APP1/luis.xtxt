@@ -5,7 +5,7 @@ I=DVNT;T=STRING;D=Device Note;C=EDIT;xIndex=3;S=1==1?"i":"e";
 I=TZ;T=STRING;D=Time Zone;C=EDIT;xIndex=4;S=1==1?"i":"e";
 I=FWV;T=STRING;D=Firmware;C=EDIT;V=none;S=1==1?"i":"e";xIndex=5;
 I=GEN;D=Connectivity;T=GROUP;
-I=MODE;T=INT;C=STATIC;D=Communication Mode;O=Wi-Fi/0/Cellular/1;xIndex=7;
+I=MODE;T=INT;C=STATIC;D=Communication Mode;O=Wi-Fi/0/Cellular/1/Wi-Fi with Cellular Backup/2;xIndex=7;
 I=WAP;T=STRING;C=EDIT;D=Wi-Fi SSID;S=MODE==1?"i":"e";xIndex=8;
 I=WPW;T=STRING;C=PASSWORD;D=Wi-Fi Password;S=MODE==1?"i":"e";xIndex=9;
 I=DH;T=INT;C=STATIC;D=Wi-Fi DHCP;O=Disable/0/Enable/1;xIndex=10;S=MODE==1?"i":"e";

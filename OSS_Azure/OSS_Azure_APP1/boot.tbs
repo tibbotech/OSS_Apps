@@ -5,7 +5,8 @@ include "global.tbh"
 const CELL__SIMCARD_PIN = CELL__QUESTMARK	'<-- CHANGE THIS AS NEEDED
 
 dim DNS_socket as byte
-dim comm_mode as byte '0: WIFI, 1: LTE
+dim comm_mode as byte 
+dim fallback_to_LTE as no_yes = NO
 dim connect_to_azure_required as no_yes=NO
 dim min_rec_num_to_send as word
 dim config_mode as no_yes=NO
@@ -116,7 +117,7 @@ sub boot()
 			device_debug_print("mcp23017 self test failed!")
 		#endif
 		if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
-		pat.play("R-R-R",PL_PAT_CANINT)
+		pat.play("R-R-~",PL_PAT_CANINT)
 		#if DEVICE_DEBUG_PRINT
 			device_debug_print("mcp2307 init failed.")
 		#endif
@@ -236,7 +237,11 @@ sub boot()
 		'-----------------------------------------------------------------
 	
 		http_start()
-		if comm_mode=0 then
+		if comm_mode = 2 and wln.autoconnect = NO then
+			fallback_to_LTE = YES
+		end if
+		
+		if comm_mode=0 and fallback_to_LTE = NO then
 			current_interface = PL_SOCK_INTERFACE_WLN
 		else
 			init_cell_tech()

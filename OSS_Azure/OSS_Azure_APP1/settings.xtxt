@@ -38,7 +38,7 @@
 >>CTEC	E	B	1	0	4	A	0	Cell communication tech
 >>DBIP	E	D	1	4	4	A	0.0.0.0	Debug IP
 >>BTNM	E	S	1	0	2	A	^	BT Name
->>DBMD	E	B	1	0	6	A	^	0
+>>DBMD	E	B	1	0	6	A	0	Diagnostics
 #define STG_DESCRIPTOR_FILE "settings.xtxt"
 #define STG_TIMESTAMP 1
 #define STG_MAX_NUM_SETTINGS 41

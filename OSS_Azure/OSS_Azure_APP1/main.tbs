@@ -6,6 +6,7 @@ dim luis_bt_enabled as boolean
 dim TBT00_3_S5_CHANNEL as byte
 dim ntag_pw_reset_timer as byte = 0
 dim button_press_counter as byte = 0
+
 const NTAG_PW_WAIT_TIME = 10
 const NTAG_PW_RESET_TIME = 4
 
@@ -63,7 +64,7 @@ sub on_sys_timer()
 		exit sub
 	end if
 	if connect_to_azure_required=YES then	
-		if comm_mode=1 then
+		if comm_mode = 1 or fallback_to_LTE = Yes then
 			cell__proc_sys_timer()
 		end if
 		dns_proc_timer()
@@ -112,7 +113,7 @@ sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as strin
 		stg_set("NM",0,wln.netmask)		
 	end if
  
-	if config_mode=NO and comm_mode=0 then
+	if config_mode = NO and (comm_mode = 0 or (comm_mode = 2 and fallback_to_LTE = NO)) then
 		if upgrade_state <255 then
 			connect_to_firmware_server()
 		else
@@ -177,8 +178,8 @@ sub on_wln_event(wln_event as enum pl_wln_events)
 		wln.ip = stg_get("IP",0)
 		wln.gatewayip = stg_get("GI",0)
 		wln.netmask = stg_get("NM",0)
-		
-		if config_mode=NO and comm_mode=0 then
+
+		if config_mode = NO and (comm_mode = 0 or (comm_mode = 2 and fallback_to_LTE = NO)) then
 			if upgrade_state <255 then
 				connect_to_firmware_server()
 			else

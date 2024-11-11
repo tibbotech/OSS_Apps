@@ -45,6 +45,8 @@ dim sensor_state as en_sensor_states
 dim number_of_fld as byte = 0
 dim field_counter as byte = 0
 dim next_sensor_read_ts as dword
+dim wifi_fallback_timer as byte = 0
+dim fallback_LTE_conn_timer as word = 0
 
 declare sub device_sampling()
 declare sub device_migrating()
@@ -83,7 +85,14 @@ sub device_proc_timer()
 			end if
 		end if
 	end if	
-		
+	
+	if comm_mode = 2 then
+		wifi_fallback_timer = wifi_fallback_timer+1
+		if wifi_fallback_timer > 60 then
+			
+		end if
+	end if
+	
 	if upgrade_state <> 255 then
 		if http_conn_timeout = YES then
 			http_conn_timeout = NO
@@ -143,6 +152,7 @@ sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref s
 		debug_string="WiFi Password: " + stg_value
 	case "SPT":
 		sleep_time = val(stg_value)
+		next_sensor_read_ts = 0
 	case "RCN":
 		min_rec_num_to_send = val(stg_value)
 	case "CMD":
@@ -242,9 +252,7 @@ sub callback_dns_debugprint(byref debug_msg as string)
 end sub
         
 sub callback_http_request_failed(error_message as string)
-	if error_message = "Timeout" then
-		http_conn_timeout = YES
-	end if
+	http_conn_timeout = YES
 end sub
 
 sub callback_http_header_arrival(header_type as string, header_value as string)
@@ -320,6 +328,8 @@ end sub
 sub callback_http_request_complete()
     if upgrade_state = 255 then
 		azure_http_request_complete()
+	else
+		connect_to_azure_server()
 	end if    
 end sub
 
@@ -382,9 +392,8 @@ sub callback_tbl_field_error(byref file_name as string,byref field_name as strin
     
 end sub
         
-
 sub callback_tbl_modified(byref file_name as string, modified_operation as en_tbl_modified_operation)
-    
+
 end sub
 
 sub callback_azure_rtc_correction(daycounts as word, mincounts as word, seconds as byte)
@@ -472,7 +481,7 @@ sub callback_azure_get_assigned_hub(byref assigned_hub as string)
 end sub
         
 sub callback_azure_conn_timeout()
-    if comm_mode=1 then
+    if comm_mode = 1 or fallback_to_LTE = Yes then
 		cell__start(CELL__SIMCARD_PIN, CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD)
 	else
 		azure_on_disconnected()
@@ -798,6 +807,7 @@ sub device_add_event(device_event as en_device_events, byref parameter as string
 		device_debug_print("Event: "+event_msg)
 	#endif
 	fd.filenum = f
+	azure_send_telemetry()
 end sub
 
 function app_fw_copy_part_to_file() as ok_ng
@@ -899,11 +909,16 @@ end sub
 
 public sub upgrade_app_fw_init()
 	upgrade_state = val(stg_get("UPD",0))
+	dim fd_status as pl_fd_status_codes
+	
 	if upgrade_state = 255 then exit sub
 	
-	if app_fw_filenum = 255 then app_fw_filenum = filenum_get("FMW")
+	if app_fw_filenum = 255 then
+		app_fw_filenum=filenum_open("FMW",APP_FW_FILE,fd_status)
+	end if
+	
 	if part_filenum = 255 then 
-		part_filenum = filenum_get("PAR")
+		part_filenum = app_fw_filenum=filenum_open("PAR",PART_FILE,fd_status)
 		fd.filenum=part_filenum
 		fd.delete(PART_FILE)
 		fd.create(PART_FILE)
@@ -1818,3 +1833,28 @@ sub set_timestamp(ts_type as en_ts_type, ts as dword)
 	end if
 end sub
 
+sub check_wifi_fallback()
+	dim active_rec_num as word
+	
+	if comm_mode <> 2 then
+		exit sub
+	end if	
+	
+	tbl_select("Azure","Azure")
+	tbl_get_num_records(active_rec_num,NO)
+	if active_rec_num mod number_of_fld = 0 then
+		active_rec_num=active_rec_num/number_of_fld
+		min_rec_num_to_send=val(stg_get("RCN",0))
+		
+		if active_rec_num >= min_rec_num_to_send+1 then
+			if wln.autoconnect = NO then
+				wln.autoconnect = YES
+			else
+				wln.autoconnect = NO
+			end if
+			
+		end if					
+	end if
+		
+	
+end sub

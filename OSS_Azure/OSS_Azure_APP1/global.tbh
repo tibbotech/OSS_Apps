@@ -38,7 +38,7 @@ includepp "tables.xtxt"
 #define CELL__PAYLOAD_SIZE 8
 #define DNS_REPLY_TIMEOUT 15
 #define FILENUM_MAX_SIGNATURE_LEN 3
-#define FILENUM_MAX_FILES 3
+#define FILENUM_MAX_FILES 4
 
 #define MODBUS_TIMEOUT 10000
 
@@ -199,7 +199,8 @@ declare interface_ready(MAX_NUM_INTERFACES) as no_yes
 declare current_interface as pl_sock_interfaces
 declare DNS_socket as byte
 declare luis_bt_enabled as boolean
-declare comm_mode as byte '0: WIFI, 1: LTE
+declare comm_mode as byte '0: WIFI, 1: LTE, 2: WIFI fallback to LTE
+declare fallback_to_LTE as no_yes
 declare TBT00_3_S5_CHANNEL as byte
 declare sensor_channel as byte
 declare pic_channel as byte

@@ -4,7 +4,7 @@ platform=WM2000
 src_lib_ver=0_00
 name=OSS_Azure_APP1
 output=OSS_Azure_APP1.tpc
-debug=off
+debug=on
 defines= 
 transport=udp_winpcap
 [address1]
@@ -14,7 +14,7 @@ address=156.101.249.68.115.105
 [address2]
 platform=WM2000
 transport=serial
-address=COM7:921600
+address=COM6:921600
 [address3]
 platform=WM2000
 transport=udp_broadcast
