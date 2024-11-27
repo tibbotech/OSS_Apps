@@ -45,8 +45,7 @@ dim sensor_state as en_sensor_states
 dim number_of_fld as byte = 0
 dim field_counter as byte = 0
 dim next_sensor_read_ts as dword
-dim wifi_fallback_timer as byte = 0
-dim fallback_LTE_conn_timer as word = 0
+dim wifi_fallback_timer as word = 1 'start the timer at 1, 0 means never had any sock data activity
 
 declare sub device_sampling()
 declare sub device_migrating()
@@ -86,10 +85,19 @@ sub device_proc_timer()
 		end if
 	end if	
 	
-	if comm_mode = 2 then
+	'fallback to LTE in always on mode, use counter to determine if need to change connection method 
+	if comm_mode = 2 and operation_mode = 0 then
 		wifi_fallback_timer = wifi_fallback_timer+1
-		if wifi_fallback_timer > 60 then
-			
+		if fallback_to_LTE = Yes then
+			'currently in LTE, reset to WiFi in 30 miniutes
+			if wifi_fallback_timer > 3600 then
+				stg_set("FBL",0,"0")
+			end if
+		else
+			'currently in WiFi set to LTE if no connection for more than 40 seconds (mqtt ping is every 20 seconds)
+			if wifi_fallback_timer > 80 then
+				stg_set("FBL",0,"1")
+			end if
 		end if
 	end if
 	
@@ -158,6 +166,16 @@ sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref s
 	case "CMD":
 		if stg_value <> "" then
 			command_issued = YES
+		end if
+	case "FBL":
+		'if in fallback and always on mode, reboot after change commmunication method.
+		if comm_mode = 2 and operation_mode = 0 then 
+			if stg_value = "0" or sys.runmode = PL_SYS_MODE_DEBUG then
+				wln.autoconnect = YES
+			else
+				wln.autoconnect = NO
+			end if
+			sys.reboot()
 		end if
     end select
 	
@@ -472,6 +490,7 @@ sub callback_azure_get_assigned_hub(byref assigned_hub as string)
 	if (stg_timestamp.ts_daycount+stg_timestamp.ts_mincount+stg_timestamp.ts_seconds) = 0 then
 		stg_set("HUBN",0,"")
 	else
+		'432000 seconds = 5 days
 		last_rtc_updated = device_rtc_get_serialized(stg_timestamp.ts_daycount,stg_timestamp.ts_mincount,stg_timestamp.ts_seconds)
 		if 	(last_rtc_updated + 432000) < device_rtc_get_serialized(0,0,0) then
 			 stg_set("HUBN",0,"")
@@ -703,8 +722,20 @@ sub device_sleep()
 		mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
 	end if
 	'in wln mode, we decide next cycle should connect or not before go to sleep
-	if comm_mode = 0 then
+	if comm_mode = 0 or comm_mode = 2 then
 		wln.autoconnect = need_to_connect()
+	end if
+	
+	if comm_mode = 1 and wln.autoconnect = YES then
+		wln.autoconnect = NO
+	end if
+	'check if need to fallback to LTE, if current cycle is a connection cycle but never had any sock data
+	'next cycle fallback to LTE
+	if comm_mode = 2 then
+		if connect_to_azure_required=YES and wifi_fallback_timer = 1 then
+			stg_set("FBL",0,"1")
+			wln.autoconnect = NO
+		end if
 	end if
 	
 '------------------------------------------------------	
@@ -1102,9 +1133,9 @@ read_again:
 	if co2_invalid = NO then add_telemetry("co2",str_co2,ts)
 
 	'in power saving mode log battery level
-	if operation_mode = 1 then
-		add_telemetry("BAT_LVL",str(battery_level),ts)
-	end if
+'	if operation_mode = 1 then
+'		add_telemetry("BAT_LVL",str(battery_level),ts)
+'	end if
 	
 	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
 	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
@@ -1179,9 +1210,9 @@ read_again:
 	if humd_invalid = NO then add_telemetry("humidity",humd,ts)
 
 	'in power saving mode log battery level
-	if operation_mode = 1 then
-		add_telemetry("BAT_LVL",str(battery_level),ts)
-	end if
+'	if operation_mode = 1 then
+'		add_telemetry("BAT_LVL",str(battery_level),ts)
+'	end if
 	
 	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
 	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
@@ -1323,21 +1354,21 @@ sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref
 		field_counter = field_counter+1
 		
 		'in power saving mode log battery level
-		if operation_mode = 1 then
-			'for mulitple fields sensor, count back number of fields and add the BAT_LVL at then end	
-			if number_of_fld - field_counter = 1 then
-				add_telemetry("BAT_LVL",str(battery_level),sensor_telemetry_ts)
-				sensor_state = EN_SENSOR_SAMPLE_READ
+'		if operation_mode = 1 then
+'			'for mulitple fields sensor, count back number of fields and add the BAT_LVL at then end	
+'			if number_of_fld - field_counter = 1 then
+'				add_telemetry("BAT_LVL",str(battery_level),sensor_telemetry_ts)
+'				sensor_state = EN_SENSOR_SAMPLE_READ
 
-				field_counter = 0
-			end if
-		else
+'				field_counter = 0
+'			end if
+'		else
 			if number_of_fld - field_counter = 0 then
 				sensor_state = EN_SENSOR_SAMPLE_READ 
 
 				field_counter = 0
 			end if
-		end if
+'		end if
 	end if
 end sub
 
@@ -1833,28 +1864,3 @@ sub set_timestamp(ts_type as en_ts_type, ts as dword)
 	end if
 end sub
 
-sub check_wifi_fallback()
-	dim active_rec_num as word
-	
-	if comm_mode <> 2 then
-		exit sub
-	end if	
-	
-	tbl_select("Azure","Azure")
-	tbl_get_num_records(active_rec_num,NO)
-	if active_rec_num mod number_of_fld = 0 then
-		active_rec_num=active_rec_num/number_of_fld
-		min_rec_num_to_send=val(stg_get("RCN",0))
-		
-		if active_rec_num >= min_rec_num_to_send+1 then
-			if wln.autoconnect = NO then
-				wln.autoconnect = YES
-			else
-				wln.autoconnect = NO
-			end if
-			
-		end if					
-	end if
-		
-	
-end sub

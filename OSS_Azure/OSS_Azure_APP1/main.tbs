@@ -13,6 +13,7 @@ const NTAG_PW_RESET_TIME = 4
 declare sub device_store_app_fw(data as string)
 declare mqtt_state as en_mqtt_states
 declare credential_changed as no_yes
+declare wifi_fallback_timer as word
 
 sub on_sys_init()
 	boot()
@@ -22,6 +23,18 @@ sub on_sock_data_arrival()
 	dns_proc_data()
     http_proc_data()
 	mqtt_proc_data()
+	
+	if comm_mode = 2 then
+		'when operation mode is always on, reset timer of sock activity only in WiFi cycle
+		if operation_mode = 0 then
+			if fallback_to_LTE = NO then
+				wifi_fallback_timer = 0
+			end if
+		else
+		'in power saving mode, rest timer when ever there is sock data activity
+			wifi_fallback_timer = 0
+		end if
+	end if
 end sub
 
 sub on_sys_timer()
@@ -131,6 +144,18 @@ sub on_sock_data_sent()
 
     azure_on_telemetry_sent()
 
+	'data sent notification is also indication of working connection, refresh timer
+	if comm_mode = 2 then
+		'when operation mode is always on, reset timer of sock activity only in WiFi cycle
+		if operation_mode = 0 then
+			if fallback_to_LTE = NO then
+				wifi_fallback_timer = 0
+			end if
+		else
+		'in power saving mode, rest timer when ever there is sock data activity
+			wifi_fallback_timer = 0
+		end if
+	end if
 end sub
 
 

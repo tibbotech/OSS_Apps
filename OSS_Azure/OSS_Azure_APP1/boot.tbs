@@ -209,12 +209,15 @@ sub boot()
 		end if		
 	
 		sock.num=SYS_DPRINT_SOCK_NUM
-		sock.txbuffrq(5)
+		sock.txbuffrq(3)
 		sys.buffalloc()
 		'sock.protocol=PL_SOCK_PROTOCOL_TCP
 		sock.protocol=PL_SOCK_PROTOCOL_UDP
 		sock.targetip=stg_get("DBIP",0)  'changes as see fit
 		sock.targetport=val(stg_get("DBPR",0))
+		sock.targetinterface = PL_SOCK_INTERFACE_WLN
+		sock.allowedinterfaces = "WLN"
+		sock.connect()
 	else
 		if connect_to_azure_required=YES then
 			if comm_mode = 0 and wln.autoconnect = NO then
@@ -222,7 +225,7 @@ sub boot()
 				sys.reboot()
 			end if
 			
-			if comm_mode = 1 and wln.autoconnect = YES and (sys.runmode =PL_SYS_MODE_RELEASE or sys.debugmode = PL_SYS_DBG_SERIAL) then
+			if comm_mode = 1 and wln.autoconnect = YES and (sys.runmode =PL_SYS_MODE_RELEASE or sys.debugmode <> PL_SYS_DBG_NET) then
 				wln.autoconnect = NO
 				sys.reboot()
 			end if
@@ -237,11 +240,15 @@ sub boot()
 		'-----------------------------------------------------------------
 	
 		http_start()
-		if comm_mode = 2 and wln.autoconnect = NO then
+		if comm_mode = 2 and stg_get("FBL",0) = "1" then
 			fallback_to_LTE = YES
+			'if in low power mode, switch off Fallback for the next cycle
+			if operation_mode = 1 then
+				stg_set("FBL",0,"0")
+			end if
 		end if
 		
-		if comm_mode=0 and fallback_to_LTE = NO then
+		if comm_mode=0 or (comm_mode = 2 and fallback_to_LTE = NO) then
 			current_interface = PL_SOCK_INTERFACE_WLN
 		else
 			init_cell_tech()
@@ -320,9 +327,14 @@ fw205:
 				stg_set("BTNM",0,"")  'ble name
 				stg_set("DBMD",0,"0") 'debugprint mode
 				goto fw206
-			else if w1>=205 and w1<204 then
+			else if w1>=205 and w1<206 then
 fw206:
-			end if
+				stg_set("FBL",0,"0")
+				goto fw207
+			else if w1>=206 and w1<207 then
+fw207:
+
+			end if			
 		else
 			stg_restore_multiple(EN_STG_INIT_MODE_NORMAL)
 			stg_set("FWV",0,OSS_APP_FW_VER)
@@ -372,10 +384,18 @@ sub alternate_debugprint(byref source as string, byref msg as string)
 	
 	dim b as byte=sock.num
 	sock.num=SYS_DPRINT_SOCK_NUM
-	sock.setdata(msg)
-	sock.send()
+	if wln.ip <> "0.0.0.0" and sock.targetip <> "0.0.0.0" and sock.targetport <> 0 then
+		if sock.txfree = 0 then
+			sock.txclear()
+			sock.close()
+		end if
+		if sock.statesimple <> PL_SSTS_EST then
+			sock.connect()
+		end if
+		sock.setdata(msg)
+		sock.send()
+	end if
 	sock.num=b
-	
 end sub
 
 sub init_i2c_sensor()
@@ -482,7 +502,7 @@ sub sensor_init()
 	
 	sensor_state = EN_SENSOR_WAITTING_TO_READ
 	'in power saving mode log battery level
-	if operation_mode = 1 then number_of_fld = number_of_fld + 1	
+'	if operation_mode = 1 then number_of_fld = number_of_fld + 1	
 end sub
 
 sub read_ntag()

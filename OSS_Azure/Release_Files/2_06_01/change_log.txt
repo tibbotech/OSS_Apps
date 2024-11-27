@@ -1,0 +1,50 @@
+Changelog of OSS APP
+	-	Date of change:27/11/2024
+	-	New revision of OSS APP: AZR2.06.01
+	-	Previous revision of OSS APP: AZR2.05.10 - 17/10/2024
+	-	The reason for change: 
+			-- New sensor firmware
+			-- New TiOS
+			-- Taking telemetry base on rtc instead of timercount
+			-- Refresh rtc at least once every 5 days
+			-- New communication mode, WiFi fallback to LTE
+			-- Password mask in APP0
+			-- Remove BAT LVL
+			-- Fix a bug that might leads to incorrect record count in table library
+
+	-	Files changed:
+			-- OSS_Azure_APP1/Platforms/src/0_00/tables/tables.tbs: Bugfix
+			-- OSS_Azure_APP0/luis.xtxt: Password (masked)
+			-- OSS_Azure_APP1/luis.xtxt: new comm mode
+			-- OSS_Azure_APP1/libraries/utils.tbs: rtc telemetry 
+			-- OSS_Azure_APP1/libraries/utils.tbh: rtc telemetry
+			-- global.tbh: rtc telemetry; New sensor firmware; New TiOS
+			-- boot.tbs: rtc telemetry; fallback to LTE; new comm mode;
+			-- device.tbs: rtc telemetry;
+			-- main.tbs: fallback to LTE;
+			-- settings.xtxt: fallback to LTE
+			-- tables.xtxt: rtc telemetry
+
+	-   Release files built:  
+			--2-06-01/OSS_Azure_APP0.tpc
+			--2-06-01/OSS_Azure_APP1.tpc
+			--2-06-01/OSS_Azure_FW_2-06-01.bin
+			--2-06-01/OSS_Azure_FW_2-06-01.tcu
+			--2-06-01/OSS Template v4.json
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_07.bin
+			--OSS_SUPR_PIC_FW_025.hex
+			--OSS_SNS_PIC_FW_013.hex
+
+	- Level of change:Major
+	- Risk assessment and cons: 
+		-- New sensor firmware and new TiOS at the same time could be risky.  
+		-- Use rtc for telemetry minimize the time drift. But to make it possible, 
+			the device need wake up a bit early and wait for the time to take 
+			the telemetry, this could cost the battery.
+		-- Fallback to LTE in low power mode, doesn't switch instantly, user would 
+			have delay in getting telemetry. This is done to prevent device 
+			being on for too long and drain the battery.  
+	- Deprecated Features: none
+			

@@ -1,9 +1,9 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="AZR2.05.10"
+const OSS_APP_FW_VER="AZR2.06.01"
 const OSS_SUPR_FW_VER = "025"
-const OSS_SNS_FW_VER = "012"
+const OSS_SNS_FW_VER = "013"
 #define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_025.hex"
-#define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_012.hex"
+#define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_013.hex"
 
 includepp "settings.xtxt"
 includepp "filenum.xtxt"
@@ -11,13 +11,13 @@ includepp "tables.xtxt"
 
 'XXX_DEBUG_PRINT value 0: don't print, 1: send to other output (tcp etc...) 2: 1+print to output pane
 #define STG_DEBUG_PRINT 1
-#define MQTT_DEBUG_PRINT 1
+#define MQTT_DEBUG_PRINT 2
 #define LUIS_DEBUG_PRINT 0
-#define DNS_DEBUG_PRINT 1
-#define HTTP_DEBUG_PRINT 1
-#define CELL__DEBUG_PRINT 1
-#define AZURE_DEBUG_PRINT 1
-#define DEVICE_DEBUG_PRINT 1
+#define DNS_DEBUG_PRINT 2
+#define HTTP_DEBUG_PRINT 2
+#define CELL__DEBUG_PRINT 2
+#define AZURE_DEBUG_PRINT 2
+#define DEVICE_DEBUG_PRINT 2
 #define SYS_EVENT_DEBUGPRINT 0 'save as telemetry
 #define SYS_DPRINT_SOCK_NUM 10
 #define LUIS_CONFIG_FILE "luis.xtxt"
@@ -39,7 +39,7 @@ includepp "tables.xtxt"
 #define DNS_REPLY_TIMEOUT 15
 #define FILENUM_MAX_SIGNATURE_LEN 3
 #define FILENUM_MAX_FILES 4
-
+#define MQTT_PING_TIMER 20
 #define MODBUS_TIMEOUT 10000
 
 const MAX_NUM_INTERFACES=4
