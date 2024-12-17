@@ -1,8 +1,8 @@
 'DEFINES-------------------------------------------------------------
 const OSS_APP_FW_VER="AZR2.06.01"
-const OSS_SUPR_FW_VER = "025"
+const OSS_SUPR_FW_VER = "026"
 const OSS_SNS_FW_VER = "013"
-#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_025.hex"
+#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_026.hex"
 #define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_013.hex"
 
 includepp "settings.xtxt"
@@ -66,6 +66,19 @@ const HIH6130_READ_ADDR=&h4F
 
 const MAXIMUM_TS_NUM=5
 'const BASELINE_TS = 783046200 '2024-10-24 00:00:00
+
+'battery-----------------------------------------------
+#define ModelCfg &hDB
+#define DesignCap &h18
+#define RepCap &h05
+#define FullCapRep &h10
+#define VEmpty &h3A
+#define RepSOC &h06
+#define TTE &h11
+#define VCell &h09
+#define Current &h0A
+#define QH &h4D
+
 'SET DESIRED CELL-MODE-----------------------------------------------
 #define CELL_IO_EXTENDER 1
 #define CELL__PPP_MODE_ISENABLED	1
@@ -141,6 +154,7 @@ declare cell__reset_setto_off as low_high
 #endif
 
 'INCLUDES------------------------------------------------------------
+
 
 include "settings\settings.tbh"
 include "sock\sock.tbh"

@@ -20,6 +20,7 @@ dim SYS_SOCK_DEBUGPRINT as byte
 dim sensor_type as byte
 dim operation_mode as byte '0: always on, 1: low power mode
 
+declare sub read_battery()
 declare sub check_app_fw_version()
 declare sub sensor_init()
 declare sub pic_init()
@@ -139,10 +140,6 @@ sub boot()
 	if sys.debugmode <> PL_SYS_DBG_SERIAL then turn_sensor3v3_on()
 	'-----------------------------------------------------------------	
 	
-	dim bl as string(1) = pic_read(&h02,1)
-	battery_level = asc(bl)
-	if battery_level > 100 then battery_level=0
-
 	if sys.debugmode <> PL_SYS_DBG_SERIAL then sensor_init()	
 	
 	dim scid as string(2) = pic_read(&h03,2)
@@ -271,6 +268,8 @@ sub boot()
 	if stg_get("CMD",0)<>"" then
 		command_issued = YES
 	end if
+	
+	read_battery()
 end sub
 
 sub check_app_fw_version()
@@ -711,4 +710,63 @@ sub init_cell_tech()
 	end select
 	CELL__AT_CNMP = CELL__AT_PLUS + "CNMP" + "=" + cnmp
 	CELL__AT_CMNB = CELL__AT_PLUS + "CMNB" + "=" + cmnb
+end sub
+
+function readMAXRegister(register as byte) as word
+	#define MAX_ADDRESS &h6C
+	#define OSS_WR 0
+	#define OSS_RD 1
+	
+	si2c_start()
+	si2c_write(MAX_ADDRESS OR OSS_WR)
+	si2c_write(register)
+	si2c_stop()
+	si2c_start()
+	si2c_write(MAX_ADDRESS OR OSS_RD)
+	readMAXRegister = si2c_read(true)
+	readMAXRegister = readMAXRegister + si2c_read(false) * 256
+	si2c_stop()
+	
+end function
+
+sub read_battery()
+	dim tmp as dword
+	dim sign as integer
+	dim result as float 
+	
+	tmp = readMAXRegister(FullCapRep)
+	sys.debugprint("FullCapRep " + str(tmp) + "mAh" + chr(13) + chr(10)) 
+	
+	tmp = readMAXRegister(RepCap)
+	sys.debugprint("RepCap " + str(tmp) + "mAh" + chr(13) + chr(10)) 
+	
+	tmp = readMAXRegister(RepSOC)
+	result = tmp / 256
+	sys.debugprint("RepSOC " + ftostr(result, FTOSTR_MODE_PLAIN, 2) + "%" + chr(13) + chr(10)) 
+	
+	tmp = readMAXRegister(TTE)
+	sys.debugprint("TTE " + str(tmp) + "min" + chr(13) + chr(10)) 
+	
+	tmp = readMAXRegister(VCell)
+	result = 0.078125 * tmp
+	sys.debugprint("VCell " + ftostr(result, FTOSTR_MODE_PLAIN, 2) + "mV" + chr(13) + chr(10)) 
+	
+	tmp = readMAXRegister(Current)
+	sign = tmp
+	result = sign * 0.00015625
+	sys.debugprint("Current " + ftostr(result, FTOSTR_MODE_PLAIN, 6) + "A" + chr(13) + chr(10)) 
+
+	dim qh as integer
+	qh = readMAXRegister(QH)
+	sys.debugprint("QH " + stri(qh) + chr(13) + chr(10)) 
+	
+	dim bl as string(1) = pic_read(&h02,1)
+	battery_level = asc(bl)
+	if battery_level > 128 then
+		sys.debugprint("Battery present" + chr(13) + chr(10)) 
+		battery_level = battery_level - 128
+		sys.debugprint("BatLvl " + str(battery_level) + "%" + chr(13) + chr(10)) 
+	else 
+		sys.debugprint("Battery not present" + chr(13) + chr(10)) 
+	end if
 end sub

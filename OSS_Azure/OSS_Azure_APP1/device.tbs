@@ -737,6 +737,11 @@ sub device_sleep()
 			wln.autoconnect = NO
 		end if
 	end if
+
+	'while in debugging with NET, make sure always connect after reboot
+	if sys.runmode = PL_SYS_MODE_DEBUG and sys.debugmode = PL_SYS_DBG_NET then
+		wln.autoconnect = YES
+	end if
 	
 '------------------------------------------------------	
 'device sleeps until next read substract the time for sensor to boot properly	

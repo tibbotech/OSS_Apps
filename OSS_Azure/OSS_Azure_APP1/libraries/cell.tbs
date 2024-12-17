@@ -1371,7 +1371,7 @@ end sub
 		cell__sock_flush_all()
 			
 		'Release all sockets
-		cell__sock_release_all()
+'		cell__sock_release_all()
 	
 		'Disable Port
 		ppp.enabled = NO
