@@ -1,0 +1,18 @@
+'=================== power pcb test ===================
+
+sub pwr_pic_write(addr as byte, byref data as string)
+	const PWR_PIC_ADDR = &b01001000
+
+	dim i as byte
+	
+	si2c_get(pic_channel)
+	si2c_start()
+	si2c_write(PWR_PIC_ADDR OR PIC_WR)
+	si2c_write(addr)
+	for i = 1 to len(data)
+		delay_ms(10)
+		si2c_write(asc(mid(data,i,1)))
+	next i
+	delay_ms(10)
+	si2c_stop()
+end sub
