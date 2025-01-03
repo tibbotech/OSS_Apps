@@ -19,6 +19,7 @@ dim CELL__AT_CMNB as string(16)
 dim SYS_SOCK_DEBUGPRINT as byte
 dim sensor_type as byte
 dim operation_mode as byte '0: always on, 1: low power mode
+dim vmod_volts as byte
 
 declare sub check_app_fw_version()
 declare sub sensor_init()
@@ -100,6 +101,7 @@ sub boot()
 	CELL__MYPASSWORD = stg_get("GPW",0)
 	operation_mode = stg_get("OPMD",0)
 	SYS_SOCK_DEBUGPRINT = val(stg_get("DBMD",0))
+	vmod_volts = val(stg_get("VMOD",0))
 	
     '-----------------------------------------------------------------
 	
@@ -128,8 +130,10 @@ sub boot()
 	pic_init()
 	check_and_upgrade_supr_pic()
 	
-	mcp23017_line_out_enable(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,YES,TBT00_3_S5_CHANNEL)
-	mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
+	' leave this main pcb-controlled vmod shutdown as input, use power pcb
+	'mcp23017_line_out_enable(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,YES,TBT00_3_S5_CHANNEL)
+	'mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,HIGH,TBT00_3_S5_CHANNEL)
+	mcp23017_line_out_enable(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,NO,TBT00_3_S5_CHANNEL)
 
 	'allow pic to put device into sleep
 	mcp23017_line_out_enable(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,yes,TBT00_3_S5_CHANNEL)
@@ -271,6 +275,8 @@ sub boot()
 	if stg_get("CMD",0)<>"" then
 		command_issued = YES
 	end if
+'=================== power pcb ===================
+	pwr_io_setup(vmod_volts)
 end sub
 
 sub check_app_fw_version()
@@ -425,7 +431,8 @@ end sub
 
 sub init_modbus_sensor()
 	'enable modbus voltage
-	mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,HIGH,TBT00_3_S5_CHANNEL)
+	' use the setting controlled power_pcb_io control for vmod shutdown
+	'mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,HIGH,TBT00_3_S5_CHANNEL)
 
 	sensor_level_shift_on()
 

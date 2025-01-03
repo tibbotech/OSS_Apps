@@ -159,6 +159,7 @@ include "libraries\super_i2c.tbh"
 include "libraries\cell.tbh"
 include "libraries\modbus.tbh"
 include "PIC_LVP.tbh"
+include "power_pcb_io.tbh"
 'DECLARATIONS--------------------------------------------------------
 enum en_ts_type
 	EN_TS_LAST_SAMPLED = 0

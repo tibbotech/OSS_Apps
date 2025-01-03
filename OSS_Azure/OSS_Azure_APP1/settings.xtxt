@@ -40,9 +40,10 @@
 >>BTNM	E	S	1	0	2	A	^	BT Name
 >>DBMD	E	B	1	0	6	A	0	Diagnostics
 >>FBL	E	B	1	0	1	A	0	Fallback to LTE
+>>VMOD	E	B	1	0	3	I	0	VMOD voltage setting
 #define STG_DESCRIPTOR_FILE "settings.xtxt"
 #define STG_TIMESTAMP 1
-#define STG_MAX_NUM_SETTINGS 42
+#define STG_MAX_NUM_SETTINGS 43
 #define STG_RAM_ARRAY_SIZE 123
 #define STG_MAX_SETTING_NAME_LEN 4
 #define STG_MAX_SETTING_VALUE_LEN 128

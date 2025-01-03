@@ -719,7 +719,7 @@ sub device_sleep()
 	turn_sensor3v3_off()
 	
 	if sensor_type > 127 then
-		mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
+		'mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
 	end if
 	'in wln mode, we decide next cycle should connect or not before go to sleep
 	if comm_mode = 0 or comm_mode = 2 then

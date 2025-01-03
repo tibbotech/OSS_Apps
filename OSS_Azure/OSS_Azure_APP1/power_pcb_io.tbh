@@ -1,0 +1,29 @@
+#define PWR_IO_ADDR &b01001000
+#define IODIR_REG 	&h00
+#define IPOL_REG	&h01
+#define IOCON_REG	&h05
+#define GPPU_REG	&h06
+#define GPIO_REG 	&h09
+#define OLAT_REG 	&h0A
+
+' REGISTER VALUES FOR 'OFF'
+#define IODIR_OFF 	&h03
+#define GPIO_OFF	&b00000000
+
+' REGISTER VALUES FOR '5V'
+#define IODIR_5V 	&h03
+#define GPIO_5V		&b11110000
+
+' REGISTER VALUES FOR '12V'
+#define IODIR_12V 	&h01
+#define GPIO_12V	&b11110010
+
+' REGISTER VALUES FOR '24V'
+#define IODIR_24V 	&h02
+#define GPIO_24V	&b11110001
+
+
+declare sub pwr_io_write(addr as byte, data as byte)
+declare sub pwr_io_read(addr as byte)
+
+declare sub pwr_io_setup(setting as byte)

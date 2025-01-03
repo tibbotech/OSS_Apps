@@ -1,18 +1,54 @@
+include "global.tbh"
+
 '=================== power pcb test ===================
 
-sub pwr_pic_write(addr as byte, byref data as string)
-	const PWR_PIC_ADDR = &b01001000
+sub pwr_io_write(addr as byte, data as byte)
 
 	dim i as byte
-	
-	si2c_get(pic_channel)
+	' the power pcb io expander is at the same i2C address as the main pcb PIC
+	si2c_get(pic_channel) 
 	si2c_start()
-	si2c_write(PWR_PIC_ADDR OR PIC_WR)
+	si2c_write(PWR_IO_ADDR OR PIC_WR)
 	si2c_write(addr)
-	for i = 1 to len(data)
-		delay_ms(10)
-		si2c_write(asc(mid(data,i,1)))
-	next i
+	delay_ms(10)
+	si2c_write(data)
 	delay_ms(10)
 	si2c_stop()
+end sub
+
+sub pwr_io_read(addr as byte)
+
+	dim i as byte
+	' the power pcb io expander is at the same i2C address as the main pcb PIC
+	si2c_get(pic_channel) 
+	si2c_start()
+	si2c_write(PWR_IO_ADDR OR PIC_WR)
+	si2c_write(addr)
+	si2c_start()
+	si2c_write(PWR_IO_ADDR OR PIC_RD)
+	i = si2c_read(false)
+	delay_ms(10)
+	si2c_stop()
+end sub
+
+sub pwr_io_setup(setting as byte)
+	pwr_io_write(IPOL_REG, &h0)
+	pwr_io_write(IOCON_REG, &h0)
+	pwr_io_write(GPPU_REG, &h0)
+	select case setting
+	case 3: ' 24v
+		pwr_io_write(IODIR_REG, IODIR_24V)
+		pwr_io_write(GPIO_REG, GPIO_24V)
+	case 2: ' 12v
+		pwr_io_write(IODIR_REG, IODIR_12V)
+		pwr_io_write(GPIO_REG, GPIO_12V)
+	case 1: ' 5v
+		pwr_io_write(IODIR_REG, IODIR_5V)
+		pwr_io_write(GPIO_REG, GPIO_5V)
+	case else: ' off
+		pwr_io_write(IODIR_REG, IODIR_OFF)
+		pwr_io_write(GPIO_REG, GPIO_OFF)
+	end select
+	
+	'pwr_io_read(OLAT_REG)
 end sub
