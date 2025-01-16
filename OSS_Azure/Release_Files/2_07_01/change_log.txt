@@ -1,0 +1,40 @@
+Changelog of OSS APP
+	-	Date of change:16/01/2025
+	-	New revision of OSS APP: AZR2.07.01
+	-	Previous revision of OSS APP: AZR2.06.01 - 27/11/2024
+	-	The reason for change: 
+			-- bugfix: Device freeze if connected sensor is Modbus, but set to onboard sensors.
+			-- bugfix: "," causes text breaking in cloud settings
+			-- New PIC firmware
+			-- Update the DPS server to global.azure-devices-provisioning.net
+
+	-	Files changed:
+			-- OSS_Azure_APP1/libraries/super_i2c.tbh: bugfix, device freeze 
+			-- OSS_Azure_APP1/libraries/super_i2c.tbs: bugfix, device freeze
+			-- OSS_Azure_APP1/boot.tbs: bugfix, device freeze; New DPS,
+			-- OSS_Azure_APP1/devices.tbs: bugfix, text breaking
+			-- OSS_Azure_APP1/global.tbh: New PIC firmware
+			-- OSS_Azure_APP1/azure.tbh: bugfix, text breaking
+			-- OSS_Azure_APP1/azure.tbs: bugfix, text breaking
+			-- OSS_Azure_APP1/main.tbs: bugfix, device freeze
+			-- OSS_Azure_APP1/OSS_SUPR_PIC_FW_027.hex: New PIC firmware
+
+	-   Release files built:  
+			--2-07-01/OSS_Azure_APP0.tpc
+			--2-07-01/OSS_Azure_APP1.tpc
+			--2-07-01/OSS_Azure_FW_2-07-01.bin
+			--2-07-01/OSS_Azure_FW_2-07-01.tcu
+			--2-07-01/OSS Template v4.json
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_07.bin
+			--OSS_SUPR_PIC_FW_027.hex
+			--OSS_SNS_PIC_FW_013.hex
+
+	- Level of change:Major
+	- Risk assessment and cons: 
+		changes in super_i2c library breaks the endless loop when device is not really connected to a super_i2c device, but the result can be unpredictable.
+		Updating DPS is a temporary solution, need to be further improved so we can change DPS without breaking connection.
+					
+	- Deprecated Features: none
+			

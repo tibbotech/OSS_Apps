@@ -22,7 +22,7 @@ declare function si2c_who_uses(num as byte) as string
 declare sub si2c_release(num as byte)
 
 declare sub si2c_get(num as byte)
-declare sub si2c_start()
+declare function si2c_start() as ok_ng
 declare sub si2c_stop()
 declare sub si2c_write(data as byte)
 declare function si2c_read(acknak_request as boolean) as byte

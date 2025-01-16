@@ -6,6 +6,7 @@ dim luis_bt_enabled as boolean
 dim TBT00_3_S5_CHANNEL as byte
 dim ntag_pw_reset_timer as byte = 0
 dim button_press_counter as byte = 0
+dim bt_timemout as byte = 0
 
 const NTAG_PW_WAIT_TIME = 10
 const NTAG_PW_RESET_TIME = 4
@@ -64,16 +65,28 @@ sub on_sys_timer()
 			end if
 		else
 			if bt.connected = YES then
-				bt.setdata("\x02Z"+str(sleep_time)+","+stg_get("AWK",0)+"\x0d")
+				dim s as string(8)
+				s = "\x02Z"+str(sleep_time)+","+stg_get("AWK",0)+"\x0d"
+				bt.setdata(s)
 				bt.send()
 				'wait for data to be sent or maximum 3 seconds
-				dim ts as dword = sys.timercount32
-				while bt.newtxlen > 0 and ts < sys.timercount32+6 
+				dim ts as dword = sys.timercount32+6
+				while bt.newtxlen > 0 and ts > sys.timercount32
 				wend
 			end if
-			
 			device_sleep()
-		end if	
+		end if
+		if sys.runmode <> PL_SYS_MODE_DEBUG then
+			if bt.connected = NO then
+				bt_timemout = bt_timemout + 1
+				if bt_timemout > 5  then
+					sys.reboot()
+				end if
+			else
+				bt_timemout = 0
+			end if			
+		end if
+
 		exit sub
 	end if
 	if connect_to_azure_required=YES then	

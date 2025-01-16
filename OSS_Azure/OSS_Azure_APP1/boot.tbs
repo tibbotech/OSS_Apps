@@ -333,7 +333,10 @@ fw206:
 				goto fw207
 			else if w1>=206 and w1<207 then
 fw207:
-
+				stg_set("DPSS",0,"global.azure-devices-provisioning.net")
+				goto fw208
+			else if w1>=207 and w1<208 then
+fw208:
 			end if			
 		else
 			stg_restore_multiple(EN_STG_INIT_MODE_NORMAL)
@@ -471,6 +474,7 @@ end sub
 sub sensor_init()
 	sensor_type = val(stg_get("STPY",0))
 	
+	if config_mode = YES then exit sub
 	select case sensor_type
 	case 130,131,132,133,137,138:
 		number_of_fld = 1
@@ -582,7 +586,10 @@ sub check_and_upgrade_sns_pic()
 	sensor_level_shift_on()
 	si2c_get(sensor_channel)
 	' Read FW version
-	si2c_start()
+	if si2c_start() = NG then
+		device_add_event(EVENT_SENSOR_NOT_FOUND, "")
+		exit sub
+	end if
 	si2c_write(SENSOR_ADDR or PIC_WR)
 	si2c_write(&h03)
 	si2c_start()

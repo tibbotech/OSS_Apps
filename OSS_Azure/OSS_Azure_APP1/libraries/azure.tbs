@@ -155,66 +155,43 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string)
 		#if AZURE_DEBUG_PRINT
 			azure_debugprint("Properties update: "+data)
 		#endif		
-		pos1=instr(1,data,"desired",1)
-		do 
-			pos2=instr(pos1,data,"{",1)
-			pos3=instr(pos1,data,"}",1)
-			if pos2>0 and pos2<pos3 then
-				pos1=pos2+1
-				c=c+1
-			else
-				if pos3>0 then
-					c=c-1
-					if c=0 then
-						s=mid(data,pos1,pos3-pos1)
-					end if
-					pos1=pos3+1
-				end if
-			end if
-			if pos2=0 and pos3=0 then
-				c=0
-			end if			
-		loop while c>0
 
+		s = azure_get_json_value(data, "desired")
 		pos1=1
 		do 
-			pos2=instr(pos1,s,":",1)
-			if pos2>0 then
-				item_name=mid(s,pos1+1,pos2-pos1-2)
-				pos3=instr(pos2,s,",",1)
-				if pos3=0 then
-					pos3=len(s)+1
-				end if
-				value=mid(s,pos2+1,pos3-pos2-1)
-				if left(value,1)="\x22" and right(value,1)="\x22" then
-					value = mid(value,2,len(value)-2)
-				end if
-				
-				if item_name = "$version" then
-					callback_azure_update_twin_version(value)
-				else
-					dim prev_value as string=stg_get(item_name,0)
-					if value<>prev_value then
-						#if AZURE_DEBUG_PRINT
-							azure_debugprint("Remote value of \x22"+item_name+"\x22 was "+prev_value+" changed to: "+value)
-						#endif							
-						pos1=instr(1,topic,"$rid=",1)
-						if pos1>0 then
-							rid=right(topic, len(topic)-pos1-4)
-							azure_rid=lval(rid)
-						end if
-								
-						'Double confirm setting is set correctly here
-						if stg_sg(item_name,0,value,EN_STG_SET)=EN_STG_STATUS_OK then
-							value="{\x22"+item_name+"\x22:\x22"+value+"\x22}"
-							azure_rid=azure_rid+1
-							mqtt_publish(AZURE_TOPIC_PROPERTY_REPORTED+"?$rid="+str(azure_rid),value,QOS_AT_MOST_ONCE)
-						end if
-					end if				
-				end if
-				pos1=pos3+1
+			pos1 = instr(pos1,s,"\x22",1)
+			pos2 = instr(pos1,s,"\x22",2)
+			if pos1=0 and pos2=0 then
+				exit do
 			end if
-		loop while pos2>0		
+
+			item_name=mid(s,pos1+1,pos2-pos1-1)
+			value = azure_get_json_value(s, item_name)
+
+			if item_name = "$version" then
+				callback_azure_update_twin_version(value)
+			else
+				dim prev_value as string=stg_get(item_name,0)
+				if value<>prev_value then
+					#if AZURE_DEBUG_PRINT
+						azure_debugprint("Remote value of \x22"+item_name+"\x22 was "+prev_value+" changed to: "+value)
+					#endif							
+					pos1=instr(1,topic,"$rid=",1)
+					if pos1>0 then
+						rid=right(topic, len(topic)-pos1-4)
+						azure_rid=lval(rid)
+					end if
+							
+					'Double confirm setting is set correctly here
+					if stg_sg(item_name,0,value,EN_STG_SET)=EN_STG_STATUS_OK then
+						value="{\x22"+item_name+"\x22:\x22"+value+"\x22}"
+						azure_rid=azure_rid+1
+						mqtt_publish(AZURE_TOPIC_PROPERTY_REPORTED+"?$rid="+str(azure_rid),value,QOS_AT_MOST_ONCE)
+					end if
+				end if				
+			end if			
+			pos1 = pos2 + len(value) + 2
+		loop while pos1>0 and pos2>0		
 	end if
 end sub
 
@@ -630,6 +607,57 @@ function azure_generate_sas_token(byref resourceUri as string, byref signingKey 
 
 end function
 
+function azure_get_json_value(byref json_str as string, byref attribute as string) as string
+	dim pos1, pos2, pos3 as byte
+	dim len1 as byte
+	dim start_chr as string(1)
+	
+	azure_get_json_value = ""
+	pos1 = instr(1,json_str,attribute,1)
+	if pos1 = 0 then exit function
+	
+	pos1 = instr(pos1+len(attribute),json_str,":",1)
+	if pos1 = 0 then exit function
+	pos1 = pos1 + 1
+	
+	start_chr = mid(json_str,pos1,1)
+	
+	select case start_chr
+	'if attribute value start with {, assume it's a json object, has to end with }
+	case "{":
+		pos2 = pos1
+		pos3 = pos1
+		do	
+			pos2 = instr(pos2+1,json_str,"}",1)
+			pos3 = instr(pos3+1, json_str,"{",1)
+		loop while pos3 > 0 and pos3 < pos2
+		pos2 = pos2 + 1	
+	
+	'if attribute value starts with ", assume it's a string, has to end with "
+	case "\x22":
+		pos2 = pos1
+		do 
+			pos3 = instr(pos2+1,json_str,"\x5c",1)
+			pos2 = instr(pos2+1,json_str,"\x22",1)
+		loop while pos2 > 0 and pos3 = pos2 - 1
+		pos2 = pos2 + 1
+		
+	case else:
+		pos2 = instr(pos1,json_str,",",1)
+		if pos2 = 0 then
+			pos2 = instr(pos1,json_str,"}",1)
+		end if	
+	end select
+	
+	if pos2 = 0 then exit function
+	
+	azure_get_json_value = mid(json_str,pos1,pos2-pos1)
+	
+	if left(azure_get_json_value,1) = "\x22" then
+		azure_get_json_value = mid(azure_get_json_value,2,len(azure_get_json_value)-2)
+	end if	
+end function
+
 #if AZURE_DEBUG_PRINT
 	sub azure_debugprint(byref print_data as string)
 		dim s as string	
@@ -641,3 +669,5 @@ end function
 
 	end sub
 #endif	
+
+

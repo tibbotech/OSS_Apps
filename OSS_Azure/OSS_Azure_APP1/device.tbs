@@ -94,7 +94,7 @@ sub device_proc_timer()
 				stg_set("FBL",0,"0")
 			end if
 		else
-			'currently in WiFi set to LTE if no connection for more than 40 seconds (mqtt ping is every 20 seconds)
+			'currently in WiFi set to LTE if no connection for more than 40 seconds (mqtt ping is every 30 seconds)
 			if wifi_fallback_timer > 80 then
 				stg_set("FBL",0,"1")
 			end if
@@ -1467,7 +1467,7 @@ sub proc_modbus_jx(byref request_item as modbus_request_item, byref reply as str
 		case 4:
 			telemetry_name = "PM1.0"
 		case else:		
-		end select	
+		end select
 	case else
 		exit sub
 	end select
@@ -1570,12 +1570,38 @@ public function turn_sensor3v3_off() as boolean
 end function
 
 function get_json_value(byref json_str as string, byref attribute as string) as string
-	dim attr as string = "\x22"+attribute+"\x22:\x22"
-	dim l as byte = len(attr)
-	dim pos1 as byte = instr(1, json_str, attr, 1) + l
-	dim pos2 as byte = instr(pos1, json_str, "\x22",1)
+	dim pos1, pos2, pos3 as byte
+	dim len1 as byte
 	
-	get_json_value = mid(json_str, pos1,pos2-pos1)
+	get_json_value = ""
+	pos1 = instr(1,json_str,attribute,1)
+	if pos1 = 0 then exit function
+	
+	pos1 = instr(pos1+len(attribute),json_str,":",1)
+	if pos1 = 0 then exit function
+	pos1 = pos1 + 1
+	
+	if mid(json_str,pos1,1) = "{" then
+		pos2 = pos1
+		pos3 = pos1
+		do	
+			pos2 = instr(pos2+1,json_str,"}",1)
+			pos3 = instr(pos3+1, json_str,"{",1)
+		loop while pos3 > 0 and pos3 < pos2
+		pos2 = pos2 + 1
+	else
+		pos2 = instr(pos1,json_str,",",1)
+		if pos2 = 0 then
+			pos2 = instr(pos1,json_str,"}",1)
+		end if	
+	end if
+	if pos2 = 0 then exit function
+	
+	get_json_value = mid(json_str,pos1,pos2-pos1)
+	
+	if left(get_json_value,1) = "\x22" then
+		get_json_value = mid(get_json_value,2,len(get_json_value)-2)
+	end if	
 end function
 
 sub device_sampling()
@@ -1790,8 +1816,6 @@ sub read_sensor()
 			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 1, "", MODBUS_UART, modbus_RTU) 'PM2.5
 			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 3, 1, "", MODBUS_UART, modbus_RTU) 'PM10
 			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 4, 1, "", MODBUS_UART, modbus_RTU) 'PM1.0
-		
-		case else:
 		end select
 	else
 		sensor_state = EN_SESNOR_TS_ERROR

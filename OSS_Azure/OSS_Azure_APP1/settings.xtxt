@@ -8,7 +8,7 @@
 >>GI	E	D	1	4	4	A	127.0.0.1	Wi-Fi, gateway
 >>NM	E	D	1	4	4	A	0.0.0.0	Wi-Fi, netmask
 >>DLPT	E	S	1	0	128	A	^	Download point
->>DPSS	E	S	1	0	63	I	g2-cert-dps.azure-devices-provisioning.net	DPS server
+>>DPSS	E	S	1	0	63	I	global.azure-devices-provisioning.net	DPS server
 >>SCID	E	S	1	0	16	I	^	Scope ID
 >>DVID	E	S	1	0	32	I	^	Device ID
 >>PKEY	E	S	1	0	64	I	^	Primary key

@@ -48,3 +48,4 @@ declare sub iot_header_arrival(header_type as string, header_value as string)
 declare sub azure_send_telemetry()
 declare sub azure_send_property(prop_name as string, prop_value as string)
 declare sub azure_request_property()
+declare function azure_get_json_value(byref json_str as string, byref attribute as string) as string
