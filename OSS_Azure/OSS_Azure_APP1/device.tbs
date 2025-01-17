@@ -949,7 +949,7 @@ public sub upgrade_app_fw_init()
 	end if
 	
 	if part_filenum = 255 then 
-		part_filenum = app_fw_filenum=filenum_open("PAR",PART_FILE,fd_status)
+		part_filenum =filenum_open("PAR",PART_FILE,fd_status)
 		fd.filenum=part_filenum
 		fd.delete(PART_FILE)
 		fd.create(PART_FILE)

@@ -11,12 +11,12 @@ includepp "tables.xtxt"
 
 'XXX_DEBUG_PRINT value 0: don't print, 1: send to other output (tcp etc...) 2: 1+print to output pane
 #define STG_DEBUG_PRINT 1
-#define MQTT_DEBUG_PRINT 2
+#define MQTT_DEBUG_PRINT 1
 #define LUIS_DEBUG_PRINT 0
 #define DNS_DEBUG_PRINT 1
-#define HTTP_DEBUG_PRINT 2
+#define HTTP_DEBUG_PRINT 1
 #define CELL__DEBUG_PRINT 1
-#define AZURE_DEBUG_PRINT 2
+#define AZURE_DEBUG_PRINT 1
 #define DEVICE_DEBUG_PRINT 2
 #define SYS_EVENT_DEBUGPRINT 0 'save as telemetry
 #define SYS_DPRINT_SOCK_NUM 10

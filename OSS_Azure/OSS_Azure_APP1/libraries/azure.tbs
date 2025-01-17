@@ -147,51 +147,96 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string)
 		#endif				
 		exit sub
 	end if
-
+	
+	
+	'device twin
 	if instr(1, topic,AZURE_TOPIC_TWIN,1)>0 then
+		dim ts as dword
+		dim processing_desired as no_yes = YES
+		
+		if sys.runmode = PL_SYS_MODE_RELEASE then
+			ts = sys.timercount32 + 10
+		else
+			ts = sys.timercount32 + 100000
+		end if
 		if instr(1, topic,"/res/400",1)>0 then
 			exit sub
-		end if			
-		#if AZURE_DEBUG_PRINT
-			azure_debugprint("Properties update: "+data)
-		#endif		
-
-		s = azure_get_json_value(data, "desired")
-		pos1=1
-		do 
-			pos1 = instr(pos1,s,"\x22",1)
-			pos2 = instr(pos1,s,"\x22",2)
-			if pos1=0 and pos2=0 then
-				exit do
+		end if
+		
+		if instr(1, topic,"/res/200",1)>0 then
+			dim l as byte
+			if mid(data,1,1) <> "{" then
+				value = "{}"
+				goto empty_reply
 			end if
+			do 
+				l = 255-len(data)		
+				if l>0 then data = data + sock.tlsgetdata(l)
+				pos1 = instr(1,data,"\x22",1)
+				pos2 = instr(pos1+1,data,"\x22",1)
+				if pos1=0 or pos2=0 then
+					exit do
+				end if
 
-			item_name=mid(s,pos1+1,pos2-pos1-1)
-			value = azure_get_json_value(s, item_name)
-
-			if item_name = "$version" then
-				callback_azure_update_twin_version(value)
-			else
-				dim prev_value as string=stg_get(item_name,0)
-				if value<>prev_value then
-					#if AZURE_DEBUG_PRINT
-						azure_debugprint("Remote value of \x22"+item_name+"\x22 was "+prev_value+" changed to: "+value)
-					#endif							
-					pos1=instr(1,topic,"$rid=",1)
-					if pos1>0 then
-						rid=right(topic, len(topic)-pos1-4)
-						azure_rid=lval(rid)
+				item_name=mid(data,pos1+1,pos2-pos1-1)
+				
+				select case item_name
+				case "desired":
+					processing_desired = YES
+					data = right(data,len(data)-11)
+			
+				case "reported":
+					processing_desired = NO
+					data = right(data,len(data)-12)
+				case "$version":
+					dim processed_bytes as byte
+					
+					value = azure_get_json_value(data, item_name)
+					callback_azure_update_twin_version(value)
+					processed_bytes = pos2+len(value)+2
+					data = right(data,len(data)-processed_bytes)
+					
+				case else:
+					dim processed_bytes as byte
+					dim locat_value as string
+					dim stg_result as en_stg_status_codes
+					
+					stg_result = stg_sg(item_name,0,locat_value,EN_STG_GET)
+					value = azure_get_json_value(data, item_name)
+					processed_bytes = pos2+len(value)+2
+					'check if value is a string type, revmove 2 more bytes if so.
+					if mid(data,pos2+2,1) = "\x22" then
+						processed_bytes = processed_bytes+2
 					end if
-							
-					'Double confirm setting is set correctly here
-					if stg_sg(item_name,0,value,EN_STG_SET)=EN_STG_STATUS_OK then
-						value="{\x22"+item_name+"\x22:\x22"+value+"\x22}"
-						azure_rid=azure_rid+1
-						mqtt_publish(AZURE_TOPIC_PROPERTY_REPORTED+"?$rid="+str(azure_rid),value,QOS_AT_MOST_ONCE)
-					end if
-				end if				
-			end if			
-			pos1 = pos2 + len(value) + 2
-		loop while pos1>0 and pos2>0		
+					data = right(data,len(data)-processed_bytes)
+										
+					if stg_result=EN_STG_STATUS_OK and value<>locat_value then						
+						if processing_desired = YES then
+							#if AZURE_DEBUG_PRINT
+								azure_debugprint("Remote value of \x22"+item_name+"\x22 was "+locat_value+" changed to: "+value)
+							#endif
+							stg_sg(item_name,0,value,EN_STG_SET)
+							pos1=instr(1,topic,"$rid=",1)
+							if pos1>0 then
+								rid=right(topic, len(topic)-pos1-4)
+								azure_rid=lval(rid)
+							end if
+									
+							'Double confirm setting is set correctly here						
+							value="{\x22"+item_name+"\x22:\x22"+value+"\x22}"
+empty_reply:							
+							azure_rid=azure_rid+1
+							mqtt_publish(AZURE_TOPIC_PROPERTY_REPORTED+"?$rid="+str(azure_rid),value,QOS_AT_MOST_ONCE)
+						else
+							#if AZURE_DEBUG_PRINT
+								azure_debugprint("Report updated local value of \x22"+item_name+"\x22 change from " + value + "to " +locat_value)
+							#endif
+							callback_stg_eeprom_set(item_name,0,"")
+						end if
+					end if				
+				end select		
+			loop while pos1>0 and pos2>0 and sys.timercount32 < ts
+		end if
 	end if
 end sub
 
@@ -644,8 +689,9 @@ function azure_get_json_value(byref json_str as string, byref attribute as strin
 		
 	case else:
 		pos2 = instr(pos1,json_str,",",1)
-		if pos2 = 0 then
-			pos2 = instr(pos1,json_str,"}",1)
+		pos3 = instr(pos1,json_str,"}",1)
+		if (pos3>0 and pos3<pos2) or pos2 = 0 then
+			pos2 = pos3 
 		end if	
 	end select
 	
