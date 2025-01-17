@@ -193,7 +193,7 @@ sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref
 	select case stg_name_or_num
 		case "DVID","SCID","PKEY":
 			if config_mode = YES then credential_changed = YES
-		case "FWV", "CID", "MNUM", "DVNM", "MODE", "OPMD", "STPY", "MBID": 'device side settings
+		case "FWV", "CID", "MNUM", "DVNM", "MODE", "OPMD", "STPY", "MBID", "IP", "GI": 'device side settings
 			property_modified = YES
 			stg_timestamp.ts_milsec = 0
 			stg_set_ts(stg_name_or_num)
@@ -383,8 +383,8 @@ sub callback_mqtt_connect_lost()
 	end if
 end sub
         
-sub callback_mqtt_notif(byref topic as string,byref data as string,remaining_bytes as dword)
-    azure_proc_mqtt_msg(topic,data)	
+sub callback_mqtt_notif(byref topic as string,byref data as string, byref remaining_bytes as word)
+    azure_proc_mqtt_msg(topic,data,remaining_bytes)	
 end sub
 
 sub callback_mqtt_debugprint(byref debug_msg as string)
@@ -1636,8 +1636,10 @@ sub device_sampling()
 	case EN_SENSOR_READ_ERROR:
 		next_sensor_read_ts=device_rtc_get_serialized(0,0,0)+5
 		sensor_read_count = sensor_read_count + 1
-		if sensor_read_count > 3 then
+		if sensor_read_count > 5 then
 			device_add_event(EVENT_SENSOR_TIMEOUT, "")
+			sensor_read_count = 0
+			set_timestamp(EN_TS_LAST_SAMPLED,device_rtc_get_serialized(0,0,0))
 		end if
 		sensor_state = EN_SENSOR_WAITTING_TO_READ
 

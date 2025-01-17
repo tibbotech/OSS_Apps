@@ -107,7 +107,7 @@ public sub azure_on_disconnected()
 	callback_azure_on_disconnected()
 end sub
 
-public sub azure_proc_mqtt_msg(byref topic as string,byref data as string)
+public sub azure_proc_mqtt_msg(byref topic as string,byref data as string, byref remaining_byte as word)
 	if azure_init_flag<>AZURE_INIT_SIGNATURE then
 		#if AZURE_DEBUG_PRINT
 			azure_debugprint("ERROR: azure_start() wasn't used or failed")
@@ -148,7 +148,6 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string)
 		exit sub
 	end if
 	
-	
 	'device twin
 	if instr(1, topic,AZURE_TOPIC_TWIN,1)>0 then
 		dim ts as dword
@@ -163,21 +162,26 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string)
 			exit sub
 		end if
 		
-		if instr(1, topic,"/res/200",1)>0 then
-			dim l as byte
-			if mid(data,1,1) <> "{" then
-				value = "{}"
-				goto empty_reply
+		if instr(1, topic,"/res/200",1)>0 or instr(1, topic, AZURE_TOPIC_PROPERTY_DESIRED, 1) >0 then
+			
+			pos1=instr(1,topic,"$rid=",1)
+			if pos1>0 then
+				rid=right(topic, len(topic)-pos1-4)
+				azure_rid=lval(rid)
 			end if
+			
 			do 
-				l = 255-len(data)		
-				if l>0 then data = data + sock.tlsgetdata(l)
+				if remaining_byte > 0 and (255 - len(data)) > remaining_byte then
+					data = data + sock.tlsgetdata(remaining_byte)
+					remaining_byte = 0
+				end if
+
 				pos1 = instr(1,data,"\x22",1)
 				pos2 = instr(pos1+1,data,"\x22",1)
 				if pos1=0 or pos2=0 then
 					exit do
 				end if
-
+				
 				item_name=mid(data,pos1+1,pos2-pos1-1)
 				
 				select case item_name
@@ -188,6 +192,7 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string)
 				case "reported":
 					processing_desired = NO
 					data = right(data,len(data)-12)
+					
 				case "$version":
 					dim processed_bytes as byte
 					
@@ -216,21 +221,17 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string)
 								azure_debugprint("Remote value of \x22"+item_name+"\x22 was "+locat_value+" changed to: "+value)
 							#endif
 							stg_sg(item_name,0,value,EN_STG_SET)
-							pos1=instr(1,topic,"$rid=",1)
-							if pos1>0 then
-								rid=right(topic, len(topic)-pos1-4)
-								azure_rid=lval(rid)
-							end if
 									
 							'Double confirm setting is set correctly here						
-							value="{\x22"+item_name+"\x22:\x22"+value+"\x22}"
-empty_reply:							
+							value="{\x22"+item_name+"\x22:\x22"+value+"\x22}"						
 							azure_rid=azure_rid+1
 							mqtt_publish(AZURE_TOPIC_PROPERTY_REPORTED+"?$rid="+str(azure_rid),value,QOS_AT_MOST_ONCE)
 						else
+							
 							#if AZURE_DEBUG_PRINT
 								azure_debugprint("Report updated local value of \x22"+item_name+"\x22 change from " + value + "to " +locat_value)
 							#endif
+							
 							callback_stg_eeprom_set(item_name,0,"")
 						end if
 					end if				

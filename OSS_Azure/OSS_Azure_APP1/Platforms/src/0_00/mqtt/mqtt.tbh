@@ -100,7 +100,7 @@ declare sub callback_mqtt_sub_ok()
 'Called on the subscriber when the MQTT server confirms the requested subscription.
 
 	
-declare sub callback_mqtt_notif(byref topic as string,byref data as string,remaining_bytes as dword)
+declare sub callback_mqtt_notif(byref topic as string,byref data as string, byref remaining_bytes as word)
 'MQTT callback function. Must be implemented elsewhere in the user's program.
 'Called when the subscriber receives a message from the MQTT server for the topic this subscriber is subscribed to.
 '<b>topic</b> - Name of the topic receieved

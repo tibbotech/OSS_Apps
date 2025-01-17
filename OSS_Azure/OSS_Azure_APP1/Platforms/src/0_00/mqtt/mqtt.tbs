@@ -411,9 +411,7 @@ sub mqtt_proc_timer()
 			
 end sub
 
-
-sub mqtt_sock_event(newstate as enum pl_sock_state, newstatesimple as enum pl_sock_state_simple)
-	
+sub mqtt_sock_event(newstate as enum pl_sock_state, newstatesimple as enum pl_sock_state_simple)	
 	if sock.num<>mqtt_sock_num then 
 		exit sub 
 	end if 
