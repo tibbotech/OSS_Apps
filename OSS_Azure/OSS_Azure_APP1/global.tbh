@@ -1,5 +1,5 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="AZR2.07.01"
+const OSS_APP_FW_VER="AZR2.07.02"
 const OSS_SUPR_FW_VER = "027"
 const OSS_SNS_FW_VER = "013"
 #define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_027.hex"
@@ -160,7 +160,7 @@ include "libraries\modbus.tbh"
 include "PIC_LVP.tbh"
 'DECLARATIONS--------------------------------------------------------
 enum en_ts_type
-	EN_TS_LAST_SAMPLED = 0
+	EN_TS_LAST_SAMPLED = 1
 end enum
 
 enum en_sensor_states
@@ -241,7 +241,12 @@ declare sub enter_LVP_mode()
 declare sub exit_LVP_mode()
 declare sub alternate_debugprint(byref source as string, byref msg as string)
 declare sub set_timestamp(ts_type as en_ts_type, ts as dword)
-
+declare sub time_to_str(byref ts_str as string(20),	
+	byref time_daycount as word,
+	byref time_mincount as word,
+	byref time_second_byte as byte,
+	with_separators as no_yes)
+	
 #if DEVICE_DEBUG_PRINT
 	declare sub device_debug_print(byref data as string)
 #endif

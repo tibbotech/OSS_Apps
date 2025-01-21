@@ -50,11 +50,7 @@ dim wifi_fallback_timer as word = 1 'start the timer at 1, 0 means never had any
 declare sub device_sampling()
 declare sub device_migrating()
 declare function get_json_value(byref json_str as string, byref attribute as string) as string 
-declare sub time_to_str(byref ts_str as string(20),	
-	byref time_daycount as word,
-	byref time_mincount as word,
-	byref time_second_byte as byte,
-	with_separators as no_yes)
+
 
 declare sub device_sleep()
 declare sub device_store_app_fw(data as string)
@@ -160,7 +156,8 @@ sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref s
 		debug_string="WiFi Password: " + stg_value
 	case "SPT":
 		sleep_time = val(stg_value)
-		next_sensor_read_ts = 0
+		set_timestamp(EN_TS_LAST_SAMPLED,device_rtc_get_serialized(0,0,0))
+		
 	case "RCN":
 		min_rec_num_to_send = val(stg_value)
 	case "CMD":
@@ -745,13 +742,18 @@ sub device_sleep()
 	
 	rtc.getdata(daycounts, mincounts, seconds)
 	current_ts = device_rtc_get_serialized(daycounts, mincounts, seconds)
+	
+	'reset timestamp if next read is less than boot up delay
+	if next_sensor_read_ts < boot_up_delay then
+		set_timestamp(EN_TS_LAST_SAMPLED,current_ts)
+	end if
+	
 	next_boot_ts = next_sensor_read_ts - boot_up_delay
-
+	
 	#if DEVICE_DEBUG_PRINT
-		dim ts as string
-		
+		dim ts as string	
 		time_to_str(ts,daycounts,mincounts, seconds,YES)
-		device_debug_print("Now:" + ts)
+		device_debug_print("(Sleep) Now:" + ts)
 	#endif
 	
 'if current time is already exceed the time for next read, wake up in 1 cycle time from now
@@ -762,7 +764,6 @@ sub device_sleep()
 	device_serialized_to_time(next_boot_ts, daycounts, mincounts, seconds)
 	
 	#if DEVICE_DEBUG_PRINT
-		
 		time_to_str(ts,daycounts,mincounts, seconds,YES)
 		device_debug_print("Sleep till:" + ts)
 	#endif
@@ -997,14 +998,19 @@ public sub connect_to_firmware_server()
 end sub
 
 public sub connect_to_azure_server()		
-	dim AZURE_DEVICE_ID as string=stg_get("DVID",0)
-	dim AZURE_SCOPE_ID as string=stg_get("SCID",0)
-	dim AZURE_DPS_SERVER as string=stg_get("DPSS",0)
-	dim AZURE_PRIMARY_KEY as string=stg_get("PKEY",0)
+	dim AZURE_DEVICE_ID as string
+	dim AZURE_SCOPE_ID as string
+	dim AZURE_DPS_SERVER as string
+	dim AZURE_PRIMARY_KEY as string
 	
 	if connect_to_azure_required = NO then
 		exit sub
 	end if
+
+	AZURE_DEVICE_ID = stg_get("DVID",0)
+	AZURE_SCOPE_ID = stg_get("SCID",0)
+	AZURE_DPS_SERVER = stg_get("DPSS",0)
+	AZURE_PRIMARY_KEY = stg_get("PKEY",0)
 	
 	'when switching between server making sure all previous connection is closed
 	http_stop()

@@ -1,0 +1,35 @@
+Changelog of OSS APP
+	-	Date of change:21/01/2025
+	-	New revision of OSS APP: AZR2.07.02
+	-	Previous revision of OSS APP: AZR2.07.01 - 16/01/2025
+	-	The reason for change: 
+			-- bugfix: JSON format wasn't processed properly, and could lead to a loop.
+			-- bugfix: IP and gateway value wasn't updated in cloud
+			-- bugfix: modify Sensor Sampling Time (SPT) could put device in a state that nevery goes to sleep.
+			-- bugfix: file number wasn't assigned correctly cause firmware download got interrupted by setting timestamp
+
+	-	Files changed:
+			-- OSS_Azure_APP1/global.tbh: bugfix, firmware download interrupted
+			-- OSS_Azure_APP1/devices.tbs: bugfix, JSON loop, IP/GI update, SPT error
+			-- OSS_Azure_APP1/azure.tbh: bugfix, JSON loop
+			-- OSS_Azure_APP1/azure.tbs: bugfix, JSON loop
+			-- OSS_Azure_APP1/Platforms/src/0_00/mqtt/mqtt.tbs: bugfix, JSON loop
+			-- OSS_Azure_APP1/Platforms/src/0_00/mqtt/mqtt.tbh: bugfix, JSON loop
+
+	-   Release files built:  
+			--2-07-02/OSS_Azure_APP0.tpc
+			--2-07-02/OSS_Azure_APP1.tpc
+			--2-07-02/OSS_Azure_FW_2-07-02.bin
+			--2-07-02/OSS_Azure_FW_2-07-02.tcu
+			--2-07-02/OSS Template v4.json
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_07.bin
+			--OSS_SUPR_PIC_FW_027.hex
+			--OSS_SNS_PIC_FW_013.hex
+
+	- Level of change:Minor
+	- Risk assessment and cons: none
+								
+	- Deprecated Features: none
+			

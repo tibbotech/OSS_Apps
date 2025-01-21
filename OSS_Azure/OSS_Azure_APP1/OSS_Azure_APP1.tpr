@@ -4,13 +4,13 @@ platform=WM2000
 src_lib_ver=0_00
 name=OSS_Azure_APP1
 output=OSS_Azure_APP1.tpc
-debug=on
+debug=off
 defines= 
 transport=udp_winpcap
 [address1]
 platform=WM2000
 transport=udp_winpcap
-address=156.101.249.68.115.87
+address=156.101.249.68.85.79
 [address2]
 platform=WM2000
 transport=serial

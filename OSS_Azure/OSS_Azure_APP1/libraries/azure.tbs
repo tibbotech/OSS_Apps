@@ -203,10 +203,10 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string, byref
 					
 				case else:
 					dim processed_bytes as byte
-					dim locat_value as string
+					dim local_value as string
 					dim stg_result as en_stg_status_codes
 					
-					stg_result = stg_sg(item_name,0,locat_value,EN_STG_GET)
+					stg_result = stg_sg(item_name,0,local_value,EN_STG_GET)
 					value = azure_get_json_value(data, item_name)
 					processed_bytes = pos2+len(value)+2
 					'check if value is a string type, revmove 2 more bytes if so.
@@ -215,10 +215,10 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string, byref
 					end if
 					data = right(data,len(data)-processed_bytes)
 										
-					if stg_result=EN_STG_STATUS_OK and value<>locat_value then						
+					if stg_result=EN_STG_STATUS_OK and value<>local_value then						
 						if processing_desired = YES then
 							#if AZURE_DEBUG_PRINT
-								azure_debugprint("Remote value of \x22"+item_name+"\x22 was "+locat_value+" changed to: "+value)
+								azure_debugprint("Remote value of \x22"+item_name+"\x22 was "+local_value+" changed to: "+value)
 							#endif
 							stg_sg(item_name,0,value,EN_STG_SET)
 									
@@ -229,7 +229,7 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string, byref
 						else
 							
 							#if AZURE_DEBUG_PRINT
-								azure_debugprint("Report updated local value of \x22"+item_name+"\x22 change from " + value + "to " +locat_value)
+								azure_debugprint("Report updated local value of \x22"+item_name+"\x22 change from " + value + " to " +local_value)
 							#endif
 							
 							callback_stg_eeprom_set(item_name,0,"")

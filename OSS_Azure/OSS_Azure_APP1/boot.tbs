@@ -491,7 +491,7 @@ sub sensor_init()
 	
 	select case sensor_type
 	case 0, 1:	'temp_hum / temp_hum_co2
-		if sensor_type = 0 then boot_up_delay = 8
+		if sensor_type = 0 then boot_up_delay = 10
 		if sensor_type = 1 then boot_up_delay = 30
 		init_i2c_sensor()
 		check_and_upgrade_sns_pic()
