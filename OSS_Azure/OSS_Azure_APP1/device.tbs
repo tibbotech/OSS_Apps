@@ -194,7 +194,12 @@ sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref
 			property_modified = YES
 			stg_timestamp.ts_milsec = 0
 			stg_set_ts(stg_name_or_num)
-	
+			
+		case "DPSS":
+			'if DPS server is changed while device is in operation (not config mode) reboot device.
+			if operation_mode = 0 and config_mode = NO then
+				sys.reboot()
+			end if
 		case "RCN", "SPT", "AWK", "DVNT", "TZ": 'server side settings
 		case else
 		
@@ -241,7 +246,7 @@ sub close_interface_sockets(interface as pl_sock_interfaces)
 end sub
 
 sub callback_dns_failure(status as en_dns_status_codes)
-    
+
 end sub
 
 sub callback_dns_answer_acquired(return_type as en_dns_return_type, byref return_string as string)
@@ -268,6 +273,9 @@ end sub
         
 sub callback_http_request_failed(error_message as string)
 	http_conn_timeout = YES
+	if upgrade_state = 255 then
+		azure_http_request_failed()
+	end if
 end sub
 
 sub callback_http_header_arrival(header_type as string, header_value as string)
@@ -345,7 +353,7 @@ sub callback_http_request_complete()
 		azure_http_request_complete()
 	else
 		connect_to_azure_server()
-	end if    
+	end if
 end sub
 
 sub callback_http_response_code_arrival(http_response as string)
@@ -455,44 +463,23 @@ sub callback_azure_command_triggered(byref command as string, byref param as str
 			device_add_event(EVENT_MIGRATE_INVALID_KEY, "")
 			new_pkey = ""
 		end if
+	case "NEWDPS":
+		device_add_event(EVENT_NEW_DPS,param)
+		stg_set("DPSS",0,param)
+		
     case else: 'by default send response.
 		azure_command_respond(command,"{}",rid,EN_AZURE_OK)
     end select
   
 end sub     
 
-sub callback_azure_device_assigned(byref assigned_hub as string)
-	dim wdaycount, wmincount as word
-	dim bsec as byte
-	
-	rtc.getdata(wdaycount,wmincount,bsec)
-	stg_timestamp.ts_daycount = wdaycount
-	stg_timestamp.ts_mincount = wmincount
-	stg_timestamp.ts_seconds = bsec
-	stg_timestamp.ts_milsec = 0
-	
+sub callback_azure_device_assigned(byref assigned_hub as string)	
 	stg_set("HUBN",0,assigned_hub)
 	
-	stg_timestamp.ts_daycount = 0
-	stg_timestamp.ts_mincount = 0
-	stg_timestamp.ts_seconds = 0
 end sub
 
 sub callback_azure_get_assigned_hub(byref assigned_hub as string)
-	dim last_rtc_updated as dword
-	
 	assigned_hub = stg_get("HUBN",0)
-	
-	'check if it has been more than 5 days since device connect to provision server for rtc update
-	if (stg_timestamp.ts_daycount+stg_timestamp.ts_mincount+stg_timestamp.ts_seconds) = 0 then
-		stg_set("HUBN",0,"")
-	else
-		'432000 seconds = 5 days
-		last_rtc_updated = device_rtc_get_serialized(stg_timestamp.ts_daycount,stg_timestamp.ts_mincount,stg_timestamp.ts_seconds)
-		if 	(last_rtc_updated + 432000) < device_rtc_get_serialized(0,0,0) then
-			 stg_set("HUBN",0,"")
-		end if	
-	end if
 	
 end sub
         
@@ -705,9 +692,6 @@ sub cell__callback_after_switching_from_CMD_to_DATA()
 end sub
 
 sub device_sleep()
-	dim daycounts, mincounts as word
-	dim seconds as byte	
-
 	if sleep_time=0 then
 		exit sub
 	end if
@@ -739,8 +723,10 @@ sub device_sleep()
 'device sleeps until next read substract the time for sensor to boot properly	
 	dim next_boot_ts as dword
 	dim current_ts as dword
+	dim daycounts as word = 0 
+	dim mincounts as word = 0
+	dim seconds as byte = 0
 	
-	rtc.getdata(daycounts, mincounts, seconds)
 	current_ts = device_rtc_get_serialized(daycounts, mincounts, seconds)
 	
 	'reset timestamp if next read is less than boot up delay
@@ -822,6 +808,8 @@ sub device_add_event(device_event as en_device_events, byref parameter as string
 		event_msg="Advance command ("+parameter+") accepted!"
 	case EVENT_ADVANCE_REJECTED_CMD:
 		event_msg="Advance command ("+parameter+") rejected!"
+	case EVENT_NEW_DPS:
+		event_msg="Switch to new DPS server: "+ parameter
 	case EVENT_DEBUG_INFO:
 		event_msg=parameter
 	end select
@@ -1276,19 +1264,27 @@ end function
 
 function need_to_connect() as no_yes
 	dim active_rec_num as word
-	dim daycounts, mincounts as word
-	dim seconds as byte
+	dim ts_now as dword
+	dim ts_rtc_updated as dword
 	
 	need_to_connect = NO
-	
-	rtc.getdata(daycounts,mincounts,seconds)
-	if operation_mode = 0 or daycounts = 0 then
+	ts_now = device_rtc_get_serialized(0,0,0)
+	ts_rtc_updated = get_timestamp(EN_TS_RTC_UPDATED) 
+
+'if current time is less than rtc last updated time, rtc is incorrect, or if rtc last updated has been more than 5 (432000 secs) days, rtc update is required
+	if ts_now < ts_rtc_updated or ts_now - ts_rtc_updated > 432000 then
+		need_to_connect = YES
+		set_timestamp(EN_TS_RTC_UPDATED,0)
+		exit function
+	end if
+
+	if operation_mode = 0 then
 		need_to_connect=YES
 		exit function
 	end if
 	
 	if sys.runmode = PL_SYS_MODE_DEBUG and sys.debugmode = PL_SYS_DBG_NET then
-		need_to_connect=YES 
+		need_to_connect=YES
 		exit function
 	end if
 		
@@ -1753,15 +1749,14 @@ sub execute_special_command()
 end sub
 
 sub read_sensor()
-
 	dim daycounts, mincounts as word
 	dim seconds as byte		
 	dim ts as string(36)		
 	
 	'check the timestampe, if it's invalid, don't sample, but sample again in 2 sec
 	rtc.getdata(daycounts,mincounts,seconds)
-	if daycounts>0 then
-		set_timestamp(EN_TS_LAST_SAMPLED,device_rtc_get_serialized(0,0,0))
+	if daycounts > 0 then
+		set_timestamp(EN_TS_LAST_SAMPLED,device_rtc_get_serialized(daycounts,mincounts,seconds))
 		
 		time_to_str(ts,daycounts,mincounts,seconds,YES)
 		ts=ts+".000Z"
@@ -1896,3 +1891,13 @@ sub set_timestamp(ts_type as en_ts_type, ts as dword)
 	end if
 end sub
 
+function get_timestamp(ts_type as en_ts_type) as dword
+	dim ts as string(32)
+	dim w as word
+	
+	w = ts_type
+	tbl_select("SysTS","SysTS")
+	tbl_record_sg(w,EN_TBL_GET)
+	tbl_field_sg("TS",ts,EN_TBL_GET)
+	get_timestamp = lval(ts)
+end function

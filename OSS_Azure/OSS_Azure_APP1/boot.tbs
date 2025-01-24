@@ -158,11 +158,8 @@ sub boot()
     dim prev_sensor_read_ts as dword
 	dim current_ts as dword
 	
-	tbl_select("SysTS","SysTS")
-	tbl_record_sg(EN_TS_LAST_SAMPLED,EN_TBL_GET)
-	tbl_field_sg("TS",ts,EN_TBL_GET)
 	current_ts = device_rtc_get_serialized(0,0,0)
-	prev_sensor_read_ts = lval(ts)
+	prev_sensor_read_ts = get_timestamp(EN_TS_LAST_SAMPLED)
 	next_sensor_read_ts = prev_sensor_read_ts + (sleep_time*60)
 		
 	'if at boot up time is already bigger than the time for next read, at the boot up delay the make sure sensor has time to boot properly before read

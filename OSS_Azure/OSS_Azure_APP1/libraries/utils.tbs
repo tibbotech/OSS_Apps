@@ -171,6 +171,10 @@ sub time_to_str(byref ts_str as string(20),
 	with_separators as no_yes)
 	dim time_year_str, time_month_str, time_date_str, time_hour_str, time_minute_str, time_second_str as string(4)
 
+	if (time_daycount + time_mincount + time_second_byte) = 0 then
+		rtc.getdata(time_daycount,time_mincount,time_second_byte)
+	end if
+	
 	time_year_str=str(year(time_daycount)+2000)
 	time_month_str=str(month(time_daycount))
 	time_date_str=str(date(time_daycount))
@@ -201,18 +205,25 @@ sub time_to_str(byref ts_str as string(20),
 end sub
 
 '------------------------------------------------------------------------------
-function device_rtc_get_serialized(wdaycount as word, wmincount as word, bsec as byte) as dword
+function device_rtc_get_serialized(byref wdaycount as word,byref wmincount as word,byref bsec as byte) as dword
 'calculate number of seconds from 2000-01-01 00:00:00
 	dim dw1 as dword
-	
-	if (wdaycount+wmincount+bsec) = 0 then
-		rtc.getdata(wdaycount,wmincount,bsec)
+	dim time_daycount as word = wdaycount
+	dim time_mincount as word = wmincount
+	dim time_second_byte as byte = bsec
+
+	if (time_daycount + time_mincount + time_second_byte) = 0 then
+		rtc.getdata(time_daycount,time_mincount,time_second_byte)
+		wdaycount = time_daycount
+		wmincount = time_mincount
+		bsec = time_second_byte
 	end if
-	device_rtc_get_serialized=wdaycount
+	
+	device_rtc_get_serialized=time_daycount
 	device_rtc_get_serialized=device_rtc_get_serialized*86400
-	dw1=wmincount
+	dw1=time_mincount
 	dw1=dw1*60
-	device_rtc_get_serialized=device_rtc_get_serialized+dw1+bsec
+	device_rtc_get_serialized=device_rtc_get_serialized+dw1+time_second_byte
 
 end function
 

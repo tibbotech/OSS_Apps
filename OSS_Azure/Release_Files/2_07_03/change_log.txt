@@ -1,0 +1,34 @@
+Changelog of OSS APP
+	-	Date of change:24/01/2025
+	-	New revision of OSS APP: AZR2.07.03
+	-	Previous revision of OSS APP: AZR2.07.02 - 21/01/2025
+	-	The reason for change: 
+			-- Modify the server connection procedure, so device will try to connect to stored HUB url, regardless DPS server's aviliablity.
+			-- Add command that allow user to modify DPS server from Azure IoT central	
+
+	-	Files changed:
+			-- OSS_Azure_APP1/global.tbh: DPS connection procedure
+			-- OSS_Azure_APP1/boot.tbs: DPS connection procedure
+			-- OSS_Azure_APP1/devices.tbs: DPS connection procedure, DPS command
+			-- OSS_Azure_APP1/azure.tbh: DPS connection procedure
+			-- OSS_Azure_APP1/azure.tbs: DPS connection procedure
+			-- OSS_Azure_APP1/libraries/utils.tbs DPS connection procedure
+			-- OSS_Azure_APP1/libraries/utils.tbh DPS connection procedure
+
+	-   Release files built:  
+			--2-07-03/OSS_Azure_APP0.tpc
+			--2-07-03/OSS_Azure_APP1.tpc
+			--2-07-03/OSS_Azure_FW_2-07-03.bin
+			--2-07-03/OSS_Azure_FW_2-07-03.tcu
+			--2-07-03/OSS Template v5.json
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_07.bin
+			--OSS_SUPR_PIC_FW_027.hex
+			--OSS_SNS_PIC_FW_013.hex
+
+	- Level of change:Minor
+	- Risk assessment and cons: none
+								
+	- Deprecated Features: none
+			

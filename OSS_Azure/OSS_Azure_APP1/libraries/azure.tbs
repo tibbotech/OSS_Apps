@@ -262,15 +262,14 @@ public sub azure_proc_timer()
 	case EN_AZURE_NOT_INITIALIZED:
 		exit sub
 	case EN_AZURE_NOT_CONNECTED:
-		dim w as word
-		rtc.getdata(w,0,0)	'check if rtc has been reset.
 		callback_azure_get_assigned_hub(azure_assigned_hub)
-		if azure_assigned_hub <>"" and w<>0 then
+		if azure_assigned_hub <> "" and get_timestamp(EN_TS_RTC_UPDATED) > 0 then
 			azure_mqtt_start()
 			azure_state = EN_AZURE_DEVICE_LOOKUP
 		else
 			azure_device_lookup()
 		end if
+		
 	case EN_AZURE_DEVICE_LOOKUP:
 		if azure_timer >0 then
 			azure_timer=azure_timer-1
@@ -278,8 +277,10 @@ public sub azure_proc_timer()
 			azure_timer=AZURE_CONNECTION_TOUT
 			callback_azure_conn_timeout()
 		end if
+		
 	case EN_AZURE_NOT_PROVISIONED:
 		azure_dps_device_provisioning()
+		
 	case EN_AZURE_PROVISIONING:
 		if azure_timer >0 then
 			azure_timer=azure_timer-1
@@ -428,10 +429,11 @@ sub azure_set_datetime(byref dt_string as string)
 	mincounts=mincount(val(shour),val(smin))
 	
 	rtc.getdata(curr_daycounts,curr_mincounts, b)
-	if curr_daycounts<>daycounts or curr_mincounts<>mincounts then
+	if curr_daycounts<>daycounts or curr_mincounts<>mincounts or get_timestamp(EN_TS_RTC_UPDATED) = 0 then
 		callback_azure_rtc_correction(curr_daycounts,curr_mincounts, b)
 		b=val(ssec) 	
 		rtc.setdata(daycounts,mincounts,b)
+		set_timestamp(EN_TS_RTC_UPDATED,device_rtc_get_serialized(daycounts,mincounts,b))
 	end if
 		
 end sub
@@ -568,6 +570,20 @@ sub iot_header_arrival(header_type as string, header_value as string)
 	if header_type = "Date" then
 		azure_set_datetime(header_value)
 	end if
+end sub
+
+sub azure_http_request_failed()
+	'if request to dps server failed, but we have previously stored hub, try connect to hub without dps look up
+	if http_request_item.url = azure_current_url and azure_state = EN_AZURE_DEVICE_LOOKUP then
+		if azure_assigned_status=false then
+			azure_state=EN_AZURE_NOT_PROVISIONED
+		end if
+		'if device is already registered, skip provisioning
+		callback_azure_get_assigned_hub(azure_assigned_hub)
+		if azure_assigned_hub<>"" and azure_assigned_status<>false then
+			azure_mqtt_start()
+		end if	
+	end if		
 end sub
 
 sub azure_http_request_complete()

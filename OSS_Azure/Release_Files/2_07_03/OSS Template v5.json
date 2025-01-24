@@ -1,0 +1,761 @@
+[
+  {
+    "@id": "dtmi:tibboiotdev:OSSV5_707;1",
+    "@type": "Interface",
+    "contents": [
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:event;3",
+        "@type": [
+          "Telemetry",
+          "EventValue",
+          "Event"
+        ],
+        "displayName": {
+          "en": "Event"
+        },
+        "name": "event",
+        "schema": "string",
+        "severity": "information"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:DLPT;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Download Point"
+        },
+        "name": "DLPT",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:co2;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "CO2"
+        },
+        "name": "co2",
+        "schema": "integer",
+        "displayUnit": {
+          "en": "ppm"
+        },
+        "maxValue": 10000,
+        "minValue": 100
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:TZ;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Time Zone"
+        },
+        "name": "TZ",
+        "schema": "string",
+        "writable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:DVNT;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Device Notes"
+        },
+        "name": "DVNT",
+        "schema": "string",
+        "writable": true,
+        "maxLength": 64
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:temperature;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Temperature"
+        },
+        "name": "temperature",
+        "schema": "float",
+        "unit": "degreeCelsius",
+        "displayUnit": {
+          "en": "°C"
+        }
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:humidity;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Humidity"
+        },
+        "name": "humidity",
+        "schema": "double",
+        "unit": "percent",
+        "displayUnit": {
+          "en": "%"
+        }
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:UPGRADE;3",
+        "@type": "Command",
+        "description": {
+          "en": "This link can be used to trigger the FOTA upgrade. Go to https://oss-fota.azurewebsites.net/ for instructions and generating the update link!"
+        },
+        "displayName": {
+          "en": "Upgrade Remotely"
+        },
+        "name": "UPGRADE",
+        "request": {
+          "@type": "CommandPayload",
+          "description": {
+            "en": "You can get this link from https://oss-fota.azurewebsites.net/"
+          },
+          "displayName": {
+            "en": "Download Point"
+          },
+          "name": "DLPT",
+          "schema": "string"
+        },
+        "durable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:RSTNTGPW;3",
+        "@type": "Command",
+        "description": {
+          "en": "This can be used to reset the NFC password in case it is forgotten! If you request this service, as soon as device gets connected to Azure, it will execute the command when a Phone with OSS Companion app taps the device.  Remember that the password will be removed and it is recommended the user to set a new password to ensure security is maintained!"
+        },
+        "displayName": {
+          "en": "Reset NTAG Password"
+        },
+        "name": "RSTNTGPW",
+        "durable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:DEVMIG;3",
+        "@type": "Command",
+        "description": {
+          "en": "You can use this command in case you would like to migrate your device from one Azure device instance to another one. Just enter the new credentials and click run! As soon as device gets this command, it will try to connect to the new instance. In case of failure, it will still connect to the current Azure instance; this is to prevent device from getting disconnected."
+        },
+        "displayName": {
+          "en": "Migrate Device"
+        },
+        "name": "DEVMIG",
+        "request": {
+          "@type": "CommandPayload",
+          "description": {
+            "en": "New Azure Device Instance"
+          },
+          "displayName": {
+            "en": "Connect"
+          },
+          "name": "Connect",
+          "schema": {
+            "@type": "Object",
+            "displayName": {
+              "en": "Object"
+            },
+            "fields": [
+              {
+                "displayName": {
+                  "en": "ID Scope"
+                },
+                "name": "SCID",
+                "schema": "string"
+              },
+              {
+                "displayName": {
+                  "en": "Devcie ID"
+                },
+                "name": "DVID",
+                "schema": "string"
+              },
+              {
+                "displayName": {
+                  "en": "Primary Key"
+                },
+                "name": "PKEY",
+                "schema": "string"
+              }
+            ]
+          }
+        },
+        "durable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:SPT;3",
+        "@type": [
+          "Property",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Sensor Sampling Time (min)"
+        },
+        "name": "SPT",
+        "schema": "integer",
+        "writable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:RCN;3",
+        "@type": [
+          "Property",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Number of Samples to Aggregate"
+        },
+        "name": "RCN",
+        "schema": "integer",
+        "writable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:CID;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Device (Customer) ID"
+        },
+        "name": "CID",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:FWV;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Firmware Version"
+        },
+        "name": "FWV",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:MNUM;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Model No."
+        },
+        "name": "MNUM",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:DVNM;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Device Name"
+        },
+        "name": "DVNM",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:MODE;3",
+        "@type": "Property",
+        "displayName": {
+          "en": "Communication Mode"
+        },
+        "name": "MODE",
+        "schema": {
+          "@id": "dtmi:tibboiotdev:OSSV5_707:MODE:schema;3",
+          "@type": "Enum",
+          "displayName": {
+            "en": "Enum"
+          },
+          "enumValues": [
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:MODE:schema:WiFi;3",
+              "displayName": {
+                "en": "Wi-Fi"
+              },
+              "enumValue": "0",
+              "name": "WiFi"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:MODE:schema:LTECATM1NBIoT;3",
+              "displayName": {
+                "en": "LTE-CAT-M1 / NB-IoT"
+              },
+              "enumValue": "1",
+              "name": "LTECATM1NBIoT"
+            }
+          ],
+          "valueSchema": "string"
+        },
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:OPMD;3",
+        "@type": "Property",
+        "displayName": {
+          "en": "Operation Mode"
+        },
+        "name": "OPMD",
+        "schema": {
+          "@id": "dtmi:tibboiotdev:OSSV5_707:OPMD:schema;3",
+          "@type": "Enum",
+          "displayName": {
+            "en": "Enum"
+          },
+          "enumValues": [
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:OPMD:schema:AlwaysOn;3",
+              "displayName": {
+                "en": "Always On"
+              },
+              "enumValue": "0",
+              "name": "AlwaysOn"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:OPMD:schema:LowPowerMode;3",
+              "displayName": {
+                "en": "Low-Power Mode"
+              },
+              "enumValue": "1",
+              "name": "LowPowerMode"
+            }
+          ],
+          "valueSchema": "string"
+        },
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:STPY;3",
+        "@type": "Property",
+        "displayName": {
+          "en": "Sensor Type"
+        },
+        "name": "STPY",
+        "schema": {
+          "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema;3",
+          "@type": "Enum",
+          "displayName": {
+            "en": "Enum"
+          },
+          "enumValues": [
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema:TempHumidity;3",
+              "displayName": {
+                "en": "Temp / Humidity"
+              },
+              "enumValue": "0",
+              "name": "TempHumidity"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema:TempHumidityCO2;3",
+              "displayName": {
+                "en": "Temp / Humidity / CO2"
+              },
+              "enumValue": "1",
+              "name": "TempHumidityCO2"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema:MBP02TempHumidity;3",
+              "displayName": {
+                "en": "M-BP02 (Temp / Humidity)"
+              },
+              "enumValue": "128",
+              "name": "MBP02TempHumidity"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema:MSOILJXBS3001TRRS;3",
+              "displayName": {
+                "en": "M-SOIL(JXBS-3001-TR-RS)"
+              },
+              "enumValue": "129",
+              "name": "MSOILJXBS3001TRRS"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema:MBP01AmebientTemp;3",
+              "displayName": {
+                "en": "M-BP01 (Amebient Temp)"
+              },
+              "enumValue": "133",
+              "name": "MBP01AmebientTemp"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema:MBP05FloodLeak;3",
+              "displayName": {
+                "en": "M-BP05 (Flood / Leak) "
+              },
+              "enumValue": "130",
+              "name": "MBP05FloodLeak"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema:MSOILJXBS3001TRCGQRS;3",
+              "displayName": {
+                "en": "M-SOIL (JXBS-3001-TRCGQ-RS)"
+              },
+              "enumValue": "134",
+              "name": "MSOILJXBS3001TRCGQRS"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema:MH2S100PPMJXBS3005H2SRS;3",
+              "displayName": {
+                "en": "M-H2S100PPM (JXBS-3005-H2S-RS)"
+              },
+              "enumValue": "135",
+              "name": "MH2S100PPMJXBS3005H2SRS"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema:MUVJXBS3001UVRS;3",
+              "displayName": {
+                "en": "M-UV (JXBS-3001-UV-RS)"
+              },
+              "enumValue": "136",
+              "name": "MUVJXBS3001UVRS"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema:MNOISEJXBS3001ZSRS;3",
+              "displayName": {
+                "en": "M-NOISE (JXBS-3001-ZS-RS)"
+              },
+              "enumValue": "137",
+              "name": "MNOISEJXBS3001ZSRS"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema:MBP03AmbientLight;3",
+              "displayName": {
+                "en": "M-BP03 (Ambient Light)"
+              },
+              "enumValue": "131",
+              "name": "MBP03AmbientLight"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:STPY:schema:MBP06DigitalInput;3",
+              "displayName": {
+                "en": "M-BP06 (Digital Input)"
+              },
+              "enumValue": "132",
+              "name": "MBP06DigitalInput"
+            }
+          ],
+          "valueSchema": "string"
+        },
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:MBID;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Modbus Device ID"
+        },
+        "name": "MBID",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:IP;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Last IP"
+        },
+        "name": "IP",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:MAC;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Wi-Fi MAC Address"
+        },
+        "name": "MAC",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:Flood;3",
+        "@type": "Telemetry",
+        "displayName": {
+          "en": "Flood/Leak"
+        },
+        "name": "Flood",
+        "schema": {
+          "@id": "dtmi:tibboiotdev:OSSV5_707:Flood:schema;3",
+          "@type": "Enum",
+          "displayName": {
+            "en": "Enum"
+          },
+          "enumValues": [
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:Flood:schema:Dry;3",
+              "displayName": {
+                "en": "Dry"
+              },
+              "enumValue": 0,
+              "name": "Dry"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV5_707:Flood:schema:Wet;3",
+              "displayName": {
+                "en": "Wet"
+              },
+              "enumValue": 1,
+              "name": "Wet"
+            }
+          ],
+          "valueSchema": "integer"
+        }
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:Light;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Ambient Light"
+        },
+        "name": "Light",
+        "schema": "integer",
+        "unit": "lux",
+        "displayUnit": {
+          "en": "Lux"
+        },
+        "maxValue": 655258,
+        "minValue": 1
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:IMEI;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "IMEI"
+        },
+        "name": "IMEI",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:CCID;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "ICCID"
+        },
+        "name": "CCID",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:AWK;3",
+        "@type": [
+          "Property",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Maximum Awake Time (min)"
+        },
+        "name": "AWK",
+        "schema": "integer",
+        "writable": true,
+        "maxValue": 4,
+        "minValue": 2
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:BAT_LVL;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Battery Level"
+        },
+        "name": "BAT_LVL",
+        "schema": "double",
+        "unit": "percent",
+        "maxValue": 100,
+        "minValue": 0
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:pH;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "pH"
+        },
+        "name": "pH",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:conductivity;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Conductivity"
+        },
+        "name": "conductivity",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:nitrogen;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Nitrogen"
+        },
+        "name": "nitrogen",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:phosphorus;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Phosphorus"
+        },
+        "name": "phosphorus",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:potassium;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Potassium"
+        },
+        "name": "potassium",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:H2S;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "H2S"
+        },
+        "name": "H2S",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:UV;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "UV"
+        },
+        "name": "UV",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:noise;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Noise"
+        },
+        "name": "noise",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:SoilTemp;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue",
+          "Temperature"
+        ],
+        "displayName": {
+          "en": "Temperature"
+        },
+        "name": "SoilTemp",
+        "schema": "float",
+        "unit": "degreeCelsius",
+        "displayUnit": {
+          "en": "°C"
+        }
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:SoilHumd;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue",
+          "RelativeHumidity"
+        ],
+        "displayName": {
+          "en": "Moisture"
+        },
+        "name": "SoilHumd",
+        "schema": "float",
+        "unit": "percent",
+        "displayUnit": {
+          "en": "%"
+        }
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV5_707:NEWDPS;1",
+        "@type": "Command",
+        "displayName": {
+          "en": "Assign New DPS"
+        },
+        "name": "NEWDPS",
+        "request": {
+          "@type": "CommandPayload",
+          "displayName": {
+            "en": "New server address"
+          },
+          "name": "DPSS",
+          "schema": "string"
+        },
+        "durable": true
+      }
+    ],
+    "displayName": {
+      "en": "OSS v5"
+    },
+    "@context": [
+      "dtmi:iotcentral:context;2",
+      "dtmi:dtdl:context;2"
+    ]
+  }
+]
