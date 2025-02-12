@@ -1,0 +1,33 @@
+Changelog of OSS APP
+	-	Date of change:12/02/2025
+	-	New revision of OSS APP: AZR2.08.02
+	-	Previous revision of OSS APP: AZR2.07.03 - 24/01/2025
+	-	The reason for change: 
+			-- Add new setting VMOD to control modbus VMOD
+			-- Modify FOTA behavior, partial checksum fail will not trigger start over any more.
+			-- Bug fix, device goto LTE without trying wifi at boot up when comm_mode set to Fallback to LTE.
+
+	-	Files changed:
+			-- OSS_Azure_APP1/boot.tbs: VMOD; Partial download; Fallback to LTE.
+			-- OSS_Azure_APP1/devices.tbs: VMOD; Partial download.
+			-- OSS_Azure_APP1/luis.xtxt: VMOD
+			-- OSS_Azure_APP1/settings.xtxt: VMOD
+			-- Release/2-08-02/OSS_Azure_Template_V4_12-FEB-2025: VMOD
+
+	-   Release files built:  
+			--2-08-02/OSS_Azure_APP0.tpc
+			--2-08-02/OSS_Azure_APP1.tpc
+			--2-08-02/OSS_Azure_FW_2-08-00.bin
+			--2-08-02/OSS_Azure_FW_2-08-00.tcu
+			--2-08-02/OSS_Azure_Template_V4_12-FEB-2025.json
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_07.bin
+			--OSS_SUPR_PIC_FW_027.hex
+			--OSS_SNS_PIC_FW_013.hex
+
+	- Level of change:Minor
+	- Risk assessment and cons: none
+								
+	- Deprecated Features: none
+			

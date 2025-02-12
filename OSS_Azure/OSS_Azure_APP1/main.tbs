@@ -145,11 +145,6 @@ sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as strin
 			connect_to_azure_server()
 		end if
 	end if
-	
-	if SYS_SOCK_DEBUGPRINT>0 then
-		sock.num = SYS_DPRINT_SOCK_NUM
-		sock.connect()
-	end if
 end sub
 
 sub on_sock_data_sent()

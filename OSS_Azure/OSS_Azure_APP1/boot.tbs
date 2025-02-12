@@ -196,8 +196,12 @@ sub boot()
     '================================================================     
 	connect_to_azure_required = need_to_connect()
 	comm_mode=val(stg_get("MODE",0))
-
-	'if sock debugprint is on, autoconnect no matter what comm mode is	
+	
+	if comm_mode <> "2" and stg_get("FBL", 0) = "1" then
+		stg_set("FBL", 0, "0")
+	end if
+	'if sock debugprint is on, autoconnect no matter what comm mode is
+	
 	if SYS_SOCK_DEBUGPRINT>0 then
 		if wln.autoconnect<>YES or wln.autodhcp<>YES then	
 			wln.autodhcp=YES
@@ -214,10 +218,10 @@ sub boot()
 		sock.targetport=val(stg_get("DBPR",0))
 		sock.targetinterface = PL_SOCK_INTERFACE_WLN
 		sock.allowedinterfaces = "WLN"
-		sock.connect()
+
 	else
 		if connect_to_azure_required=YES then
-			if comm_mode = 0 and wln.autoconnect = NO then
+			if (comm_mode = 0 or (comm_mode = 2 and stg_get("FBL",0) = "0" )) and wln.autoconnect = NO then
 				wln.autoconnect = YES
 				sys.reboot()
 			end if
@@ -268,6 +272,7 @@ sub boot()
 	if stg_get("CMD",0)<>"" then
 		command_issued = YES
 	end if
+	device_debug_print("Device boot up")
 end sub
 
 sub check_app_fw_version()
@@ -334,6 +339,10 @@ fw207:
 				goto fw208
 			else if w1>=207 and w1<208 then
 fw208:
+				stg_set("VMOD",0,"0")
+				goto fw209
+			else if w1>=208 and w1<209 then
+fw209:
 			end if			
 		else
 			stg_restore_multiple(EN_STG_INIT_MODE_NORMAL)
@@ -385,15 +394,14 @@ sub alternate_debugprint(byref source as string, byref msg as string)
 	dim b as byte=sock.num
 	sock.num=SYS_DPRINT_SOCK_NUM
 	if wln.ip <> "0.0.0.0" and sock.targetip <> "0.0.0.0" and sock.targetport <> 0 then
-		if sock.txfree = 0 then
-			sock.txclear()
-			sock.close()
-		end if
-		if sock.statesimple <> PL_SSTS_EST then
+		if sock.statesimple <> PL_SSTS_EST and sock.statesimple <> PL_SSTS_ARP then
+			sock.reset()
 			sock.connect()
 		end if
-		sock.setdata(msg)
-		sock.send()
+		if sock.statesimple = PL_SSTS_EST then
+			sock.setdata(msg)
+			sock.send()
+		end if
 	end if
 	sock.num=b
 end sub
@@ -425,8 +433,10 @@ end sub
 
 sub init_modbus_sensor()
 	'enable modbus voltage
-	mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,HIGH,TBT00_3_S5_CHANNEL)
-
+	if stg_get("VMOD",0) = "1" then
+		mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,HIGH,TBT00_3_S5_CHANNEL)
+	end if
+	
 	sensor_level_shift_on()
 
 	'Modbus RS485 setup on UART 1

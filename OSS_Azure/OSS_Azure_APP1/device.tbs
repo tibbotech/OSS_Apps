@@ -35,9 +35,9 @@ dim property_modified as no_yes = YES
 dim sensor_telemetry_ts as string(36) = ""
 dim modbus_device_id as byte
 dim device_migrate_state as en_device_migrate_states = EN_DEVICE_MIGRATE_IDLE
-dim new_dvid as string(32)
-dim new_scid as string(16) 
-dim new_pkey as string(64)
+dim new_dvid as string(35)
+dim new_scid as string(19) 
+dim new_pkey as string(67)
 dim rand_event_num as byte 
 dim command_issued as no_yes = NO
 dim sensor_read_count as byte = 0 
@@ -51,8 +51,6 @@ declare sub device_sampling()
 declare sub device_migrating()
 declare function get_json_value(byref json_str as string, byref attribute as string) as string 
 
-
-declare sub device_sleep()
 declare sub device_store_app_fw(data as string)
 declare sub read_onboard_t_h_co2_sensor(byref ts as string)
 declare sub read_onboard_t_h_sensor(byref ts as string)
@@ -167,7 +165,7 @@ sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref s
 	case "FBL":
 		'if in fallback and always on mode, reboot after change commmunication method.
 		if comm_mode = 2 and operation_mode = 0 then 
-			if stg_value = "0" or sys.runmode = PL_SYS_MODE_DEBUG then
+			if stg_value = "0" or (sys.runmode = PL_SYS_MODE_DEBUG and sys.debugmode = PL_SYS_DBG_NET) then
 				wln.autoconnect = YES
 			else
 				wln.autoconnect = NO
@@ -190,7 +188,8 @@ sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref
 	select case stg_name_or_num
 		case "DVID","SCID","PKEY":
 			if config_mode = YES then credential_changed = YES
-		case "FWV", "CID", "MNUM", "DVNM", "MODE", "OPMD", "STPY", "MBID", "IP", "GI": 'device side settings
+			
+		case "FWV", "CID", "MNUM", "DVNM", "MODE", "OPMD", "STPY", "MBID", "IP", "GI", "VMOD": 'device side settings
 			property_modified = YES
 			stg_timestamp.ts_milsec = 0
 			stg_set_ts(stg_name_or_num)
@@ -200,6 +199,7 @@ sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref
 			if operation_mode = 0 and config_mode = NO then
 				sys.reboot()
 			end if
+			
 		case "RCN", "SPT", "AWK", "DVNT", "TZ": 'server side settings
 		case else
 		
@@ -457,6 +457,19 @@ sub callback_azure_command_triggered(byref command as string, byref param as str
 		if right(new_pkey,1) = "=" then
 			new_scid = get_json_value(param,"SCID")
 			new_dvid = get_json_value(param,"DVID")
+			
+			if len(new_pkey) > 64 then
+				device_add_event(EVENT_MIGRATE_FAIL, "Primary Key exceeds maximum length.")
+				exit sub
+			end if
+			if len(new_scid) > 16 then
+				device_add_event(EVENT_MIGRATE_FAIL, "Device ID exceeds maximum length.")
+				exit sub
+			end if
+			if len(new_dvid) >32 then
+				device_add_event(EVENT_MIGRATE_FAIL, "ID Scope exceeds maximum length.")
+				exit sub
+			end if
 			device_add_event(EVENT_MIGRATE_START, new_dvid)
 			device_migrate_state = EN_DEVICE_MIGRATE_STARTING
 		else
@@ -697,11 +710,10 @@ sub device_sleep()
 	end if
 	
 	mqtt_disconnect()
+	
+	mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
 	turn_sensor3v3_off()
 	
-	if sensor_type > 127 then
-		mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
-	end if
 	'in wln mode, we decide next cycle should connect or not before go to sleep
 	if comm_mode = 0 or comm_mode = 2 then
 		wln.autoconnect = need_to_connect()
@@ -777,9 +789,9 @@ sub device_add_event(device_event as en_device_events, byref parameter as string
 	case EVENT_UPGRADE_START:
 		event_msg="Over-the-air FW downloading started!"
 	case EVENT_UPGRADE_FAIL:
-		event_msg="FW download failed! retrying.."
+		event_msg=parameter + "of FW download failed! retrying.."
 	case EVENT_UPGRADE_PART_DOWNLOAD:
-		event_msg=parameter+ " of FW downloaded!"
+		event_msg=parameter + " of FW downloaded!"
 	case EVENT_UPGRADE_FULL_DOWNLOAD:
 		event_msg="FW download completed! flashing firmware…"
 	case EVENT_UPGRADE_COMPLETE:
@@ -801,7 +813,7 @@ sub device_add_event(device_event as en_device_events, byref parameter as string
 	case EVENT_MIGRATE_SUCC:
 		event_msg="Device migrated! The destination device ID:"+parameter
 	case EVENT_MIGRATE_FAIL:
-		event_msg="Device migration failed!"
+		event_msg="Device migration failed! (" + parameter +")"
 	case EVENT_MIGRATE_INVALID_KEY:
 		event_msg="Invalid primary key! Device migration will not start!"
 	case EVENT_ADVANCE_ACCEPTED_CMD:
@@ -811,7 +823,7 @@ sub device_add_event(device_event as en_device_events, byref parameter as string
 	case EVENT_NEW_DPS:
 		event_msg="Switch to new DPS server: "+ parameter
 	case EVENT_DEBUG_INFO:
-		event_msg=parameter
+		event_msg="[DEBUG]"+parameter
 	end select
 	
 	rand_event_num = rand_event_num+1
@@ -831,8 +843,11 @@ sub device_add_event(device_event as en_device_events, byref parameter as string
 end sub
 
 function app_fw_copy_part_to_file() as ok_ng
+	dim original_filesize as dword
+	
 	fd.filenum=app_fw_filenum
 	fd.open(APP_FW_FILE)
+	original_filesize = fd.filesize
 	fd.setpointer(fd.filesize+1)
 	fd.filenum=part_filenum
 	fd.setpointer(1)
@@ -846,12 +861,13 @@ function app_fw_copy_part_to_file() as ok_ng
 		end if
 		fd.filenum=part_filenum
 	loop while fd.pointer < fd.filesize and fd.laststatus=PL_FD_STATUS_OK
-	
+		
 	'verify checksum for whole firmware file
 	fd.filenum = app_fw_filenum
 	if fd.laststatus = PL_FD_STATUS_OK then
 		fd.flush()
 		upgrade_state = upgrade_state+1
+		'all parts downloaded
 		if upgrade_state = total_chuncks then
 			dim checksum as dword=0
 			fd.setpointer(1)		
@@ -870,6 +886,7 @@ function app_fw_copy_part_to_file() as ok_ng
 		fd.close()
  		app_fw_copy_part_to_file = OK
 	else
+		fd.setfilesize(original_filesize)
 		app_fw_copy_part_to_file = NG
 	end if
 end function
@@ -902,14 +919,9 @@ sub device_store_app_fw(data as string)
 			checksum=checksum+(strsum(data))
 		loop while fd.pointer <= fd.filesize
 		
-	'checksum verify
+		'partial checksum verify
 		if checksum <> part_checksum then
-			if operation_mode = 0 then
-				device_add_event(EVENT_UPGRADE_FAIL, "")
-			else
-				device_add_event(EVENT_UPGRADE_FAIL, "")
-				stg_set("UPD",0,"0") 'start over			
-			end if
+			device_add_event(EVENT_UPGRADE_FAIL, str(part_num+1)+"/"+str(total_chuncks) + " ")
 			exit sub
 		end if
 	else
@@ -919,8 +931,7 @@ sub device_store_app_fw(data as string)
 	if app_fw_copy_part_to_file() = OK then
 		device_add_event(EVENT_UPGRADE_PART_DOWNLOAD, str(part_num+1)+"/"+str(total_chuncks))
 	else	
-		device_add_event(EVENT_UPGRADE_FAIL, "")
-		stg_set("UPD",0,"0") 'start over		
+		device_add_event(EVENT_UPGRADE_FAIL,str(part_num+1)+"/"+str(total_chuncks) + " ")
 	end if
 	'in power saving mode, connect to azure to finish other task
 	connect_to_azure_server()
@@ -1547,6 +1558,7 @@ sub update_server_properties()
 		update_stg_ts_and_send_azure("MBID")
 		update_stg_ts_and_send_azure("RCN")
 		update_stg_ts_and_send_azure("SPT")
+		update_stg_ts_and_send_azure("VMOD")
 		property_modified = NO
 	end if
 end sub
@@ -1701,7 +1713,7 @@ sub device_migrating()
 		
 	case EN_DEVICE_MIGRATE_FAILED:
 		if azure_fail_to_connect_count >= FAIL_CONN_COUNT_MAX then		
-			device_add_event(EVENT_MIGRATE_FAIL, new_dvid)
+			device_add_event(EVENT_MIGRATE_FAIL, "Unable to connect with new parameters.")
 			new_dvid = ""
 			new_scid = "" 
 			new_pkey = ""

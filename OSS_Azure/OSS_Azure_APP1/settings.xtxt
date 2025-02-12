@@ -1,7 +1,7 @@
 >>WAP	R	S	1	0	32	I	^	Wi-Fi SSID
 >>WPW	R	S	1	0	64	I	^	Wi-Fi Password
->>DH	R	B	1	0	1	A	^	Wi-Fi, DHCP
->>CID	E	W	1	0	65535	A	0	Customer ID
+>>DH	R	B	1	0	1	I	1	Wi-Fi, DHCP
+>>CID	E	W	1	0	65535	I	0	Customer ID
 >>FWV	E	S	1	0	20	I	^	F-ware version
 >>MODE	E	B	1	0	2	A	0	Comm mode
 >>IP	E	D	1	4	4	A	1.0.0.1	Wi-Fi, IP
@@ -40,9 +40,10 @@
 >>BTNM	E	S	1	0	2	A	^	BT Name
 >>DBMD	E	B	1	0	6	A	0	Diagnostics
 >>FBL	E	B	1	0	1	A	0	Fallback to LTE
+>>VMOD	E	B	1	0	1	A	0	VMOD output
 #define STG_DESCRIPTOR_FILE "settings.xtxt"
 #define STG_TIMESTAMP 1
-#define STG_MAX_NUM_SETTINGS 42
+#define STG_MAX_NUM_SETTINGS 43
 #define STG_RAM_ARRAY_SIZE 123
 #define STG_MAX_SETTING_NAME_LEN 4
 #define STG_MAX_SETTING_VALUE_LEN 128
