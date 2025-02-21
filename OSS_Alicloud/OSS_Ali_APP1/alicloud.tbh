@@ -1,0 +1,27 @@
+#ifndef ALICLOUD_DEBUG_PRINT
+	#define ALICLOUD_DEBUG_PRINT 1
+#endif
+
+enum en_alicloud_states
+	EN_ALICLOUD_NOT_INITIALIZED,
+	EN_ALICLOUD_NOT_CONNECTED,
+	EN_ALICLOUD_CONNECTING,
+	EN_ALICLOUD_CONNECTED
+end enum
+
+declare sub alicloud_start(byref client_id as string, byref username as string, byref url as string, byref secret as string, interface as pl_sock_interfaces)
+declare sub alicloud_proc_timer()
+declare sub alicloud_on_connected()	
+declare sub alicloud_send_telemetry()
+declare sub alicloud_on_telemetry_sent()
+declare function alicloud_update_json(byref original as string, byref attribute as string, byref value as string, with_quote as no_yes) as string
+declare sub alicloud_send_property(byref prop_name as string, byref prop_value as string, byref ts as string)
+declare sub alicloud_proc_mqtt_msg(byref topic as string, byref data as string, byref remaining_byte as word)
+declare sub alicloud_on_disconnected()
+
+declare sub callback_alicloud_on_connected()
+declare sub callback_alicloud_on_telemetry_sent()
+declare sub callback_alicloud_debugprint(byref msg as string)
+declare sub callback_alicloud_command_triggered(byref command as string, byref param as string)
+declare sub callback_alicloud_on_disconnected()
+declare sub callback_alicloud_rtc_correction(daycounts as word, mincounts as word, seconds as byte)

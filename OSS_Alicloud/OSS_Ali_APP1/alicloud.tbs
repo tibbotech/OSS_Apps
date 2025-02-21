@@ -1,0 +1,533 @@
+include "global.tbh"
+
+const ALICLOUD_INIT_SIGNATURE = &h39EA
+const ALICLOUD_CONNECTION_TOUT=150
+
+const ALICLOUD_TOPIC_NTP_RESP = "/ext/ntp/${productKey}/${deviceName}/response"
+const ALICLOUD_TOPIC_NTP_REQ = "/ext/ntp/${productKey}/${deviceName}/request"
+
+'------- shadow --------------
+const ALICLOUD_TOPIC_SHADOW_GET = "/shadow/get/${productKey}/${deviceName}"
+const ALICLOUD_TOPIC_SHADOW_UPDATE = "/shadow/update/${productKey}/${deviceName}"
+
+'------ property (settings) topics --------
+const ALICLOUD_SETTING_MODULE_NAME = "settings"
+'publish
+const ALICLOUD_TOPIC_PROPERTY_SET = "/sys/${productKey}/${deviceName}/thing/service/property/set"
+
+'------ telemetry topics --------
+const ALICLOUD_TELEMETRY_MODULE_NAME = "telemetry"
+'publish
+const ALICLOUD_TOPIC_PROPERTY_POST = "/sys/${productKey}/${deviceName}/thing/event/property/post"
+'subscribe
+const ALICLOUD_TOPIC_PROPERTY_REPLY = "/sys/${productKey}/${deviceName}/thing/event/property/post_reply"
+
+'------ service (commands) topics ---------
+const ALICLOUD_COMMAND_MODULE_NAME = "command"
+'subscribe
+const ALICLOUD_TOPIC_SERVICE = "/sys/${productKey}/${deviceName}/thing/service"
+
+'------ events topics -----------
+const ALICLOUD_EVENT_MODULE_NAME = "events"
+const ALICLOUD_EVENT_NAME = "events"
+'publish
+const ALICLOUD_TOPIC_EVENT_REPORT = "/sys/${productKey}/${deviceName}/thing/event/${identifier}/post"
+'subscribe
+const ALICLOUD_TOPIC_EVENT_REPLY = "/sys/${productKey}/${deviceName}/thing/event/${identifier}/post_reply"
+
+dim alicloud_product_key as string(64)
+dim alicloud_device_id as string(64)
+dim alicloud_secret as string(64)
+dim alicloud_url as string(64)
+dim alicloud_client_id as string
+dim alicloud_interface as pl_sock_interfaces
+dim alicloud_state as en_alicloud_states
+dim alicloud_init_flag as word = 0
+dim alicloud_telemetry_ts as string(36) = ""
+dim alicloud_timer as byte
+
+declare mqtt_state as en_mqtt_states
+declare mqtt_sock_num as byte
+
+declare sub alicloud_sync_time()
+declare sub alicloud_debugprint(byref print_data as string)
+declare function alicloud_get_json_value(byref json_str as string, byref attribute as string) as string
+
+public sub alicloud_start(byref client_id as string, byref username as string, byref url as string, byref secret as string, interface as pl_sock_interfaces)
+	dim pos1 as byte
+	
+	pos1 = instr(1,username,"&",1)
+	if pos1 < 2 then
+	#if ALICLOUD_DEBUG_PRINT
+		alicloud_debugprint("ERROR: alicloud_start() invalid parameters")
+	#endif
+	end if
+	
+	alicloud_product_key = right(username,len(username)-pos1)
+	alicloud_device_id = left(username,pos1-1)
+	alicloud_secret = secret
+	alicloud_url = url
+	alicloud_client_id = client_id
+	alicloud_interface = interface
+	alicloud_telemetry_ts = ""
+	alicloud_init_flag = ALICLOUD_INIT_SIGNATURE
+	alicloud_timer = ALICLOUD_CONNECTION_TOUT
+	alicloud_state= EN_ALICLOUD_NOT_CONNECTED
+end sub
+
+function alicloud_topic_get(byref topic as string, byref identifier as string) as string
+	dim s as string
+	dim pos1 as byte
+	dim l1, l2 as byte
+	
+	s = topic
+	pos1 = instr(1,s,"${productKey}",1)
+	l1 = len(s)
+	
+	if pos1 > 0  then
+		l2 = len("${productKey}")
+		s = left(s,pos1-1) + alicloud_product_key + right(s, l1-(pos1+l2-1)) 
+	end if
+	
+	pos1 = instr(1,s,"${deviceName}",1)
+	l1 = len(s)
+	
+	if pos1 > 0  then
+		l2 = len("${deviceName}")
+		s = left(s,pos1-1) + alicloud_device_id + right(s, l1-(pos1+l2-1)) 
+	end if	
+
+	if identifier <> "" then
+		pos1 = instr(1,s,"${identifier}",1)
+		l1 = len(s)
+		
+		if pos1 > 0  then
+			l2 = len("${identifier}")
+			s = left(s,pos1-1) + identifier + right(s, l1-(pos1+l2-1)) 
+		end if	
+	end if
+	
+	alicloud_topic_get = s 
+end function
+
+sub alicloud_mqtt_start()
+	dim username as string = alicloud_device_id + "&" + alicloud_product_key
+	mqtt_start(alicloud_interface,alicloud_url,1883,username,alicloud_secret,alicloud_client_id,true)
+	
+end sub
+
+public sub alicloud_proc_timer()
+	select case alicloud_state
+	case EN_ALICLOUD_NOT_INITIALIZED:
+		
+	case EN_ALICLOUD_NOT_CONNECTED:
+		alicloud_mqtt_start()
+		alicloud_state = EN_ALICLOUD_CONNECTING
+	case EN_ALICLOUD_CONNECTING:
+		
+	case EN_ALICLOUD_CONNECTED:
+		
+	end select
+end sub
+
+public sub alicloud_on_connected()	
+	if alicloud_init_flag<>ALICLOUD_INIT_SIGNATURE then
+		#if ALICLOUD_DEBUG_PRINT
+			alicloud_debugprint("ERROR: alicloud_start() wasn't used or failed")
+		#endif
+		exit sub
+	end if
+	
+	mqtt_sub(alicloud_topic_get(ALICLOUD_TOPIC_SHADOW_GET,""),QOS_AT_LEAST_ONCE)	
+	mqtt_sub(alicloud_topic_get(ALICLOUD_TOPIC_NTP_RESP,""),QOS_AT_LEAST_ONCE)
+	mqtt_sub(alicloud_topic_get(ALICLOUD_TOPIC_PROPERTY_REPLY,""),QOS_AT_LEAST_ONCE)
+	mqtt_sub(alicloud_topic_get(ALICLOUD_TOPIC_SERVICE,""),QOS_AT_LEAST_ONCE)
+	mqtt_sub(alicloud_topic_get(ALICLOUD_TOPIC_EVENT_REPLY,ALICLOUD_EVENT_MODULE_NAME+":"+ALICLOUD_EVENT_NAME),QOS_AT_LEAST_ONCE)
+
+	alicloud_sync_time()
+
+	mqtt_publish(alicloud_topic_get(ALICLOUD_TOPIC_SHADOW_UPDATE,""),"{\x22method\x22: \x22get\x22}",QOS_AT_LEAST_ONCE)	
+	callback_alicloud_on_connected()
+	alicloud_state = EN_ALICLOUD_CONNECTED
+end sub
+
+public sub alicloud_on_disconnected()
+	if alicloud_init_flag<>ALICLOUD_INIT_SIGNATURE then
+		#if ALICLOUD_DEBUG_PRINT
+			alicloud_debugprint("ERROR: alicloud_start() wasn't used or failed")
+		#endif
+		exit sub
+	end if
+	#if ALICLOUD_DEBUG_PRINT
+		alicloud_debugprint("Disconnected from server.")
+	#endif
+	
+	alicloud_state=EN_ALICLOUD_NOT_CONNECTED
+	alicloud_telemetry_ts=""
+	callback_alicloud_on_disconnected()
+end sub
+
+public function alicloud_update_json(byref original as string, byref attribute as string, byref value as string, with_quote as no_yes) as string
+	if original="" then
+		original="{}"
+	end if
+	
+	while right(original,1)<>"}"
+		original=left(original,len(original)-1)
+	wend
+		
+	if original="{}" then
+		if (left(value,1)="{" and right(value,1)="}") or with_quote = NO then
+			alicloud_update_json="{\x22"+attribute+"\x22:"+value+"}"
+		else
+			alicloud_update_json="{\x22"+attribute+"\x22:\x22"+value+"\x22}"
+		end if
+	else
+		if (left(value,1)="{" and right(value,1)="}") or with_quote = NO then
+			alicloud_update_json=left(original,len(original)-1)+","+"\x22"+attribute+"\x22:"+value+"}"
+		else
+			alicloud_update_json=left(original,len(original)-1)+","+"\x22"+attribute+"\x22:\x22"+value+"\x22}"
+		end if
+	end if
+end function
+
+public sub alicloud_send_telemetry()
+	if mqtt_state<>EN_MQTT_STATES_LOGGED_IN or alicloud_telemetry_ts<>"" then
+		exit sub
+	end if
+	
+	if alicloud_init_flag<>ALICLOUD_INIT_SIGNATURE then
+		#if ALICLOUD_DEBUG_PRINT
+			alicloud_debugprint("ERROR: alicloud_start() wasn't used or failed")
+		#endif
+		exit sub
+	end if
+	dim ts as string(36)
+	dim same_ts as boolean = true
+	dim json as string = ""
+	dim param as string = ""
+	dim rec_num as word=1
+	dim method as string
+	dim topic as string
+	
+	while same_ts = true
+		tbl_select("Event","Event")
+		if tbl_record_read_active(rec_num)=EN_TBL_STATUS_OK then
+			dim record_type, record_value as string(64)
+			tbl_field_sg("time",ts,EN_TBL_GET)
+			tbl_field_sg("type", record_type,EN_TBL_GET)
+			tbl_field_sg("value",record_value ,EN_TBL_GET)
+			
+			if record_type = ALICLOUD_EVENT_NAME then
+				param=alicloud_update_json(param,"message",record_value,YES)
+				method = "thing.event.events:events.post"
+				topic = alicloud_topic_get(ALICLOUD_TOPIC_EVENT_REPORT,ALICLOUD_EVENT_MODULE_NAME +":" + record_type)
+			else
+				record_type = ALICLOUD_TELEMETRY_MODULE_NAME +":" + record_type
+				param=alicloud_update_json(param,record_type,record_value,NO)
+				method = "thing.event.property.post"
+				topic = alicloud_topic_get(ALICLOUD_TOPIC_PROPERTY_POST,"")
+			end if
+
+			dim next_ts as string
+			rec_num=rec_num+1
+			if tbl_record_read_active(rec_num)=EN_TBL_STATUS_OK then
+				tbl_field_sg("time",next_ts,EN_TBL_GET)
+				if ts <> next_ts then
+					same_ts = false
+				end if
+			else
+				same_ts = false
+			end if
+		else
+			exit sub
+		end if
+	wend
+
+	json=alicloud_update_json(json,"id",ts,NO)
+	json=alicloud_update_json(json,"params",param,NO)
+	json=alicloud_update_json(json,"version","1.0",YES) 
+	json=alicloud_update_json(json,"method",method,YES) 
+
+	alicloud_telemetry_ts=ts
+
+	sock.num=mqtt_sock_num
+	sock.notifysent(0)
+	mqtt_publish(topic,json,QOS_AT_MOST_ONCE)					
+end sub
+
+public sub alicloud_send_property(byref prop_name as string, byref prop_value as string, byref ts as string)
+	
+	if mqtt_state<>EN_MQTT_STATES_LOGGED_IN then
+		exit sub
+	end if
+	
+	if alicloud_init_flag<>ALICLOUD_INIT_SIGNATURE then
+		#if ALICLOUD_DEBUG_PRINT
+			alicloud_debugprint("ERROR: alicloud_start() wasn't used or failed")
+		#endif
+		exit sub
+	end if
+	
+	dim json as string = ""
+	dim param as string = ""
+	
+	param=alicloud_update_json(param,prop_name,prop_value,YES)
+	json=alicloud_update_json(json,"id",ts,NO)
+	json=alicloud_update_json(json,"params",param,NO)
+	json=alicloud_update_json(json,"version","1.0",YES) 
+	json=alicloud_update_json(json,"method","thing.event.property.post",YES) 
+
+	alicloud_telemetry_ts=ts
+
+	sock.num=mqtt_sock_num
+	sock.notifysent(0)
+	mqtt_publish(alicloud_topic_get(ALICLOUD_TOPIC_PROPERTY_POST,""),json,QOS_AT_MOST_ONCE)			
+	
+end sub
+
+public sub alicloud_on_telemetry_sent()
+	if sock.num<>mqtt_sock_num then
+		exit sub
+	end if
+	
+	if mqtt_state=EN_MQTT_STATES_LOGGED_IN then
+		dim rec_num as word=1
+	    tbl_select("Event","Event")
+		while tbl_record_find(EN_TBL_RECORD_ACTIVE,alicloud_telemetry_ts,"time",rec_num,EN_TBL_SEARCH_DOWN,PL_FD_FIND_EQUAL) = EN_TBL_STATUS_OK
+			tbl_record_delete(rec_num)
+			rec_num=1
+		wend
+		alicloud_telemetry_ts=""
+		callback_alicloud_on_telemetry_sent()	
+	end if
+end sub
+
+public sub alicloud_sync_time()
+		'sync time
+	dim ts as string
+	dim daycounts, mincounts as word
+	dim sec as byte
+	
+	rtc.getdata(daycounts,mincounts,sec)
+	daycounts=daycounts+10957
+	ts = lstr(device_rtc_get_serialized(daycounts,mincounts,sec)) + "000"
+	
+	'{"deviceSendTime":"1571724098000"}
+	
+	ts = "{\x22deviceSendTime\x22:\x22"+ts+"\x22}"
+	mqtt_publish(alicloud_topic_get(ALICLOUD_TOPIC_NTP_REQ,""),ts,QOS_AT_MOST_ONCE)		
+end sub
+
+function alicloud_get_json_value(byref json_str as string, byref attribute as string) as string
+	dim pos1, pos2, pos3 as byte
+	dim len1 as byte
+	dim start_chr as string(1)
+	
+	alicloud_get_json_value = ""
+	pos1 = instr(1,json_str,attribute,1)
+	if pos1 = 0 then exit function
+	
+	pos1 = instr(pos1+len(attribute),json_str,":",1)
+	if pos1 = 0 then exit function
+	pos1 = pos1 + 1
+	
+	start_chr = mid(json_str,pos1,1)
+	
+	select case start_chr
+	'if attribute value start with {, assume it's a json object, has to end with }
+	case "{":
+		pos2 = pos1
+		pos3 = pos1
+		do	
+			pos2 = instr(pos2+1,json_str,"}",1)
+			pos3 = instr(pos3+1, json_str,"{",1)
+		loop while pos3 > 0 and pos3 < pos2
+		if pos2 > 0 then pos2 = pos2 + 1
+	
+	'if attribute value starts with ", assume it's a string, has to end with "
+	case "\x22":
+		pos2 = pos1
+		do 
+			pos3 = instr(pos2+1,json_str,"\x5c",1)
+			pos2 = instr(pos2+1,json_str,"\x22",1)
+		loop while pos2 > 0 and pos3 = pos2 - 1
+		if pos2 > 0 then pos2 = pos2 + 1
+
+	case else:
+		pos2 = instr(pos1,json_str,",",1)
+		pos3 = instr(pos1,json_str,"}",1)
+		if (pos3>0 and pos3<pos2) or pos2 = 0 then
+			pos2 = pos3 
+		end if	
+	end select
+	
+	if pos2 = 0 then exit function
+	
+	alicloud_get_json_value = mid(json_str,pos1,pos2-pos1)
+	
+	if left(alicloud_get_json_value,1) = "\x22" then
+		alicloud_get_json_value = mid(alicloud_get_json_value,2,len(alicloud_get_json_value)-2)
+	end if	
+end function
+
+sub alicloud_proc_settings(byref settings as string)
+	dim pos1 as byte = 0
+	dim pos2, pos3, pos4 as byte
+	dim stg_name as string
+	dim stg_val as string		
+	
+	do
+		pos2 = instr(pos1+1,settings,",",1)
+		if pos2 = 0 then pos2 = instr(pos1+1,settings,"}",1)
+		if pos2 > 0 then
+			pos3 = instr(pos1,settings,ALICLOUD_SETTING_MODULE_NAME+":",1)
+			if pos3 > 0 then
+				pos3 = pos3 + len(ALICLOUD_SETTING_MODULE_NAME)+1
+				pos4 = instr(pos3,settings,":",1)
+				stg_name = mid(settings,pos3,pos4-pos3-1)
+				stg_val = alicloud_get_json_value(settings,ALICLOUD_SETTING_MODULE_NAME+":"+stg_name)
+				stg_sg(stg_name,0,stg_val,EN_STG_SET)
+			end if
+		end if
+		pos1 = pos2
+	loop while pos1 > 0	
+end sub
+
+
+public sub alicloud_proc_mqtt_msg(byref topic as string, byref data as string, byref remaining_byte as word)
+	
+	'ntp
+	if instr(1,topic,alicloud_topic_get(ALICLOUD_TOPIC_NTP_RESP,""),1)>0 then
+		'{"deviceSendTime":"1571724098000","serverSendTime":"1734657290027","serverRecvTime":"1734657290027"}
+		dim s as string
+		dim ts as dword
+		dim wdaycount, wmincount as word
+		dim curr_daycounts, curr_mincounts as word
+		dim bsec, b as byte
+
+		s = alicloud_get_json_value(data,"serverRecvTime")
+		'remove miliseconds
+		s = left(s,len(s)-3) 
+		ts = lval(s)
+		device_serialized_to_time(ts, wdaycount, wmincount, bsec)
+		wdaycount = wdaycount-10957
+		
+		rtc.getdata(curr_daycounts,curr_mincounts, b)
+		if curr_daycounts<>wdaycount or curr_mincounts<>wmincount then
+			callback_alicloud_rtc_correction(curr_daycounts,curr_mincounts, b)
+			rtc.setdata(wdaycount,wmincount,bsec)
+		end if			
+	end if
+	
+	'command
+	if instr(1,topic,alicloud_topic_get(ALICLOUD_TOPIC_SERVICE,""),1)>0 then
+		dim s as string
+		dim cmd as string
+		dim param as string
+		
+		s = "{"+alicloud_get_json_value(data,"method")+"}"
+		cmd = alicloud_get_json_value(s,"thing.service.command")
+		
+		param = alicloud_get_json_value(data,"params")
+		callback_alicloud_command_triggered(cmd,param)
+	end if
+	
+	'settings
+	if instr(1,topic,alicloud_topic_get(ALICLOUD_TOPIC_PROPERTY_SET,""),1)>0 then
+		dim s as string
+		s = alicloud_get_json_value(data,"params")
+		alicloud_proc_settings(s)
+		
+	end if
+	
+	'telemetry
+	if instr(1,topic,alicloud_topic_get(ALICLOUD_TOPIC_PROPERTY_REPLY,""),1)>0 then
+		dim ts as string
+		ts = alicloud_get_json_value(data,"id")
+	end if
+	
+	'shadow
+	'data={"method":"control","payload":{"state":{"desired":{"settings:DVNT":"Test"},"reported":{}},"metadata":{"desired":{"settings:DVNT":{"timestamp":1735804513}},"reported":{}}},"timestamp":1735804513
+	if instr(1,topic,alicloud_topic_get(ALICLOUD_TOPIC_SHADOW_GET,""),1)>0 then
+		dim attribute as string(32)
+		dim pos1, pos2, pos3 as byte
+		dim desired as no_yes = NO
+		dim state as no_yes = NO
+		dim update as no_yes = NO
+		dim alicloud_shadow_version as dword
+
+		do
+			pos1 = instr(1,data,"\x22",1)
+			pos2 = instr(pos1+1,data,"\x22",1)
+			pos3 = instr(pos2+1,data,":",1)
+			
+			if pos3 = pos2 + 1 then
+				attribute = mid(data,pos1+1,pos2-pos1-1)
+				pos3 = pos3 - 1
+				select case attribute
+				case "payload":
+				case "state":
+					state = YES
+				case "desired":
+					desired = YES
+				case "reported":
+					desired = NO
+				case "metadata":
+					state = NO
+				case "version":
+					alicloud_shadow_version = lval(alicloud_get_json_value(data,attribute))
+				case else:
+					if state = YES and desired = YES then
+						update = YES
+						if instr(1,attribute,ALICLOUD_SETTING_MODULE_NAME,1) >0 then
+							dim stg_name as string(16) = right(attribute,len(attribute)-len(ALICLOUD_SETTING_MODULE_NAME)-1)
+							dim stg_value as string = alicloud_get_json_value(data,attribute)
+							stg_set(stg_name,0,stg_value)
+						end if
+						if instr(1,attribute,ALICLOUD_COMMAND_MODULE_NAME,1) >0 then
+							dim cmd as string(16) = right(attribute,len(attribute)-len(ALICLOUD_COMMAND_MODULE_NAME)-1)
+							dim param as string = alicloud_get_json_value(data,attribute)
+							callback_alicloud_command_triggered(cmd,param)
+						end if
+					end if
+					pos1 = instr(1,data,",",1)
+					pos2 = instr(1,data,"}",1)
+					if pos2>0 and pos1>pos2 then
+						pos3 = pos2
+					else
+						pos3 = pos1
+					end if
+				end select
+				data = right(data,len(data)-pos3)
+			end if
+			
+			if remaining_byte > 0 then
+				dim get_len as byte
+					get_len = 255 - len(data)					
+				if get_len < remaining_byte then
+					remaining_byte = remaining_byte - get_len
+				else
+					get_len = remaining_byte
+					remaining_byte = 0
+				end if
+				data = data + sock.tlsgetdata(get_len)
+			end if		
+		loop while pos3 > 0
+		'delete the shawdow after finish
+		if update = YES then
+			mqtt_publish(alicloud_topic_get(ALICLOUD_TOPIC_SHADOW_UPDATE,""),"{\x22method\x22: \x22delete\x22, \x22state\x22: {\x22reported\x22: \x22null\x22}, \x22version\x22:"+lstr(alicloud_shadow_version+1)+"}",QOS_AT_LEAST_ONCE)
+		end if
+	end if
+end sub
+
+#if ALICLOUD_DEBUG_PRINT
+	sub alicloud_debugprint(byref print_data as string)
+		dim s as string	
+		s = "ALICLOUD> "+print_data+"\x0d\x0a"
+		callback_alicloud_debugprint(s)
+		#if ALICLOUD_DEBUG_PRINT = 2
+			sys.debugprint(s)
+		#endif
+	end sub
+#endif	

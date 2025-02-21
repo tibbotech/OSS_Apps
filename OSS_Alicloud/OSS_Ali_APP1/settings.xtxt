@@ -1,0 +1,48 @@
+>>WAP	R	S	1	0	32	I	^	Wi-Fi SSID
+>>WPW	R	S	1	0	64	I	^	Wi-Fi Password
+>>DH	R	B	1	0	1	A	^	Wi-Fi, DHCP
+>>CID	E	W	1	0	65535	A	0	Customer ID
+>>FWV	E	S	1	0	20	I	^	F-ware version
+>>MODE	E	B	1	0	2	A	0	Comm mode
+>>IP	E	D	1	4	4	A	1.0.0.1	Wi-Fi, IP
+>>GI	E	D	1	4	4	A	127.0.0.1	Wi-Fi, gateway
+>>NM	E	D	1	4	4	A	0.0.0.0	Wi-Fi, netmask
+>>CLID	E	S	1	0	128	I	^	Client ID
+>>MURL	E	S	1	0	63	I	^	Mqtt url
+>>USRN	E	S	1	0	16	I	^	User name
+>>DVID	E	S	1	0	32	I	^	Device ID
+>>PKEY	E	S	1	0	64	I	^	Primary key
+>>EPT	E	W	1	0	65535	A	0	Sampling period (sec)
+>>SPT	E	W	1	1	65535	A	1	Sleep time (min)
+>>DBPR	E	W	1	1	65535	A	1001	debug port
+>>RCN	E	W	1	1	65535	A	1	Number of Records start to send
+>>UPD	E	B	1	0	255	A	255	Update step
+>>BTAG	E	S	1	2	2	A	~~	BLE nTag ID
+>>GAN	E	S	1	0	24	I	onomondo	LTE, AP name
+>>GUR	E	S	1	0	16	I	^	LTE, User name
+>>GPW	E	S	1	0	16	I	^	LTE, Password
+>>STPY	E	B	1	0	255	A	0	Sensor Type
+>>MBID	E	B	1	0	255	A	0	Modbus device ID
+>>OPMD	E	B	1	0	1	A	^	Operation Mode
+>>TZ	E	S	1	0	64	A	^	Time Zone
+>>DVNT	E	S	1	0	64	A	^	Device Note
+>>DVNM	E	S	1	0	32	A	OSS	Device Name
+>>HUBN	E	S	1	0	64	A	^	Iot hub name
+>>NWPR	E	B	1	0	1	A	0	Password Recovery Requested (NTAG)
+>>MNUM	E	S	1	0	20	A	^	Model No.
+>>CMD	E	S	1	0	32	A	^	Command
+>>IMEI	E	S	1	0	15	A	^	IMEI
+>>CCID	E	S	1	0	22	A	^	ICCID
+>>MAC	E	D	1	6	6	A	0.0.0.0.0.0	MAC address
+>>AWK	E	B	1	2	4	A	2	Maximum awake time(min)
+>>CTEC	E	B	1	0	4	A	0	Cell communication tech
+>>DBIP	E	D	1	4	4	A	0.0.0.0	Debug IP
+>>BTNM	E	S	1	0	2	A	^	BT Name
+>>DBMD	E	B	1	0	6	A	0	Diagnostics
+>>FBL	E	B	1	0	1	A	0	Fallback to LTE
+#define STG_DESCRIPTOR_FILE "settings.xtxt"
+#define STG_TIMESTAMP 1
+#define STG_MAX_NUM_SETTINGS 42
+#define STG_RAM_ARRAY_SIZE 123
+#define STG_MAX_SETTING_NAME_LEN 4
+#define STG_MAX_SETTING_VALUE_LEN 128

@@ -1,0 +1,715 @@
+include "global.tbh"
+
+'CONSTANTS-----------------------------------------------------------
+
+const CELL__SIMCARD_PIN = CELL__QUESTMARK	'<-- CHANGE THIS AS NEEDED
+
+dim DNS_socket as byte
+dim comm_mode as byte 
+dim fallback_to_LTE as no_yes = NO
+dim connect_to_alicloud_required as no_yes=NO
+dim min_rec_num_to_send as word
+dim config_mode as no_yes=NO
+dim config_bt_name as string(16) = "BT-OSS-APP1"
+dim CELL__AT_APN as string(24) = "internet.iot"			'<-- CHANGE THIS AS NEEDED
+dim CELL__MYUSERNAME as string(16)  = "myusername@realm"	'<-- CHANGE THIS AS NEEDED
+dim CELL__MYPASSWORD as string(16)  = ""					'<-- CHANGE THIS AS NEEDED
+dim CELL__AT_CNMP as string(16)
+dim CELL__AT_CMNB as string(16)
+dim SYS_SOCK_DEBUGPRINT as byte
+dim sensor_type as byte
+dim operation_mode as byte '0: always on, 1: low power mode
+
+declare sub check_app_fw_version()
+declare sub sensor_init()
+declare sub pic_init()
+declare sub check_and_upgrade_supr_pic()
+declare sub check_and_upgrade_sns_pic()
+declare sub init_cell_tech()
+declare function turn_sensor3v3_on() as boolean
+declare function turn_sensor3v3_off() as boolean
+declare modbus_device_id as byte
+declare command_issued as no_yes
+declare number_of_fld as byte
+
+sub boot()
+
+    'Fd(flash disk) setup
+    '================================================================
+    if fd.mount<>PL_FD_STATUS_OK then
+        if fd.formatj(fd.availableflashspace,32,100)<>PL_FD_STATUS_OK then
+            if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
+        end if
+    
+        if fd.mount<>PL_FD_STATUS_OK then
+            if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
+        end if
+    end if
+
+    'Tables setup
+    '================================================================
+    if tbl_start()<>EN_TBL_STATUS_OK then
+        if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
+    end if
+	
+	dim i, rec_num as word
+	dim ts as string
+	tbl_select("SysTS","SysTS")
+	tbl_get_num_records(rec_num,NO)
+	for i = rec_num to MAXIMUM_TS_NUM-1
+		tbl_field_sg("TS","0",EN_TBL_SET)
+		tbl_record_add("")
+	next i
+	
+	'Setting Library Initialization	
+    '================================================================
+    dim stg_init_code as en_stg_status_codes
+    dim stg_name as string(STG_MAX_SETTING_NAME_LEN)
+	
+	stg_init_code = stg_start_no_init() 'do not init RAM settings, it will change wln.autoconnect etc..
+    if stg_init_code<>EN_STG_STATUS_OK then 
+        pat.play("R-R-~",PL_PAT_CANINT)
+        if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
+	else
+		check_app_fw_version()
+		stg_set("MAC",0,wln.mac) 'load RAM setting "MAC" with real actual MAC address
+		stg_init_code=stg_check_all(stg_name)
+		select case stg_init_code
+		case EN_STG_STATUS_OK:
+		'--- all good ---
+		case EN_STG_STATUS_INVALID, EN_STG_STATUS_FAILURE:
+			if stg_restore_multiple(EN_STG_INIT_MODE_NORMAL)<>EN_STG_STATUS_OK then
+				pat.play("R-R-~",PL_PAT_CANINT)
+				if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
+			end if
+		case else:
+			'some other trouble
+			pat.play("R-R-~",PL_PAT_CANINT)
+			if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
+		end select	
+    end if
+	
+	if stg_init_code<>EN_STG_STATUS_OK then
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print("Setting init failed.")
+		#endif
+	end if
+
+	CELL__AT_APN = stg_get("GAN",0)
+	CELL__MYUSERNAME = stg_get("GUR",0)
+	CELL__MYPASSWORD = stg_get("GPW",0)
+	operation_mode = stg_get("OPMD",0)
+	SYS_SOCK_DEBUGPRINT = val(stg_get("DBMD",0))
+	
+    '-----------------------------------------------------------------
+	
+    dim f as byte
+    for f=0 to MAX_NUM_INTERFACES-1
+        interface_ready(f)=NO
+    next f
+	
+    '-----------------------------------------------------------------
+	'mcp23017 setup on socket 5
+	'================================================================
+	select case mcp23017_init("TBT00_3_S5", YES, TBT00_3_S5_CLK, TBT00_3_S5_DATA, TBT00_3_S5_CHANNEL)
+	case MCP23017_SELF_TEST_FAIL:
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print("mcp23017 self test failed!")
+		#endif
+		if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
+		pat.play("R-R-~",PL_PAT_CANINT)
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print("mcp2307 init failed.")
+		#endif
+	case MCP23017_NO_SSI_AVAILABLE:
+		sys.debugprint("SSI channel could not be allocated, using bit banging instead.\r\n")
+	end select
+	
+	pic_init()
+	check_and_upgrade_supr_pic()
+	
+	mcp23017_line_out_enable(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,YES,TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
+
+	'allow pic to put device into sleep
+	mcp23017_line_out_enable(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,yes,TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,HIGH,TBT00_3_S5_CHANNEL)
+	
+	read_ntag()
+	if sys.debugmode <> PL_SYS_DBG_SERIAL then turn_sensor3v3_on()
+	'-----------------------------------------------------------------	
+	
+	dim bl as string(1) = pic_read(&h02,1)
+	battery_level = asc(bl)
+	if battery_level > 100 then battery_level=0
+
+	if sys.debugmode <> PL_SYS_DBG_SERIAL then sensor_init()	
+	
+	dim scid as string(2) = pic_read(&h03,2)
+	dim msb as word = asc(left(scid,1))
+	dim lsb as word = asc(right(scid,1))
+	dim cid as word = msb*256+lsb
+	stg_set("CID",0,str(cid))
+	
+	'---------timers--------------------------------------------------
+	sleep_time=val(stg_get("SPT",0))
+	device_awake_timer = val(stg_get("AWK",0))*120
+
+    dim prev_sensor_read_ts as dword
+	dim current_ts as dword
+	
+	tbl_select("SysTS","SysTS")
+	tbl_record_sg(EN_TS_LAST_SAMPLED,EN_TBL_GET)
+	tbl_field_sg("TS",ts,EN_TBL_GET)
+	current_ts = device_rtc_get_serialized(0,0,0)
+	prev_sensor_read_ts = lval(ts)
+	next_sensor_read_ts = prev_sensor_read_ts + (sleep_time*60)
+		
+	'if at boot up time is already bigger than the time for next read, at the boot up delay the make sure sensor has time to boot properly before read
+'	if sys.runmode = PL_SYS_MODE_DEBUG or current_ts > next_sensor_read_ts then
+'		next_sensor_read_ts = current_ts + boot_up_delay
+'	end if
+	if  current_ts > next_sensor_read_ts then
+		next_sensor_read_ts = current_ts + boot_up_delay
+	end if	
+	if config_mode = YES then
+		'Bluetooth setup
+		'================================================================
+		bt.name=config_bt_name
+		bt.emulation=PL_WLN_BT_EMULATION_MODE_MICROCHIP
+		bt.txbuffrq(1)
+		bt.rxbuffrq(1)
+		sys.buffalloc()
+		'enable the BLE interface and wait for it to become enabled
+		'(blocking version)
+		bt.enable
+		while bt.enabled=NO
+		wend
+		bt.advertise=YES 'allow the device to be discoverable
+		'-----------------------------------------------------------------
+		luis_start(config_bt_name)
+		luis_bt_enabled = true
+		exit sub
+	end if
+	
+	upgrade_app_fw_init()
+	'-----------------------------------------------------------------
+	
+    'WM2000 Wi-Fi setup
+    '================================================================     
+	connect_to_alicloud_required = need_to_connect()
+	comm_mode=val(stg_get("MODE",0))
+
+	'if sock debugprint is on, autoconnect no matter what comm mode is	
+	if SYS_SOCK_DEBUGPRINT>0 then
+		if wln.autoconnect<>YES or wln.autodhcp<>YES then	
+			wln.autodhcp=YES
+			wln.autoconnect=YES
+			sys.reboot 
+		end if		
+	
+		sock.num=SYS_DPRINT_SOCK_NUM
+		sock.txbuffrq(3)
+		sys.buffalloc()
+		'sock.protocol=PL_SOCK_PROTOCOL_TCP
+		sock.protocol=PL_SOCK_PROTOCOL_UDP
+		sock.targetip=stg_get("DBIP",0)  'changes as see fit
+		sock.targetport=val(stg_get("DBPR",0))
+		sock.targetinterface = PL_SOCK_INTERFACE_WLN
+		sock.allowedinterfaces = "WLN"
+		sock.connect()
+	else
+		if connect_to_alicloud_required=YES then
+			if comm_mode = 0 and wln.autoconnect = NO then
+				wln.autoconnect = YES
+				sys.reboot()
+			end if
+			
+			if comm_mode = 1 and wln.autoconnect = YES and (sys.runmode =PL_SYS_MODE_RELEASE or sys.debugmode <> PL_SYS_DBG_NET) then
+				wln.autoconnect = NO
+				sys.reboot()
+			end if
+		end if
+	end if
+	
+	if connect_to_alicloud_required=YES then	
+		'DNS setup
+		'================================================================
+		DNS_socket=sock_get("DNS")
+		dns_start(DNS_socket)
+		'-----------------------------------------------------------------
+	
+		http_start()
+		if comm_mode = 2 and stg_get("FBL",0) = "1" then
+			fallback_to_LTE = YES
+			'if in low power mode, switch off Fallback for the next cycle
+			if operation_mode = 1 then
+				stg_set("FBL",0,"0")
+			end if
+		end if
+		
+		if comm_mode=0 or (comm_mode = 2 and fallback_to_LTE = NO) then
+			current_interface = PL_SOCK_INTERFACE_WLN
+		else
+			init_cell_tech()
+			current_interface = PL_SOCK_INTERFACE_PPP
+			cell__start(CELL__SIMCARD_PIN, CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD)
+		end if
+	end if
+	
+	if upgrade_state <> 255 then
+		device_awake_timer = device_awake_timer*2
+	end if
+
+    pat.play("B-B-B-",PL_PAT_CANINT)
+	
+	if pic_read(&hA3,1) = "\x00" and stg_get("NWPR",0) = "1" then
+		device_add_event(EVENT_PASSWORD_RECOVERY_SUCC, "")
+		stg_set("NWPR",0,"0")
+	end if
+	
+	if stg_get("CMD",0)<>"" then
+		command_issued = YES
+	end if
+		
+end sub
+
+sub check_app_fw_version()
+	dim ver as string(20) = stg_get("FWV",0)
+	dim ver_number as string(20) = ""
+	dim ver_alphabet_new as string(3) = ""
+	dim ver_alphabet_old as string(3) = ""
+	dim tmp as byte
+	dim i as byte
+	
+	if OSS_APP_FW_VER<>ver then
+		for i = 1 to len(OSS_APP_FW_VER)
+			tmp = asc(mid(OSS_APP_FW_VER,i,1))
+			if tmp >= &h30 and tmp <= &h39 then
+				exit for
+			end if
+		next i
+		ver_alphabet_new = left(OSS_APP_FW_VER, i-1)
+		
+		for i = 1 to len(ver)
+			tmp = asc(mid(ver,i,1))
+			if tmp >= &h30 and tmp <= &h39 then
+				exit for
+			end if
+		next i
+		ver_alphabet_old = left(ver, i-1)
+		
+		if ver_alphabet_old = "V" or ver_alphabet_old = ver_alphabet_new then
+			ver_number = right(ver,len(ver)-i+1)
+			
+			dim pos1 as byte = instr(1,ver_number,".",1)
+			dim pos2 as byte = instr(1,ver_number,".",2)
+			dim w1 as word = val(mid(ver_number,1,pos1-1))*100+val(mid(ver_number,pos1+1,pos2-pos1-1))
+			
+			if w1<202 then
+				stg_set("CMD",0,"")
+				stg_set("MNUM",0,"")
+				goto fw203
+			else if w1>=202 and w1<203 then
+fw203:			
+				stg_set("MAC",0,wln.mac)
+				stg_set("CCID",0,"")
+				stg_set("IMEI",0,"")
+				stg_set("AWK",0,"2")
+				goto fw204
+			else if w1>=203 and w1<204 then
+fw204:
+				stg_set("CTEC",0,"0") 'cellular tech
+				goto fw205
+			else if w1>=204 and w1<205 then
+fw205:
+				stg_set("DBIP",0,"0.0.0.0") 'debugprint ip
+				stg_set("DBPR",0,"1001") 'debugprint port
+				stg_set("BTNM",0,"")  'ble name
+				stg_set("DBMD",0,"0") 'debugprint mode
+				goto fw206
+			else if w1>=205 and w1<206 then
+fw206:
+				stg_set("FBL",0,"0")
+				goto fw207
+			else if w1>=206 and w1<207 then
+fw207:
+
+			end if			
+		else
+			stg_restore_multiple(EN_STG_INIT_MODE_NORMAL)
+			stg_set("FWV",0,OSS_APP_FW_VER)
+		end if
+		stg_set("FWV",0,OSS_APP_FW_VER)
+		device_add_event(EVENT_UPGRADE_COMPLETE, OSS_APP_FW_VER)		
+	end if
+end sub
+
+sub sensor_level_shift_on()
+	io.num=SENSOR_CONTROL_PIN
+    io.enabled = YES
+    io.state = HIGH
+end sub
+
+sub alternate_debugprint(byref source as string, byref msg as string)
+	
+	#if SYS_EVENT_DEBUGPRINT
+		device_add_event(EVENT_DEBUG_INFO, msg)
+	#endif
+
+	select case SYS_SOCK_DEBUGPRINT
+	case 0:
+		exit sub
+	case 1:
+		if source <> "STG" then
+			exit sub
+		end if
+	case 2:
+		if source <> "MQTT" then
+			exit sub
+		end if	
+	case 3:
+		if source <> "DNS" and source <> "HTTP" then
+			exit sub
+		end if	
+	case 4:
+		if source <> "CELL" then
+			exit sub
+		end if
+	case 5:
+		if source <> "AZR" then
+			exit sub
+		end if
+	case 6:	
+	end select
+	
+	dim b as byte=sock.num
+	sock.num=SYS_DPRINT_SOCK_NUM
+	if wln.ip <> "0.0.0.0" and sock.targetip <> "0.0.0.0" and sock.targetport <> 0 then
+		if sock.txfree = 0 then
+			sock.txclear()
+			sock.close()
+		end if
+		if sock.statesimple <> PL_SSTS_EST then
+			sock.connect()
+		end if
+		sock.setdata(msg)
+		sock.send()
+	end if
+	sock.num=b
+end sub
+
+sub init_i2c_sensor()
+
+	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
+	if sensor_channel<4 then
+        ssi.channel=sensor_channel
+        ssi.enabled=NO
+        ssi.baudrate=PL_SSI_BAUD_100kHz
+
+        io.num=SENSOR_DAT_PIN
+        io.state=HIGH
+        io.num=SENSOR_CLK_PIN
+        io.state=HIGH
+        ssi.zmode = PL_SSI_ZMODE_ENABLED_ON_ZERO
+
+        ssi.direction=PL_SSI_DIRECTION_LEFT
+        ssi.domap = SENSOR_DAT_PIN
+        ssi.dimap = SENSOR_DAT_PIN
+        ssi.clkmap = SENSOR_CLK_PIN
+        ssi.mode = PL_SSI_MODE_0
+
+        ssi.enabled=YES
+    end if
+	delay_ms(100)
+end sub
+
+sub init_modbus_sensor()
+	'enable modbus voltage
+	mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,HIGH,TBT00_3_S5_CHANNEL)
+
+	sensor_level_shift_on()
+
+	'Modbus RS485 setup on UART 1
+    '================================================================
+	ser.num = MODBUS_UART
+    ser.enabled = NO
+
+	io.num = MODBUS_RTS
+    io.enabled = YES
+    io.state = LOW
+	ser.rtsmap = MODBUS_RTS
+	ser.dircontrol = PL_SER_DCP_LOWFORINPUT
+
+    ser.bits=PL_SER_BB_8
+    ser.flowcontrol=PL_SER_FC_DISABLED
+	
+	select case sensor_type
+	case 128, 130, 131, 132, 133:
+		ser.baudrate=PL_SER_BAUD_38400 '38400 for the BP01,BP02,BP03,BP04,BP05
+	case 129, 134, 135, 136, 137, 138:
+		ser.baudrate=PL_SER_BAUD_9600 '9600 for JXBS sensors
+	case 139:
+		ser.baudrate=PL_SER_BAUD_4800
+	end select
+   
+    ser.interface=PL_SER_SI_HALFDUPLEX
+    ser.esctype=PL_SER_ET_DISABLED
+    ser.interchardelay=0
+    ser.txbuffrq(1)
+    ser.rxbuffrq(1)
+    sys.buffalloc()
+    ser.enabled = YES
+
+    'Modbus Setup
+    '==================================
+    modbus_initialize()
+    'set these to the interface number you want to use
+	
+	modbus_device_id = val(stg_get("MBID",0))
+end sub
+
+sub sensor_init()
+	sensor_type = val(stg_get("STPY",0))
+	
+	select case sensor_type
+	case 130,131,132,133,137,138:
+		number_of_fld = 1
+	case 0, 128, 129: 
+		number_of_fld = 2
+	case 134:
+		number_of_fld = 7
+	case 1, 135, 136: 
+		number_of_fld = 3
+	case 139:
+		number_of_fld = 5
+	case else:	
+	end select	
+	
+	select case sensor_type
+	case 0, 1:	'temp_hum / temp_hum_co2
+		if sensor_type = 0 then boot_up_delay = 8
+		if sensor_type = 1 then boot_up_delay = 30
+		init_i2c_sensor()
+		check_and_upgrade_sns_pic()
+		
+	case 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139: 'modbus sensor
+		boot_up_delay = 10
+		init_modbus_sensor()
+		
+	case else:
+		exit sub
+	end select
+	
+	sensor_state = EN_SENSOR_WAITTING_TO_READ
+	'in power saving mode log battery level
+'	if operation_mode = 1 then number_of_fld = number_of_fld + 1	
+end sub
+
+sub read_ntag()
+	dim ntag as string(3)
+	dim command as string(1)
+	dim parameter as string(2)
+	
+	ntag=pic_read(&h90,3)	
+	command = left(ntag,1)
+	parameter = right(ntag,2)
+	
+	select case command
+	case "\xB6","\xB3":
+		if parameter <> "\x00\x00" then
+			config_mode = YES
+			config_bt_name=parameter+"-"+stg_get("DVNM",0)
+			if sys.runmode = PL_SYS_MODE_RELEASE then
+				if wln.autoconnect = YES then
+					stg_set("BTNM",0,parameter)
+					wln.autoconnect = NO
+					sys.reboot()
+				end if				
+			end if
+		end if
+	case else:	
+		parameter = stg_get("BTNM",0)
+		if parameter <> "" then
+			config_mode = YES
+			config_bt_name=parameter+"-"+stg_get("DVNM",0)
+			stg_set("BTNM",0,"")
+		end if
+		
+	end select
+end sub
+
+sub enter_LVP_mode()
+	io.num=PL_IO_NUM_1_TX0
+	io.enabled=YES
+	io.state=HIGH
+
+	'set LVP mode
+	mcp23017_line_out_enable(LVP_ENABLE_LINE, LVP_ENABLE_PORT, YES, TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(LVP_ENABLE_LINE, LVP_ENABLE_PORT, LOW, TBT00_3_S5_CHANNEL)
+
+	'keep ACSIP alive
+	mcp23017_line_out_enable(PMU_INHIBIT_LINE, PMU_INHIBIT_PORT, YES, TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(PMU_INHIBIT_LINE, PMU_INHIBIT_PORT, LOW, TBT00_3_S5_CHANNEL)
+
+	io.num=PL_IO_NUM_1_TX0
+	io.state=LOW
+	io.state=HIGH	
+	
+	pic_lvp_start(PL_IO_NUM_9, PL_IO_NUM_4, PL_IO_NUM_1_TX0)
+	
+end sub
+
+sub exit_LVP_mode()
+	io.num=PL_IO_NUM_1_TX0
+	io.enabled=YES
+	io.state=HIGH
+	
+	delay_ms(100)
+	
+	'set LVP mode
+	mcp23017_line_out_enable(LVP_ENABLE_LINE, LVP_ENABLE_PORT, YES, TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(LVP_ENABLE_LINE, LVP_ENABLE_PORT, HIGH, TBT00_3_S5_CHANNEL)
+
+	'keep ACSIP alive
+	mcp23017_line_out_enable(PMU_INHIBIT_LINE, PMU_INHIBIT_PORT, YES, TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(PMU_INHIBIT_LINE, PMU_INHIBIT_PORT, HIGH, TBT00_3_S5_CHANNEL)
+	
+end sub
+
+sub check_and_upgrade_sns_pic()
+	dim ver as string(3) = ""
+	
+	sensor_level_shift_on()
+	si2c_get(sensor_channel)
+	' Read FW version
+	si2c_start()
+	si2c_write(SENSOR_ADDR or PIC_WR)
+	si2c_write(&h03)
+	si2c_start()
+	si2c_write(SENSOR_ADDR or PIC_RD)
+	 
+	ver = ver + chr(si2c_read(true))
+	ver = ver + chr(si2c_read(true))
+	ver = ver + chr(si2c_read(true))
+	si2c_stop()
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print("Current version: " + ver)
+	#endif
+	if (ver <> OSS_SNS_FW_VER) then
+		' FLASHING
+		pic_lvp_start(SENSOR_CLK_PIN, SENSOR_DAT_PIN, SENSOR_CONTROL_PIN)
+		if not pic_lvp_upload_firmware(OSS_SNS_PIC_FILE) then
+			#if DEVICE_DEBUG_PRINT
+				device_debug_print("SNS PIC FW upgraded failed!")
+			#endif
+			if ver = "\xFF\xFF\xFF" then
+				device_add_event(EVENT_SENSOR_NOT_FOUND, "")
+			else
+				device_add_event(EVENT_SENSOR_UPGRADE_FAIL, "")
+			end if
+		else
+			#if DEVICE_DEBUG_PRINT
+				device_debug_print("SNS PIC FW upgraded!")
+			#endif
+			sys.reboot()			
+		end if
+	end if
+	
+end sub
+
+sub check_and_upgrade_supr_pic()	
+	dim ver as string(3) = pic_read(&h98,3)
+	dim upgrade_success as boolean
+	
+	if ver <> OSS_SUPR_FW_VER then
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print("Running PIC: "+ver+ "/ Current PIC: "+OSS_SUPR_FW_VER)
+		#endif
+		pic_write(&h30,"\x77")
+		enter_LVP_mode()
+		upgrade_success = pic_lvp_upload_firmware(OSS_SUPR_PIC_FILE)
+		
+		io.num=PL_IO_NUM_1_TX0
+		io.state=HIGH
+		delay_ms(100)
+		
+		' Set PIC to POST LVP mode 
+		pic_write(&h30,"\x88")
+		delay_ms(100)
+		
+		' RESET PIC
+		io.num=PL_IO_NUM_1_TX0
+		io.state=LOW
+		exit_LVP_mode()
+		
+		if upgrade_success = false then
+			device_add_event(EVENT_SUPERVISOR_UPGRADE_FAIL, "")
+		else
+			device_add_event(EVENT_SUPERVISOR_UPGRADE_SUCC, "")
+			sys.reboot()
+		end if
+	end if
+end sub
+
+sub pic_init()
+	
+	pic_channel = si2c_register("PIC", PIC_DAT_PIN, PIC_CLK_PIN, YES)
+	if pic_channel<4 then
+		ssi.channel=pic_channel
+		ssi.enabled=NO
+		ssi.baudrate=PL_SSI_BAUD_100kHz
+
+		io.num=PIC_DAT_PIN
+		io.enabled = YES
+		io.state=HIGH
+
+		io.num=PIC_CLK_PIN
+		io.enabled = YES
+		io.state=HIGH
+
+		ssi.zmode = PL_SSI_ZMODE_ENABLED_ON_ZERO
+		ssi.direction=PL_SSI_DIRECTION_LEFT
+		ssi.domap = PIC_DAT_PIN
+		ssi.dimap = PIC_DAT_PIN
+		ssi.clkmap = PIC_CLK_PIN
+		ssi.mode = PL_SSI_MODE_0
+
+		ssi.enabled=YES
+	end if
+end sub
+
+sub init_cell_tech()
+	dim ctech as string(1)
+	dim cmnb as string(2) '0:cat_m1, 1:nb_iot, 2: both
+	dim cnmp as string(2) '2:automatic, 13:gsm only, 38:lte only, 51:gsm and lte only
+	
+	ctech = stg_get("CTEC",0)
+	select case ctech
+	case "0": 'CAT_M1
+		cmnb = "1"
+		cnmp = "38"
+		
+	case "1": 'NB-IOT
+		cmnb = "2"
+		cnmp = "38"	
+		
+	case "2": 'CAT_M1/NB-IOT
+		cmnb = "3"
+		cnmp = "38"
+
+	case "3": '2G/3G
+		cmnb = "3"
+		cnmp = "13"
+	
+	case "4": 'Auto 
+		cmnb = "3"
+		cnmp = "2"
+	
+	case else:
+		cmnb = "1"
+		cnmp = "38"		
+	end select
+	CELL__AT_CNMP = CELL__AT_PLUS + "CNMP" + "=" + cnmp
+	CELL__AT_CMNB = CELL__AT_PLUS + "CMNB" + "=" + cmnb
+end sub

@@ -1,0 +1,238 @@
+include "global.tbh"
+
+dim interface_ready(MAX_NUM_INTERFACES) as no_yes
+dim current_interface as pl_sock_interfaces
+dim luis_bt_enabled as boolean
+dim TBT00_3_S5_CHANNEL as byte
+dim ntag_pw_reset_timer as byte = 0
+dim button_press_counter as byte = 0
+
+const NTAG_PW_WAIT_TIME = 10
+const NTAG_PW_RESET_TIME = 4
+
+declare sub device_store_app_fw(data as string)
+declare mqtt_state as en_mqtt_states
+declare credential_changed as no_yes
+declare wifi_fallback_timer as word
+
+sub on_sys_init()
+	boot()
+end sub
+
+sub on_sock_data_arrival()
+	dns_proc_data()
+    http_proc_data()
+	mqtt_proc_data()
+	
+	if comm_mode = 2 then
+		'when operation mode is always on, reset timer of sock activity only in WiFi cycle
+		if operation_mode = 0 then
+			if fallback_to_LTE = NO then
+				wifi_fallback_timer = 0
+			end if
+		else
+		'in power saving mode, rest timer when ever there is sock data activity
+			wifi_fallback_timer = 0
+		end if
+	end if
+end sub
+
+sub on_sys_timer()
+	
+	if ntag_pw_reset_timer > 0 then
+		ntag_pw_reset_timer = ntag_pw_reset_timer - 1
+		if ntag_pw_reset_timer = 0 and mqtt_state = EN_MQTT_STATES_LOGGED_IN then
+			pat.play("G~",PL_PAT_CANINT)
+		end if
+	else
+		button_press_counter = 0
+	end if
+	
+	if config_mode = YES then
+ 		if credential_changed = YES then
+			dim i as byte
+			for i = 1 to STG_MAX_NUM_SETTINGS 
+				stg_timestamp.ts_milsec = 0
+				stg_set_ts(str(i))
+			next i
+			stg_set("HUBN",0,"")
+			credential_changed = NO
+		end if	
+		if device_awake_timer > 0  then
+			if operation_mode = 1 then 'power saving mode
+				device_awake_timer=device_awake_timer-1
+			end if
+		else
+			if bt.connected = YES then
+				bt.setdata("\x02Z"+str(sleep_time)+","+stg_get("AWK",0)+"\x0d")
+				bt.send()
+				'wait for data to be sent or maximum 3 seconds
+				dim ts as dword = sys.timercount32
+				while bt.newtxlen > 0 and ts < sys.timercount32+6 
+				wend
+			end if
+			
+			device_sleep()
+		end if	
+		exit sub
+	end if
+	if connect_to_alicloud_required=YES then	
+		if comm_mode = 1 or fallback_to_LTE = Yes then
+			cell__proc_sys_timer()
+		end if
+		dns_proc_timer()
+		http_proc_timer()
+		if upgrade_state = 255 then
+			mqtt_proc_timer()
+			alicloud_proc_timer()
+		end if
+	end if
+	if sensor_type>127 then
+		modbus_proc_timer()
+	end if
+	device_proc_timer()
+end sub
+
+sub on_sock_event(newstate as pl_sock_state,newstatesimple as pl_sock_state_simple)
+
+    http_sock_state_update(newstatesimple)
+	mqtt_sock_event(newstate, newstatesimple)
+end sub
+
+sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as string(16), gateway_ip as string(16), netmask as string(16), lease_time as dword)
+
+	if renew=YES and wln.ip<>ip then
+		'this is a lease renewal and the DHCP server has issues new IP
+		'it is better to reboot than deal with the implications of the changed IP
+		sys.reboot
+	end if
+
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print("WLN DHCP OK (IP:"+ip+", GI:"+gateway_ip+", NM:"+ netmask +")")
+	#endif
+		
+	if wln.ip<>ip then
+		sock.inconenabledmaster=NO
+		close_interface_sockets(PL_SOCK_INTERFACE_WLN)
+		wln.ip=ip
+		if gateway_ip<>"" then wln.gatewayip=gateway_ip
+		if netmask<>"" then wln.netmask=netmask
+		sock.inconenabledmaster=YES 
+	end if
+ 
+ 	if stg_get("IP",0) <> wln.ip then
+		stg_set("IP",0, wln.ip)
+		stg_set("GI",0,wln.gatewayip)
+		stg_set("NM",0,wln.netmask)		
+	end if
+ 
+	if config_mode = NO and (comm_mode = 0 or (comm_mode = 2 and fallback_to_LTE = NO)) then
+		if upgrade_state <255 then
+			connect_to_firmware_server()
+		else
+			connect_to_alicloud_server()
+		end if
+	end if
+	
+	if SYS_SOCK_DEBUGPRINT>0 then
+		sock.num = SYS_DPRINT_SOCK_NUM
+		sock.connect()
+	end if
+end sub
+
+sub on_sock_data_sent()
+
+	alicloud_on_telemetry_sent()
+	'data sent notification is also indication of working connection, refresh timer
+	if comm_mode = 2 then
+		'when operation mode is always on, reset timer of sock activity only in WiFi cycle
+		if operation_mode = 0 then
+			if fallback_to_LTE = NO then
+				wifi_fallback_timer = 0
+			end if
+		else
+		'in power saving mode, rest timer when ever there is sock data activity
+			wifi_fallback_timer = 0
+		end if
+	end if
+end sub
+
+
+sub on_bt_event(bt_event as pl_bt_events)
+ 
+    luis_on_bt_event(bt_event)
+
+end sub
+
+sub on_bt_data_sent()
+
+    luis_on_bt_data_sent()
+
+end sub
+
+sub on_bt_data_arrival()
+
+    if luis_bt_enabled = true then
+        luis_on_bt_data_arrival()
+    end if
+
+end sub
+
+sub on_ser_data_arrival()
+    if ser.num=MODBUS_UART then
+        'modbus master data
+        modbus_master_receive(ser.getdata(255),modbus_RTU)
+    end if
+	
+	cell__proc_on_ser_data_arrival()
+end sub
+
+function mcp23017_line_get2(num as ext_line_name, port as ext_port_name, channel as byte) as enum low_high
+
+	dim state as low_high = LOW
+	mcp23017_line_get(num, port, state, channel)
+
+	mcp23017_line_get2=state
+end function
+
+sub on_wln_event(wln_event as enum pl_wln_events)
+
+	'if dhcp is disabled, assign stored ip, and establish connection.
+	if wln_event = PL_WLN_EVENT_ASSOCIATED and wln.autodhcp = NO then
+		wln.ip = stg_get("IP",0)
+		wln.gatewayip = stg_get("GI",0)
+		wln.netmask = stg_get("NM",0)
+
+		if config_mode = NO and (comm_mode = 0 or (comm_mode = 2 and fallback_to_LTE = NO)) then
+			if upgrade_state <255 then
+				connect_to_firmware_server()
+			else
+				connect_to_alicloud_server()
+			end if
+		end if	
+	end if
+end sub
+
+sub on_button_pressed()
+	button_press_counter = button_press_counter + 1
+	ntag_pw_reset_timer = NTAG_PW_WAIT_TIME	
+
+end sub
+
+sub on_button_released()
+
+	'press MD 3 times, and hold it for 2~5 seconds the third time
+	if button_press_counter > 2 and button.time > NTAG_PW_RESET_TIME then
+		pat.play("G-R-G-R",PL_PAT_CANINT)
+		pic_write(&hA3,"\x77")
+		delay_ms(5)
+		if pic_read(&hA3,1)="\x77" then
+			stg_set("NWPR",0,"1")
+			device_add_event(EVENT_PASSWORD_RECOVERY_REQ, "")
+		end if				
+	end if	
+end sub
+
+sub on_ser_data_sent()
+	modbus_proc_ser_data_sent()
+end sub

@@ -1,0 +1,1783 @@
+include "global.tbh"
+
+const CELL__SIMCARD_PIN = CELL__QUESTMARK	'<-- CHANGE THIS AS NEEDED
+const FAIL_CONN_COUNT_MAX = 3
+const CR_LF=chr(13)+chr(10)
+
+enum en_device_migrate_states
+	EN_DEVICE_MIGRATE_IDLE,
+	EN_DEVICE_MIGRATE_STARTING,
+	EN_DEVICE_MIGRATE_PROVISIONING,
+	EN_DEVICE_MIGRATE_SUCCESS,
+	EN_DEVICE_MIGRATE_FAILED
+end enum
+
+dim credential_changed as no_yes = NO
+dim alicloud_fail_to_connect_count as byte = 0
+dim boot_up_delay as byte = 0
+dim sensor_channel as byte
+dim pic_channel as byte
+dim device_awake_timer as word
+dim sleep_time as word
+dim upgrade_state as byte = 255  'upgrade over air state, 0~7(above) indicate the parts that is being downloading, 255: no upgrade in progress, 254: whole file completed
+dim app_fw_size as dword=4294836225
+dim app_fw_filenum as byte = 255
+dim app_fw_checksum as dword
+dim part_size as dword=4294836225
+dim part_filenum as byte = 255
+dim part_checksum as dword
+dim http_conn_timeout as no_yes = NO
+dim total_chuncks as byte = 0
+dim part_num as byte = 255
+dim battery_level as byte = 0
+dim property_modified as no_yes = YES
+dim sensor_telemetry_ts as string(36) = ""
+dim modbus_device_id as byte
+dim device_migrate_state as en_device_migrate_states = EN_DEVICE_MIGRATE_IDLE
+dim new_dvid as string(32)
+dim new_scid as string(16) 
+dim new_pkey as string(64)
+dim rand_event_num as byte 
+dim command_issued as no_yes = NO
+dim sensor_read_count as byte = 0 
+dim sensor_state as en_sensor_states
+dim number_of_fld as byte = 0
+dim field_counter as byte = 0
+dim next_sensor_read_ts as dword
+dim wifi_fallback_timer as word = 1 'start the timer at 1, 0 means never had any sock data activity
+
+declare sub device_sampling()
+declare sub device_migrating()
+declare function get_json_value(byref json_str as string, byref attribute as string) as string 
+declare sub time_to_str(byref ts_str as string(20),	
+	byref time_daycount as word,
+	byref time_mincount as word,
+	byref time_second_byte as byte,
+	with_separators as no_yes)
+
+declare sub device_sleep()
+declare sub device_store_app_fw(data as string)
+declare sub read_onboard_t_h_co2_sensor(byref ts as string)
+declare sub read_onboard_t_h_sensor(byref ts as string)
+declare function add_telemetry(byref telemetry_name as string, byref telemetry_value as string, byref ts as string) as en_tbl_status_codes
+declare sub update_stg_ts_and_send_alicloud(byref stg_name as string)
+declare sub update_server_properties()
+declare function turn_sensor3v3_on() as boolean
+declare function turn_sensor3v3_off() as boolean
+
+declare sub proc_modbus_jx(byref request_item as modbus_request_item, byref reply as string)
+declare sub proc_modbus_bp(byref request_item as modbus_request_item, byref reply as string)
+
+declare sub co2_calibration()
+declare sub execute_special_command()
+declare sub read_sensor()
+declare sub decimal_point_converter(byref value as string, decimal as byte)
+
+sub device_proc_timer()	
+	'deduct device_awake_timer only when device is not doing upgrade and in Low power mode	
+	if operation_mode = 1 then
+		if device_awake_timer>0 then
+			device_awake_timer=device_awake_timer-1
+			if device_awake_timer = 0 then
+				device_sleep()
+			end if
+		end if
+	end if	
+	
+	'fallback to LTE in always on mode, use counter to determine if need to change connection method 
+	if comm_mode = 2 and operation_mode = 0 then
+		wifi_fallback_timer = wifi_fallback_timer+1
+		if fallback_to_LTE = Yes then
+			'currently in LTE, reset to WiFi in 30 miniutes
+			if wifi_fallback_timer > 3600 then
+				stg_set("FBL",0,"0")
+			end if
+		else
+			'currently in WiFi set to LTE if no connection for more than 40 seconds (mqtt ping is every 20 seconds)
+			if wifi_fallback_timer > 80 then
+				stg_set("FBL",0,"1")
+			end if
+		end if
+	end if
+	
+	if upgrade_state <> 255 then
+		if http_conn_timeout = YES then
+			http_conn_timeout = NO
+			connect_to_alicloud_server()
+		end if
+	else
+		device_migrating()
+	end if
+	if sys.debugmode <> PL_SYS_DBG_SERIAL then device_sampling()
+	execute_special_command()
+end sub
+
+sub callback_stg_error(byref stg_name_or_num as string,index as byte,status as en_stg_status_codes)
+    
+end sub
+
+sub callback_stg_pre_get(byref stg_name_or_num as string,index as byte,byref stg_value as string)
+	dim debug_string as string = ""
+	
+	select case stg_name_or_num
+		case "DH":
+			stg_value=wln.autodhcp
+			debug_string="WiFi DHCP: " + stg_value
+		case "WAP":
+			stg_value=wln.autoconnectssid
+			debug_string="WiFi Access Point: " + stg_value
+		case "WPW":
+			stg_value=wln.autoconnectpassword
+			debug_string="WiFi Password: " + stg_value
+		case "MAC":
+			stg_value=wln.mac
+			debug_string="WiFi MAC: " + stg_value		
+		case else:
+	end select
+
+	#if DEVICE_DEBUG_PRINT
+		if debug_string<>"" then
+			device_debug_print(debug_string)
+		end if
+	#endif
+
+end sub    
+
+sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref stg_value as string)
+	dim debug_string as string = ""
+
+    select case stg_name_or_num
+
+	case "DH":
+		wln.autodhcp = stg_value
+		debug_string="WiFi DHCP: " + stg_value
+	case "WAP":
+		wln.autoconnectssid = stg_value
+		debug_string="WiFi Access Point: " + stg_value
+	case "WPW":
+		wln.autoconnectpassword = stg_value
+		debug_string="WiFi Password: " + stg_value
+	case "SPT":
+		sleep_time = val(stg_value)
+		next_sensor_read_ts = 0
+	case "RCN":
+		min_rec_num_to_send = val(stg_value)
+	case "CMD":
+		if stg_value <> "" then
+			command_issued = YES
+		end if
+	case "FBL":
+		'if in fallback and always on mode, reboot after change commmunication method.
+		if comm_mode = 2 and operation_mode = 0 then 
+			if stg_value = "0" or sys.runmode = PL_SYS_MODE_DEBUG then
+				wln.autoconnect = YES
+			else
+				wln.autoconnect = NO
+			end if
+			sys.reboot()
+		end if
+    end select
+	
+	#if DEVICE_DEBUG_PRINT
+		if debug_string<>"" then
+			device_debug_print(debug_string)
+		end if
+	#endif	
+end sub
+        
+sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref stg_value as string)
+	
+	'use stg_timestamp.ts_milsec as a flag to detect if the setting has been changed
+	'set it to 0 after change occured
+	select case stg_name_or_num
+		case "DVID","SCID","PKEY":
+			if config_mode = YES then credential_changed = YES
+		case "FWV", "CID", "MNUM", "DVNM", "MODE", "OPMD", "STPY", "MBID", "RCN", "SPT", "AWK", "DVNT", "TZ": 'device side settings
+			property_modified = YES
+			stg_timestamp.ts_milsec = 0
+			stg_set_ts(stg_name_or_num)
+	
+		case else
+		
+	end select
+end sub
+
+sub callback_stg_debugprint(byref debug_msg as string)
+	alternate_debugprint("STG", debug_msg)
+end sub
+
+function callback_stg_vm_read(address as word) as byte
+    
+end function
+        
+sub callback_stg_vm_write(data_to_write as byte, address as word)
+    
+end sub
+
+sub close_interface_sockets(interface as pl_sock_interfaces)
+    dim f,sock_num_bup as byte
+    dim i as word
+
+    sock_num_bup=sock.num
+
+    for f=0 to sock.numofsock-1
+        sock.num=f
+        if sock.targetinterface=interface then
+            sock.discard
+        end if
+    next f
+
+    i=sys.timercount
+
+    wait_close_interface_sockets:
+    for f=0 to sock.numofsock-1
+        sock.num=f
+        if sock.targetinterface=interface and sock.statesimple<>PL_SSTS_CLOSED and sys.timercount-i<3 and sys.timercount>=i then
+            goto wait_close_interface_sockets
+        end if
+    next f
+
+    sock.num=sock_num_bup
+
+end sub
+
+sub callback_dns_failure(status as en_dns_status_codes)
+    
+end sub
+
+sub callback_dns_answer_acquired(return_type as en_dns_return_type, byref return_string as string)
+'    http_dns_answer_acquired(return_type, return_string)
+    mqtt_dns_answer_acquired(return_type, return_string)
+
+end sub
+
+sub callback_dns_ok()
+    
+end sub
+
+sub callback_dns_pre_buffrq(num_of_pages_required as byte)
+    
+end sub
+
+sub callback_dns_buff_released()
+    
+end sub
+
+sub callback_dns_debugprint(byref debug_msg as string)
+	alternate_debugprint("DNS", debug_msg)
+end sub
+        
+sub callback_http_request_failed(error_message as string)
+	http_conn_timeout = YES
+end sub
+
+sub callback_http_header_arrival(header_type as string, header_value as string)
+
+	if upgrade_state <> 255 then
+		select case header_type
+		case "Content-Length":
+			part_size=lval(header_value)
+			
+		case "Total-Length":
+			app_fw_size=lval(header_value)
+			
+		case "Full-Checksum":
+			app_fw_checksum=lval(header_value)
+			
+		case "Total-Chuncks":
+			total_chuncks=lval(header_value)
+			
+		case "Part-Checksum":
+			part_checksum=lval(header_value)
+		
+		case "Part-Number":
+			part_num=lval(header_value)
+		case else:
+			
+		end select
+	
+	end if
+
+end sub
+
+sub callback_http_headers_complete()
+    
+end sub
+
+
+sub callback_http_content_arrival(data as string)
+    if upgrade_state = 255 then
+
+	else
+		device_store_app_fw(data)
+	end if
+end sub
+
+sub callback_http_post_data_sent_ok()
+    
+end sub
+
+sub callback_http_send_post_data(remaining_content_length as dword)
+    
+end sub
+
+sub callback_http_send_headers()
+	
+	if upgrade_state = 255 then
+
+	else
+		http_send_headers("Content-Type","application/json")
+		http_send_headers("Connection","keep-alive")
+		http_send_headers("Part", str(upgrade_state))
+	end if 
+end sub
+
+sub callback_http_debugprint(byref debug_msg as string)
+	alternate_debugprint("HTTP", debug_msg)
+end sub
+
+sub callback_http_request_complete()
+    if upgrade_state = 255 then
+
+	else
+		connect_to_alicloud_server()
+	end if    
+end sub
+
+sub callback_http_response_code_arrival(http_response as string)
+    
+end sub
+
+function callback_http_open_romfile() as dword
+    #ifdef HTTP_CER_FILE
+		romfile.open(HTTP_CER_FILE)
+		callback_http_open_romfile=romfile.offset    
+	
+	#else 
+		callback_http_open_romfile=0
+	#endif    
+end function
+
+sub callback_mqtt_connect_ok()
+    pat.play("G~",PL_PAT_CANINT)
+   	alicloud_on_connected()
+	
+end sub
+        
+sub callback_mqtt_connect_lost()
+	alicloud_on_disconnected()
+	alicloud_fail_to_connect_count = alicloud_fail_to_connect_count + 1
+	if alicloud_fail_to_connect_count >= FAIL_CONN_COUNT_MAX then
+		if device_migrate_state <>EN_DEVICE_MIGRATE_IDLE then
+			device_migrate_state = EN_DEVICE_MIGRATE_FAILED
+		end if
+	end if
+end sub
+        
+sub callback_mqtt_notif(byref topic as string,byref data as string, byref remaining_bytes as word)
+    alicloud_proc_mqtt_msg(topic,data,remaining_bytes)	
+end sub
+
+sub callback_mqtt_debugprint(byref debug_msg as string)
+	alternate_debugprint("MQTT", debug_msg)
+end sub
+
+sub callback_mqtt_sub_ok()
+	alicloud_fail_to_connect_count = 0
+	if device_migrate_state <>EN_DEVICE_MIGRATE_IDLE then
+		device_migrate_state = EN_DEVICE_MIGRATE_SUCCESS
+	end if	
+end sub      
+
+sub callback_tbl_error(status as en_tbl_status_codes)
+    
+end sub    
+
+function callback_tbl_fail_to_open(byref filename as string, status as pl_fd_status_codes, filenum as byte) as no_yes
+    
+end function
+
+sub callback_tbl_field_error(byref file_name as string,byref field_name as string,tbl_result as en_tbl_status_codes)
+    
+end sub
+        
+sub callback_tbl_modified(byref file_name as string, modified_operation as en_tbl_modified_operation)
+
+end sub
+
+sub callback_alicloud_command_triggered(byref command as string, byref param as string)
+
+    select case command
+		
+	case "RSTNTGPW":
+		pic_write(&hA3,"\x77")
+		delay_ms(5)
+		if pic_read(&hA3,1)="\x77" then
+			stg_set("NWPR",0,"1")
+			device_add_event(EVENT_PASSWORD_RECOVERY_REQ, "")
+		end if
+		
+    case else: 'by default send response.
+		
+    end select
+  
+end sub   
+
+sub callback_alicloud_rtc_correction(daycounts as word, mincounts as word, seconds as byte)
+	'if rtc was reseted, take another sample with corrected timestample
+	sensor_state = EN_SENSOR_WAITTING_TO_READ
+	
+end sub
+
+sub callback_alicloud_on_telemetry_sent()
+	dim active_rec_num as word
+	
+	update_server_properties()
+	
+	tbl_select("Event","Event")
+	tbl_get_num_records(active_rec_num,NO)
+	if active_rec_num > 0 then
+		alicloud_send_telemetry()
+	else
+		if operation_mode = 0 then 
+			sensor_state = EN_SENSOR_SAMPLE_SENT
+
+			upgrade_state = val(stg_get("UPD",0))
+			if upgrade_state <> 255 then
+				connect_to_firmware_server()
+			end if
+		else
+			'in low-power mode, do not switch case if sample haven't been taken
+			if sensor_state <> EN_SENSOR_WAITTING_TO_READ then
+				sensor_state = EN_SENSOR_SAMPLE_SENT
+
+			end if 		
+		end if
+	end if
+																																																
+end sub        
+
+sub callback_alicloud_on_connected()
+	alicloud_send_telemetry()
+end sub
+
+sub callback_alicloud_on_disconnected()
+	pat.play("-",PL_PAT_CANINT)
+	
+end sub
+
+sub callback_luis_bt_connected()
+    
+end sub
+
+sub callback_luis_bt_disconnected()
+    
+end sub
+
+sub callback_luis_bt_enabled()
+    
+end sub
+
+sub callback_luis_bt_disabled()
+    
+end sub
+
+sub callback_luis_buzz_command()
+    
+end sub
+'XXXXXXXXXXXXXXXXXXX USING IO EXTENDER FOR CELL        
+sub cell_callback_io_extender_setup()
+	mcp23017_port_config_set(&hFF,0,EXT_PORT_A,TBT00_3_S5_CHANNEL)
+
+	'SHDN line
+	mcp23017_line_out_enable(CELL__SHDN_LINENUM,CELL__SHDN_PORT,yes,TBT00_3_S5_CHANNEL)
+
+	'Initial SHDN state should be Active
+	'If False, then set to Active
+	if CELL__SHDN_STATE = cell__shdn_setto_off then
+		CELL__SET_SHDN_ON	'then set SHDN line to Active (by default)
+	end if
+
+	'PWRKEY line
+	mcp23017_line_out_enable(CELL__PWRKEY_LINENUM,CELL__PWRKEY_PORT,yes,TBT00_3_S5_CHANNEL)
+
+	'RESET line
+	mcp23017_line_out_enable(CELL__RESET_LINENUM,CELL__RESET_PORT,yes,TBT00_3_S5_CHANNEL)
+	CELL__SET_RESET_OFF
+
+	'STATUS line
+	mcp23017_line_out_enable(CELL__STATUS_LINENUM,CELL__STATUS_PORT,NO,TBT00_3_S5_CHANNEL)
+
+	'TX_BUF line
+	mcp23017_line_out_enable(TX_BUF_LINENUM,TX_BUF_PORT,yes,TBT00_3_S5_CHANNEL)
+	mcp23017_line_set(TX_BUF_LINENUM,TX_BUF_PORT, HIGH, TBT00_3_S5_CHANNEL)
+end sub
+
+sub cell__callback_modem_restart_failed()
+end sub
+
+sub cell__callback_modem_on()
+end sub
+
+sub cell__callback_modem_off()
+	pat.play("-",PL_PAT_CANINT)
+end sub
+
+sub cell__callback_insufficient_buffer_pages()
+end sub
+
+sub cell__callback_at_reply(phase as en_cell__op_at_phases,byref reply as string)
+	dim s as string
+	dim i as byte
+	
+	select case phase
+	case PHASE_AT_GSN: 'IMEI
+		i = instr(1,reply,"\x2e",1)
+		s = left(reply,i-1)
+		stg_set("IMEI",0,s)
+	case PHASE_AT_CCID:
+		i = instr(1,reply,"\x2e",1)
+		s = left(reply,i-1)
+		stg_set("CCID",0,s)
+	case else		
+	end select
+end sub
+
+sub cell__callback_at_reply_contains_error()
+end sub
+
+sub cell__callback_ppp_fcs_is_bad()
+end sub
+
+sub cell__callback_ppp_missing_address_field()
+end sub
+
+sub cell__callback_ppp_missing_control_field()
+end sub
+
+sub cell__callback_ppp_lcp_msg_length_not_matching()
+end sub
+
+sub cell__callback_ppp_lcp_successful()
+end sub
+
+sub cell__callback_ppp_lcp_disreq_from_peer()
+end sub
+
+sub cell__callback_ppp_lcp_disreq_from_sender()
+end sub
+
+sub cell__callback_ppp_retry_exceeded()
+end sub
+
+sub cell__callback_ppp_auth_successful(auth_proto_code as word)
+end sub
+
+sub cell__callback_ppp_auth_nego_failed(auth_proto_code as word)
+end sub
+
+sub cell__callback_ppp_ipcp_successful()
+end sub     
+
+sub cell__callback_ppp_ipcp_disreq_from_peer()
+end sub
+
+sub cell__callback_ppp_ipcp_disreq_from_sender()
+end sub
+                
+
+sub cell__callback_ppp_ping_successful()
+end sub
+                
+
+sub cell__callback_ppp_ping_failed()
+end sub
+
+sub callback_cell_debugprint(byref debug_msg as string)
+	alternate_debugprint("CELL", debug_msg)
+end sub
+
+sub cell__callback_ppp_link_established()
+	
+	if config_mode=NO then
+		if upgrade_state <255 then
+			connect_to_firmware_server()
+		else
+			connect_to_alicloud_server()
+			pat.play("G-~",PL_PAT_CANINT)
+		end if
+	end if
+end sub
+
+sub cell__callback_after_switching_from_DATA_to_CMD()
+end sub
+
+sub cell__callback_after_switching_from_CMD_to_DATA()
+end sub
+
+sub device_sleep()
+	dim daycounts, mincounts as word
+	dim seconds as byte	
+
+	if sleep_time=0 then
+		exit sub
+	end if
+	
+	mqtt_disconnect()
+
+	if sensor_type > 127 then
+		mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
+	end if
+	
+	turn_sensor3v3_off()
+	
+	'in wln mode, we decide next cycle should connect or not before go to sleep
+	if comm_mode = 0 or comm_mode = 2 then
+		wln.autoconnect = need_to_connect()
+	end if
+	
+	if comm_mode = 1 and wln.autoconnect = YES then
+		wln.autoconnect = NO
+	end if
+	'check if need to fallback to LTE, if current cycle is a connection cycle but never had any sock data
+	'next cycle fallback to LTE
+	if comm_mode = 2 then
+		if connect_to_alicloud_required=YES and wifi_fallback_timer = 1 then
+			stg_set("FBL",0,"1")
+			wln.autoconnect = NO
+		end if
+	end if
+	
+'------------------------------------------------------	
+'device sleeps until next read substract the time for sensor to boot properly	
+	dim next_boot_ts as dword
+	dim current_ts as dword
+	
+	rtc.getdata(daycounts, mincounts, seconds)
+	current_ts = device_rtc_get_serialized(daycounts, mincounts, seconds)
+	next_boot_ts = next_sensor_read_ts - boot_up_delay
+
+	#if DEVICE_DEBUG_PRINT
+		dim ts as string
+		
+		time_to_str(ts,daycounts,mincounts, seconds,YES)
+		device_debug_print("Now:" + ts)
+	#endif
+	
+'if current time is already exceed the time for next read, wake up in 1 cycle time from now
+	if next_boot_ts <=  current_ts then
+		next_boot_ts = current_ts + (sleep_time*60)
+	end if
+
+	device_serialized_to_time(next_boot_ts, daycounts, mincounts, seconds)
+	
+	#if DEVICE_DEBUG_PRINT
+		
+		time_to_str(ts,daycounts,mincounts, seconds,YES)
+		device_debug_print("Sleep till:" + ts)
+	#endif
+	
+	if sys.runmode = PL_SYS_MODE_RELEASE then
+		sys.sleep(daycounts, mincounts, seconds)  
+	else 
+		sys.halt()
+	end if
+end sub
+
+sub device_add_event(device_event as en_device_events, byref parameter as string)
+	dim daycounts, mincounts as word
+	dim seconds as byte
+	dim tbl_result as en_tbl_status_codes	
+	dim ts as string(36) 
+	dim f as byte
+	dim event_msg as string(64)
+	
+	select case device_event
+	case EVENT_PASSWORD_RECOVERY_REQ:
+		event_msg="NFC password removal requested!"
+	case EVENT_PASSWORD_RECOVERY_SUCC:
+		event_msg="NFC password removed!"
+	case EVENT_UPGRADE_START:
+		event_msg="Over-the-air FW downloading started!"
+	case EVENT_UPGRADE_FAIL:
+		event_msg="FW download failed! retrying.."
+	case EVENT_UPGRADE_PART_DOWNLOAD:
+		event_msg=parameter+ " of FW downloaded!"
+	case EVENT_UPGRADE_FULL_DOWNLOAD:
+		event_msg="FW download completed! flashing firmware…"
+	case EVENT_UPGRADE_COMPLETE:
+		event_msg="Upgrade succeeded! New FW version:"+parameter
+	case EVENT_SENSOR_INVALID_VALUE:
+		event_msg="Reading value out of range! Read "+parameter
+	case EVENT_SENSOR_TIMEOUT:
+		event_msg="Unable to read sensor parameters!"
+	case EVENT_SENSOR_NOT_FOUND:
+		event_msg="Unable to detect the sensor pod or sensor pod did not boot!"
+	case EVENT_SENSOR_UPGRADE_FAIL:
+		event_msg="Sensor pod’s FW upgrade failed! Version mismatch detected!"
+	case EVENT_SUPERVISOR_UPGRADE_FAIL:
+		event_msg="Supervisor MCU’s FW upgrade failed! Version mismatch detected!"
+	case EVENT_SUPERVISOR_UPGRADE_SUCC:
+		event_msg="The FW of the supervisor MCU is upgraded!"
+	case EVENT_MIGRATE_START:
+		event_msg="Device migration started! The destination device ID:"+parameter
+	case EVENT_MIGRATE_SUCC:
+		event_msg="Device migrated! The destination device ID:"+parameter
+	case EVENT_MIGRATE_FAIL:
+		event_msg="Device migration failed!"
+	case EVENT_MIGRATE_INVALID_KEY:
+		event_msg="Invalid primary key! Device migration will not start!"
+	case EVENT_ADVANCE_ACCEPTED_CMD:
+		event_msg="Advance command ("+parameter+") accepted!"
+	case EVENT_ADVANCE_REJECTED_CMD:
+		event_msg="Advance command ("+parameter+") rejected!"
+	case EVENT_DEBUG_INFO:
+		event_msg=parameter
+	end select
+	
+	rand_event_num = rand_event_num+1
+	f=fd.filenum
+	rtc.getdata(daycounts,mincounts,seconds)
+	daycounts=daycounts+10957
+	ts = lstr(device_rtc_get_serialized(daycounts,mincounts,seconds)) 
+	ts=ts+"002"
+	tbl_result = add_telemetry("events",event_msg,ts)
+	
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print("Event: "+event_msg)
+	#endif
+	fd.filenum = f
+	alicloud_send_telemetry()
+end sub
+
+function app_fw_copy_part_to_file() as ok_ng
+	fd.filenum=app_fw_filenum
+	fd.open(APP_FW_FILE)
+	fd.setpointer(fd.filesize+1)
+	fd.filenum=part_filenum
+	fd.setpointer(1)
+	
+	'read from partfile and add to firmware file
+	do
+		dim data as string=fd.getdata(255)
+		fd.filenum=app_fw_filenum
+		if fd.setdata(data) <>PL_FD_STATUS_OK then
+			exit do
+		end if
+		fd.filenum=part_filenum
+	loop while fd.pointer < fd.filesize and fd.laststatus=PL_FD_STATUS_OK
+	
+	'verify checksum for whole firmware file
+	fd.filenum = app_fw_filenum
+	if fd.laststatus = PL_FD_STATUS_OK then
+		fd.flush()
+		upgrade_state = upgrade_state+1
+		if upgrade_state = total_chuncks then
+			dim checksum as dword=0
+			fd.setpointer(1)		
+			do
+				dim data as string =fd.getdata(255)
+				checksum=checksum+(strsum(data))
+			loop while fd.pointer <= fd.filesize
+			if checksum = app_fw_checksum then
+				stg_set("UPD",0,"254") 'all parts downloaded
+			else
+				stg_set("UPD",0,"0") 'start over
+			end if
+		else
+			stg_set("UPD",0,str(upgrade_state))
+		end if
+		fd.close()
+ 		app_fw_copy_part_to_file = OK
+	else
+		app_fw_copy_part_to_file = NG
+	end if
+end function
+
+sub device_store_app_fw(data as string)
+	dim filenum as byte
+	dim filename as string
+	
+	if part_size = 4294836225 then exit sub
+	pat.play("R-",PL_PAT_CANINT)
+	'if always on mode, store data directly to the destination file.
+	'otherwise stored it to partial file and only copy to destination file if partial file is varified.
+
+	filenum = part_filenum
+	filename = PART_FILE
+
+	fd.filenum=filenum
+	if fd.fileopened=NO then
+		fd.open(filename)
+	end if
+	
+	fd.setdata(data)
+	
+	if fd.filesize = part_size then
+		fd.flush()
+		dim checksum as dword=0
+		fd.setpointer(1)		
+		do
+			data=fd.getdata(255)
+			checksum=checksum+(strsum(data))
+		loop while fd.pointer <= fd.filesize
+		
+	'checksum verify
+		if checksum <> part_checksum then
+			if operation_mode = 0 then
+				device_add_event(EVENT_UPGRADE_FAIL, "")
+			else
+				device_add_event(EVENT_UPGRADE_FAIL, "")
+				stg_set("UPD",0,"0") 'start over			
+			end if
+			exit sub
+		end if
+	else
+		exit sub
+	end if
+
+	if app_fw_copy_part_to_file() = OK then
+		device_add_event(EVENT_UPGRADE_PART_DOWNLOAD, str(part_num+1)+"/"+str(total_chuncks))
+	else	
+		device_add_event(EVENT_UPGRADE_FAIL, "")
+		stg_set("UPD",0,"0") 'start over		
+	end if
+	'in power saving mode, connect to alicloud to finish other task
+	connect_to_alicloud_server()
+	
+end sub
+
+public sub upgrade_app_fw_init()
+	upgrade_state = val(stg_get("UPD",0))
+	dim fd_status as pl_fd_status_codes
+	
+	if upgrade_state = 255 then exit sub
+	
+	if app_fw_filenum = 255 then
+		app_fw_filenum=filenum_open("FMW",APP_FW_FILE,fd_status)
+	end if
+	
+	if part_filenum = 255 then 
+		part_filenum = app_fw_filenum=filenum_open("PAR",PART_FILE,fd_status)
+		fd.filenum=part_filenum
+		fd.delete(PART_FILE)
+		fd.create(PART_FILE)
+	else
+		fd.filenum=part_filenum
+		fd.setfilesize(0)
+	end if
+
+	if upgrade_state = 0 then
+		fd.filenum=app_fw_filenum
+		fd.delete(APP_FW_FILE)
+		fd.create(APP_FW_FILE)		
+	end if
+	
+	if upgrade_state = 254 then
+		stg_set("UPD",0,"255")
+		fd.filenum = app_fw_filenum
+		if fd.open(APP_FW_FILE) = PL_FD_STATUS_OK then
+			device_add_event(EVENT_UPGRADE_FULL_DOWNLOAD, "")
+			'keep ACSIP alive
+			mcp23017_line_out_enable(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,yes,TBT00_3_S5_CHANNEL)
+			mcp23017_line_set(PMU_INHIBIT_LINE, PMU_INHIBIT_PORT, LOW, TBT00_3_S5_CHANNEL)
+			fd.copyfirmwarefromfilelzo()
+		end if
+	end if
+	
+end sub
+
+public sub connect_to_firmware_server()
+	dim url as string
+	
+	mqtt_disconnect()
+	http_stop()
+	dns_disconnect()
+	if sock.tlscurrentnum<>255 then
+		sock.num=sock.tlscurrentnum
+		sock.tlsdeinit()	
+		if sock.statesimple = PL_SSTS_EST then
+			sock.discard()
+		end if
+	end if
+	upgrade_app_fw_init()
+	url=stg_get("DLPT",0)
+	http_request(HTTP_GET, url, current_interface,"")		
+end sub
+
+public sub connect_to_alicloud_server()		
+	dim ALICLOUD_CLIENT_ID as string=stg_get("CLID",0)
+	dim ALICLOUD_USERNAME as string=stg_get("USRN",0)
+	dim ALICLOUD_URL as string=stg_get("MURL",0)
+	dim ALICLOUD_PASSWORD as string=stg_get("PKEY",0)
+	
+	if connect_to_alicloud_required = NO then
+		exit sub
+	end if
+	
+	'when switching between server making sure all previous connection is closed
+	http_stop()
+	dns_disconnect()
+	mqtt_disconnect()
+	
+	if sock.tlscurrentnum<>255 then
+		sock.num=sock.tlscurrentnum
+		sock.tlsdeinit()	
+		if sock.statesimple = PL_SSTS_EST then
+			sock.discard()
+		end if
+	end if
+	upgrade_state=255
+	
+	alicloud_start(ALICLOUD_CLIENT_ID,ALICLOUD_USERNAME,ALICLOUD_URL,ALICLOUD_PASSWORD, current_interface)
+end sub
+
+' This function is to read the sensor board that has a local MCU on it and T/H and CO2 sensor is populated on it
+sub read_onboard_t_h_co2_sensor(byref ts as string)
+	dim data0, data1, data2, data3, data4, data5, data6, data7 as byte
+	dim tmp1,hi,lo,temp2 as byte
+	dim co2, humidity, temperature as float
+	dim humd,temp,str_co2,error as string(36)
+	dim temp_invalid as no_yes = NO
+	dim humd_invalid as no_yes = NO
+	dim co2_invalid as no_yes = NO
+	dim read_retry as byte = 0
+
+read_again:
+	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
+	si2c_get(sensor_channel)
+	
+'check if ---Calibrate CO2 at 400ppm--- register has been set	
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_WR)
+	si2c_write(&hA0)
+	delay_ms(5)
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_RD)
+	data0=si2c_read(false)
+	si2c_stop()	
+		
+	if data0 <> 0 then
+		sensor_state = EN_SENSOR_READ_ERROR
+
+		exit sub
+	end if
+'----------------------------
+
+	'fetch temperature and humidity data
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_WR)
+	si2c_write(&h80)
+
+	delay_ms(5)
+	
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_RD)
+	data0=si2c_read(true)
+	data1=si2c_read(true)
+	data2=si2c_read(true)
+	data3=si2c_read(true)
+	data4=si2c_read(false)
+	si2c_stop()
+	 
+	'fetch CO2 data
+
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_WR)
+	si2c_write(&h90)
+
+	delay_ms(5)
+	
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_RD)
+	data5=si2c_read(true)
+	data6=si2c_read(true)
+	data7=si2c_read(false)
+	
+	si2c_stop()
+	
+' Calculation
+	temperature=data1*256+data2
+	temperature = ((temperature / 65528) * 165) - 40
+		
+	humidity=(data3 and &h3F)*256 + data4
+	humidity=humidity/163.82
+	
+	co2=data5*256+data6
+	
+	humd=ftostr(humidity,FTOSTR_MODE_AUTO,5)
+	temp=ftostr(temperature,FTOSTR_MODE_AUTO,5)
+	str_co2=ftostr(co2,FTOSTR_MODE_AUTO,5)
+	
+	error=hex(data7)
+
+	if temperature < -40 or temperature > 85 then
+		temp_invalid = YES
+	end if
+	
+	if humidity < 0 or humidity > 100 then
+		humd_invalid = YES
+	end if
+
+	if co2 < 1 or co2 > 10001 then
+		co2_invalid = YES
+	end if
+	
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print(temp+"C "+humd+"% "+str_co2+" "+ts)
+	#endif
+
+	if temp_invalid = YES or humd_invalid = YES or co2_invalid = YES then
+		read_retry = read_retry + 1
+		if read_retry < 10 then
+			temp_invalid = NO
+			humd_invalid = NO 
+			co2_invalid = NO
+			delay_ms(1000)
+			goto read_again			
+		end if
+	end if
+
+	if temp_invalid = NO then add_telemetry("temperature",temp,ts)
+	if humd_invalid = NO then add_telemetry("humidity",humd,ts)
+	if co2_invalid = NO then add_telemetry("co2",str_co2,ts)
+
+	'in power saving mode log battery level
+'	if operation_mode = 1 then
+'		add_telemetry("BAT_LVL",str(battery_level),ts)
+'	end if
+	
+	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
+	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
+	if co2_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[co2]: " + str_co2)
+	sensor_state = EN_SENSOR_SAMPLE_READ
+
+end sub
+' This function is to read the sensor board that has a local MCU on it and T/H sensor is populated on it but CO2 sensor is NOT populated on it
+sub read_onboard_t_h_sensor(byref ts as string)
+	dim data0, data1, data2, data3, data4 as byte
+	dim tmp1,hi,lo,temp2 as byte
+	dim humidity, temperature as float
+	dim humd,temp as string(36)
+	dim temp_invalid as no_yes = NO
+	dim humd_invalid as no_yes = NO
+	dim read_retry as byte = 0
+	
+read_again:	
+	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
+	si2c_get(sensor_channel)
+	
+	'fetch temperature and humidity data
+
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_WR)
+	si2c_write(&h80)
+
+	delay_ms(5)
+	
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_RD)
+	data0=si2c_read(true)
+	data1=si2c_read(true)
+	data2=si2c_read(true)
+	data3=si2c_read(true)
+	data4=si2c_read(false)
+	si2c_stop()
+	
+' Calculation
+	temperature=data1*256+data2
+	temperature = ((temperature / 65528) * 165) - 40
+		
+	humidity=(data3 and &h3F)*256 + data4
+	humidity=humidity/163.82
+	
+	humd=ftostr(humidity,FTOSTR_MODE_AUTO,5)
+	temp=ftostr(temperature,FTOSTR_MODE_AUTO,5)
+
+	if temperature < -40 or temperature > 85 then
+		temp_invalid = YES
+	end if
+	
+	if humidity < 0 or humidity > 100 then
+		humd_invalid = YES
+	end if
+	
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print(temp+"C "+humd+"% "+ts)
+	#endif
+
+	if temp_invalid = YES or humd_invalid = YES then
+		read_retry = read_retry + 1
+		if read_retry < 3 then
+			temp_invalid = NO
+			humd_invalid = NO 
+			delay_ms(1000)
+			goto read_again			
+		end if
+	end if
+
+	if temp_invalid = NO then add_telemetry("temperature",temp,ts)
+	if humd_invalid = NO then add_telemetry("humidity",humd,ts)
+
+	'in power saving mode log battery level
+'	if operation_mode = 1 then
+'		add_telemetry("BAT_LVL",str(battery_level),ts)
+'	end if
+	
+	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
+	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
+	sensor_state = EN_SENSOR_SAMPLE_READ 
+
+end sub
+
+sub pic_write(addr as byte, byref data as string)
+	dim i as byte
+	
+	si2c_get(pic_channel)
+	si2c_start()
+	si2c_write(PIC_ADDR OR PIC_WR)
+	si2c_write(addr)
+	for i = 1 to len(data)
+		delay_ms(10)
+		si2c_write(asc(mid(data,i,1)))
+	next i
+	delay_ms(10)
+	si2c_stop()
+end sub
+
+function pic_read(addr as byte, length as byte) as string
+	dim i as byte
+	
+	pic_read=""
+	si2c_get(pic_channel)
+	si2c_start()
+	si2c_write(PIC_ADDR OR PIC_WR)	
+	si2c_write(addr)		'Set reg num
+	si2c_start()
+	si2c_write(PIC_ADDR OR PIC_RD)
+	for i = 1 to length-1
+		delay_ms(10)
+		pic_read = pic_read + chr(si2c_read(true))
+	next i
+	delay_ms(10)
+	pic_read = pic_read + chr(si2c_read(false))
+	delay_ms(10)
+	si2c_stop()
+end function
+
+function add_telemetry(byref telemetry_name as string, byref telemetry_value as string, byref ts as string) as en_tbl_status_codes
+	
+	add_telemetry=tbl_select("Event","Event")
+	if add_telemetry<>EN_TBL_STATUS_OK then exit function
+	add_telemetry=tbl_field_sg("time",ts,EN_TBL_SET)
+	if add_telemetry<>EN_TBL_STATUS_OK then exit function
+	add_telemetry=tbl_field_sg("type",telemetry_name,EN_TBL_SET)
+	if add_telemetry<>EN_TBL_STATUS_OK then exit function	
+	add_telemetry=tbl_field_sg("value",telemetry_value,EN_TBL_SET)
+	if add_telemetry<>EN_TBL_STATUS_OK then exit function	
+	add_telemetry=tbl_record_add("")
+end function
+
+function need_to_connect() as no_yes
+	dim active_rec_num as word
+	dim daycounts, mincounts as word
+	dim seconds as byte
+	
+	need_to_connect = NO
+	
+	rtc.getdata(daycounts,mincounts,seconds)
+	if operation_mode = 0 or daycounts = 0 then
+		need_to_connect=YES
+		exit function
+	end if
+	
+	if sys.runmode = PL_SYS_MODE_DEBUG and sys.debugmode = PL_SYS_DBG_NET then
+		need_to_connect=YES 
+		exit function
+	end if
+		
+	tbl_select("Event","Event")
+	tbl_get_num_records(active_rec_num,NO)
+	active_rec_num=active_rec_num/number_of_fld
+	min_rec_num_to_send=val(stg_get("RCN",0))
+	if active_rec_num >= min_rec_num_to_send-1 then
+		need_to_connect = YES
+	end if
+end function
+
+sub update_stg_ts_and_send_alicloud(byref stg_name as string)
+	dim stg_val as string
+	dim ts as string
+	dim stg_num as byte
+	
+	'use stg_timestamp.ts_milsec as a flag to detect if the setting has been changed
+	'push to server if it is 0, and set it to 999 after push
+	
+	stg_val=stg_get(stg_name,0)
+	if stg_timestamp.ts_milsec = 0 then
+		stg_num = stg_get_num_settings()
+		ts = str(stg_num)
+		ts = strgen(3-len(ts),"0")+ts
+		ts = lstr(device_rtc_get_serialized(stg_timestamp.ts_daycount,stg_timestamp.ts_mincount,stg_timestamp.ts_seconds))+ts
+		alicloud_send_property(stg_name, stg_val, ts)
+		stg_timestamp.ts_milsec = 999
+		stg_set_ts(stg_name)
+	end if	
+end sub
+
+function modbus_callback_ReadCoilStatus(address as word) as boolean
+	
+end function
+
+function modbus_callback_ReadInputStatus(address as word) as boolean
+	
+end function
+
+function modbus_callback_WriteSingleCoil(address as word, value as low_high) as byte 
+	
+end function
+
+function modbus_callback_ReadHoldingRegister(address as word) as word
+	
+end function
+
+function modbus_callback_ReadInputRegister(address as word) as word
+	
+end function
+
+function modbus_callback_set_holding_register(address as word, data as word) as boolean
+	
+end function
+
+function modbus_set_holding_register(address as word, data as string) as boolean
+	
+end function
+
+sub callback_modbus_slave_reply_timeout(byref request_item as modbus_request_item)
+	sensor_state = EN_SENSOR_READ_ERROR
+
+end sub
+
+sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref reply as string)
+
+	if request_item.device_id = modbus_device_id then
+		select case sensor_type
+		case 128, 130, 131, 132, 133: 
+			proc_modbus_bp(request_item, reply)
+		case 129, 134, 135, 136, 137, 138, 139:
+			proc_modbus_jx(request_item, reply)
+		end select
+		sensor_read_count = 0
+		field_counter = field_counter+1
+		
+		'in power saving mode log battery level
+'		if operation_mode = 1 then
+'			'for mulitple fields sensor, count back number of fields and add the BAT_LVL at then end	
+'			if number_of_fld - field_counter = 1 then
+'				add_telemetry("BAT_LVL",str(battery_level),sensor_telemetry_ts)
+'				sensor_state = EN_SENSOR_SAMPLE_READ
+
+'				field_counter = 0
+'			end if
+'		else
+			if number_of_fld - field_counter = 0 then
+				sensor_state = EN_SENSOR_SAMPLE_READ 
+
+				field_counter = 0
+			end if
+'		end if
+	end if
+end sub
+
+sub proc_modbus_jx(byref request_item as modbus_request_item, byref reply as string)
+	dim bytes as byte(255) = reply
+	dim str_tmp as string(36) = ""
+	dim tbl_result as en_tbl_status_codes
+	dim signed_tmp as integer
+	dim telemetry_name as string(16)
+	dim decimal as byte = 0
+	
+	signed_tmp = modbus_read_word(bytes,0)
+	str_tmp = stri(signed_tmp)
+	
+	select case sensor_type
+	case 129: 'soil-tr
+		select case request_item.start_register
+		case 2:
+			telemetry_name = "SoilHumd"
+			decimal = 1		
+		case 3:
+			telemetry_name = "SoilTemp"
+			decimal = 1
+		case else:
+			exit sub
+		end select
+	case 134: 'soil-trcgq
+		select case request_item.start_register
+		case 6:
+			telemetry_name = "pH"
+			decimal = 2
+		case 18:
+			telemetry_name = "SoilHumd"
+			decimal = 1
+		case 19:
+			telemetry_name = "SoilTemp"
+			decimal = 1
+		case 21:
+			telemetry_name = "conductivity"
+		case 30:
+			telemetry_name = "nitrogen"
+		case 31:
+			telemetry_name = "phosphorus"
+		case 32:
+			telemetry_name = "potassium"
+		case else:		
+		end select
+	case 135: 'h2s
+		select case request_item.start_register
+		case 0:
+			telemetry_name = "humidity"
+			decimal = 1
+		case 1:
+			telemetry_name = "temperature"
+			decimal = 1
+		case 6:
+			telemetry_name = "H2S"
+			decimal = 1
+		case else:
+		end select
+	case 136: 'uv
+		select case request_item.start_register
+		case 0:
+			telemetry_name = "humidity"
+			decimal = 1
+		case 1:
+			telemetry_name = "temperature"
+			decimal = 1
+		case 8:
+			telemetry_name = "UV"
+			decimal = 1
+		case else:
+		end select
+	case 137: 'noises
+		if request_item.start_register = 12 then
+			telemetry_name = "noise"
+			decimal = 1
+		end if
+	case 138:
+		if request_item.start_register = 16 then
+			telemetry_name = "rain"
+			decimal = 1
+		end if
+	case 139:
+		select case request_item.start_register
+		case 0:
+			telemetry_name = "humidity"
+			decimal = 1
+		case 1:
+			telemetry_name = "temperature"
+			decimal = 1
+		case 2:
+			telemetry_name = "PM2.5"
+		case 3:
+			telemetry_name = "PM10"
+		case 4:
+			telemetry_name = "PM1.0"
+		case else:		
+		end select	
+	case else
+		exit sub
+	end select
+	decimal_point_converter(str_tmp,decimal)
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print(telemetry_name + ">> "+ str_tmp + " "+sensor_telemetry_ts)
+	#endif	
+	add_telemetry(telemetry_name,str_tmp,sensor_telemetry_ts)
+end sub
+
+sub proc_modbus_bp(byref request_item as modbus_request_item, byref reply as string)
+	dim bytes as byte(255) = reply
+	dim str_tmp as string(36) = ""
+	dim tbl_result as en_tbl_status_codes
+	dim signed_tmp as integer
+	dim telemetry_name as string(16)
+	dim decimal as byte = 0
+
+	signed_tmp = modbus_read_word(bytes,0)
+	str_tmp = stri(signed_tmp)
+	
+	select case request_item.start_register
+	case 300: 'bp01 temperature
+		telemetry_name = "temperature"
+		decimal = 2
+		
+	case 400: 'bp02 temperature
+		telemetry_name = "temperature"
+		decimal = 1
+		
+	case 404: 'bp02 humidity
+		telemetry_name = "humidity"
+		decimal = 1
+
+	case 500: 'bp03 light
+		telemetry_name = "Light"
+		
+	case 700: 'bp05 flood
+		telemetry_name = "Flood"
+		
+	case 800: 'bp06 digital input
+		telemetry_name = "DigiInput"
+		
+	case else:
+		exit sub
+	end select
+	decimal_point_converter(str_tmp,decimal)
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print(telemetry_name + ">> "+ str_tmp  + " "+sensor_telemetry_ts)
+	#endif	
+	add_telemetry(telemetry_name,str_tmp,sensor_telemetry_ts)
+end sub
+
+sub update_server_properties()
+
+	if property_modified = YES then
+		if comm_mode = 1 then
+			update_stg_ts_and_send_alicloud("IMEI")
+			update_stg_ts_and_send_alicloud("CCID")
+		else
+			update_stg_ts_and_send_alicloud("IP")
+		end if
+		
+		update_stg_ts_and_send_alicloud("MAC")
+		update_stg_ts_and_send_alicloud("FWV")
+		update_stg_ts_and_send_alicloud("CID")	
+		update_stg_ts_and_send_alicloud("MNUM")
+		update_stg_ts_and_send_alicloud("DVNT")
+		update_stg_ts_and_send_alicloud("AWK")
+		update_stg_ts_and_send_alicloud("TZ")
+		update_stg_ts_and_send_alicloud("DVNM")
+		update_stg_ts_and_send_alicloud("MODE")
+		update_stg_ts_and_send_alicloud("OPMD")
+		update_stg_ts_and_send_alicloud("STPY")
+		update_stg_ts_and_send_alicloud("MBID")
+
+		property_modified = NO
+	end if
+end sub
+
+public function turn_sensor3v3_on() as boolean
+	pic_write(&hA0,"\x77")
+	delay_ms(5)
+	if pic_read(&hA0,1)="\x77" then
+		turn_sensor3v3_on=true
+	else
+		turn_sensor3v3_on=false
+	end if
+end function
+
+public function turn_sensor3v3_off() as boolean
+	pic_write(&hA0,"\x00")
+	delay_ms(5)
+	if pic_read(&hA0,1)="\x00" then
+		turn_sensor3v3_off=true
+	else
+		turn_sensor3v3_off=false
+	end if
+end function
+
+function get_json_value(byref json_str as string, byref attribute as string) as string
+	dim attr as string = "\x22"+attribute+"\x22:\x22"
+	dim l as byte = len(attr)
+	dim pos1 as byte = instr(1, json_str, attr, 1) + l
+	dim pos2 as byte = instr(pos1, json_str, "\x22",1)
+	
+	get_json_value = mid(json_str, pos1,pos2-pos1)
+end function
+
+sub device_sampling()
+
+	select case sensor_state
+	case EN_SENSOR_WAITTING_TO_READ:
+		if device_rtc_get_serialized(0,0,0) >= next_sensor_read_ts then
+			read_sensor()
+		end if
+		
+	case EN_SENSOR_SAMPLE_READ: 
+		if operation_mode = 1 then
+			if connect_to_alicloud_required = NO then
+			'go to sleep in low power mode if not sending cycle
+				device_awake_timer = 1
+			end if
+		else
+			sensor_state = EN_SENSOR_WAITTING_TO_READ
+
+		end if
+		alicloud_send_telemetry()
+		
+	case EN_SENSOR_SAMPLE_SENT: 
+	'in low power mode check if sample has been taken, if not wait for read, otherwise go to sleep
+		if operation_mode = 1 then
+			device_awake_timer = 1
+		else
+			sensor_state = EN_SENSOR_WAITTING_TO_READ
+
+		end if
+		
+	case EN_SENSOR_READ_ERROR:
+		next_sensor_read_ts=device_rtc_get_serialized(0,0,0)+5
+		sensor_read_count = sensor_read_count + 1
+		if sensor_read_count > 3 then
+			device_add_event(EVENT_SENSOR_TIMEOUT, "")
+		end if
+		sensor_state = EN_SENSOR_WAITTING_TO_READ
+
+	case EN_SESNOR_TS_ERROR:	
+		next_sensor_read_ts=device_rtc_get_serialized(0,0,0)+10
+		#if DEVICE_DEBUG_PRINT
+			device_debug_print("Bad timestampe, skip sensor sampling")
+		#endif
+		sensor_state = EN_SENSOR_WAITTING_TO_READ
+
+	end select
+
+end sub
+
+sub device_migrating()
+	select case device_migrate_state
+	case EN_DEVICE_MIGRATE_IDLE:
+		exit sub
+		
+	case EN_DEVICE_MIGRATE_STARTING:
+		device_migrate_state = EN_DEVICE_MIGRATE_PROVISIONING
+		property_modified = YES
+		mqtt_disconnect()
+		http_stop()
+		dns_disconnect()
+		 
+		if sock.tlscurrentnum<>255 then
+			sock.num=sock.tlscurrentnum
+			sock.tlsdeinit()	
+			if sock.statesimple = PL_SSTS_EST then
+				sock.discard()
+			end if
+		end if
+'		alicloud_start(ALICLOUD_CLIENT_ID,ALICLOUD_USERNAME,ALICLOUD_URL,ALICLOUD_PASSWORD, current_interface)		
+	case EN_DEVICE_MIGRATE_PROVISIONING:
+			
+	case EN_DEVICE_MIGRATE_SUCCESS:
+		device_add_event(EVENT_MIGRATE_SUCC, new_dvid)
+		stg_set("DVID",0,new_dvid)
+		stg_set("SCID",0,new_scid)
+		stg_set("PKEY",0,new_pkey)
+		new_dvid=""
+		new_scid=""
+		new_pkey=""
+		dim i as byte
+		for i = 1 to STG_MAX_NUM_SETTINGS 
+			stg_timestamp.ts_milsec = 0
+			stg_set_ts(str(i))
+		next i					
+		property_modified = YES 'resend all properties
+		device_migrate_state = EN_DEVICE_MIGRATE_IDLE
+		connect_to_alicloud_server()
+		
+	case EN_DEVICE_MIGRATE_FAILED:
+		if alicloud_fail_to_connect_count >= FAIL_CONN_COUNT_MAX then		
+			device_add_event(EVENT_MIGRATE_FAIL, new_dvid)
+			new_dvid = ""
+			new_scid = "" 
+			new_pkey = ""
+			device_migrate_state = EN_DEVICE_MIGRATE_IDLE
+			connect_to_alicloud_server()
+		end if
+	end select
+	
+end sub
+
+sub co2_calibration()
+
+	si2c_get(sensor_channel)
+	si2c_start()
+	si2c_write(SENSOR_ADDR OR PIC_WR)
+	si2c_write(&hA0)
+	si2c_write(&h77)
+	delay_ms(10)
+	si2c_stop()		
+
+end sub
+
+sub execute_special_command()
+	if command_issued = NO then exit sub
+	dim cmd as string(32) = stg_get("CMD",0)
+	select case cmd
+	
+	case "CACO2:400":
+		if sensor_type = 1 then
+			co2_calibration()
+			next_sensor_read_ts=device_rtc_get_serialized(0,0,0)+15
+		else
+			cmd = ""
+		end if
+	case else:
+		device_add_event(EVENT_ADVANCE_REJECTED_CMD,cmd)
+		cmd = ""
+	end select
+	
+	if cmd <> "" then
+		device_add_event(EVENT_ADVANCE_ACCEPTED_CMD,cmd)
+	end if		
+	command_issued = NO
+	stg_set("CMD",0,"")
+end sub
+
+sub read_sensor()
+
+	dim daycounts, mincounts as word
+	dim seconds as byte		
+	dim ts as string(36)		
+	
+	'check the timestampe, if it's invalid, don't sample, but sample again in 2 sec
+	rtc.getdata(daycounts,mincounts,seconds)
+	if daycounts>0 then
+		set_timestamp(EN_TS_LAST_SAMPLED,device_rtc_get_serialized(0,0,0))
+		
+		daycounts=daycounts+10957
+		ts = lstr(device_rtc_get_serialized(daycounts,mincounts,seconds)) 
+		ts=ts+"001"
+
+		select case sensor_type
+		case 0:
+			read_onboard_t_h_sensor(ts)	
+		case 1:
+			read_onboard_t_h_co2_sensor(ts)			
+		case 128: 'bp02
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadInputRegisters, 400, 1, "", MODBUS_UART, modbus_RTU) 'temperature
+			modbus_master_request(modbus_device_id, ReadInputRegisters, 404, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+		case 129: 'soil-tr
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 3, 1, "", MODBUS_UART, modbus_RTU) 'temperature 
+
+		case 130: 'bp05
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadInputRegisters, 700, 1, "", MODBUS_UART, modbus_RTU) 'flood
+		case 131: 'bp03
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadInputRegisters, 500, 1, "", MODBUS_UART, modbus_RTU) 'ambient light
+		case 132: 'bp06
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadInputRegisters, 800, 1, "", MODBUS_UART, modbus_RTU) 'digital input
+		case 133: 'bp01
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadInputRegisters, 300, 1, "", MODBUS_UART, modbus_RTU) 'temperature
+		case 134: 'soil-trcgq
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 6, 1, "", MODBUS_UART, modbus_RTU) 'pH
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 18, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 19, 1, "", MODBUS_UART, modbus_RTU) 'temperature 
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 21, 1, "", MODBUS_UART, modbus_RTU) 'conductivity
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 30, 1, "", MODBUS_UART, modbus_RTU) 'nitrogen
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 31, 1, "", MODBUS_UART, modbus_RTU) 'phosphorus
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 32, 1, "", MODBUS_UART, modbus_RTU) 'potassium
+		case 135: 'h2s
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 0, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 1, 1, "", MODBUS_UART, modbus_RTU) 'temperature 		
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 6, 1, "", MODBUS_UART, modbus_RTU) 'Hydrogen sulfide
+		case 136: 'uv
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 0, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 1, 1, "", MODBUS_UART, modbus_RTU) 'temperature 		
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 8, 1, "", MODBUS_UART, modbus_RTU) 'UV
+		case 137: 'noise
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 12, 1, "", MODBUS_UART, modbus_RTU) 'noise
+		case 138: 'rain
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 16, 1, "", MODBUS_UART, modbus_RTU) 'rain
+		case 139:
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 0, 1, "", MODBUS_UART, modbus_RTU) 'humidity
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 1, 1, "", MODBUS_UART, modbus_RTU) 'temperature 		
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 1, "", MODBUS_UART, modbus_RTU) 'PM2.5
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 3, 1, "", MODBUS_UART, modbus_RTU) 'PM10
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 4, 1, "", MODBUS_UART, modbus_RTU) 'PM1.0
+		
+		case else:
+		end select
+	else
+		sensor_state = EN_SESNOR_TS_ERROR
+
+	end if
+end sub
+
+
+
+sub delay_ms(ms as dword)
+#if PLATFORM_ID=TPP2W or PLATFORM_ID=TPP2N or PLATFORM_ID=TPP3W or PLATFORM_ID=TPP3N
+	dim ax,bx as word
+
+	for ax=0 to ms
+		for bx=0 to 5
+		next bx
+	next ax
+#else
+	dim t as dword = sys.timercountms + ms
+	while sys.timercountms < t
+	wend
+#endif
+
+end sub
+
+#if DEVICE_DEBUG_PRINT
+sub device_debug_print(byref data as string)
+	dim s as string	
+	s = "Device> "+data+CR_LF
+	alternate_debugprint("DEV", s)
+	
+	#if DEVICE_DEBUG_PRINT = 2
+		sys.debugprint(s)
+	#endif
+end sub
+#endif
+
+sub decimal_point_converter(byref value as string, decimal as byte)
+	dim negative as no_yes = NO
+	dim value_len as byte
+	dim i as byte
+	
+	if decimal = 0 then exit sub
+	if left(value,1) = "-" then 
+		negative = YES
+		value = right(value, len(value)-1)
+	end if
+	value_len = len(value)
+	if value_len > decimal then
+		value=left(value,value_len-decimal)+"."+right(value,decimal)
+	else
+		value = "0."+strgen(decimal-value_len,"0")+value
+	end if
+	if negative = YES then
+		value = "-"+value
+	end if
+end sub
+
+sub set_timestamp(ts_type as en_ts_type, ts as dword)
+	dim w as word
+	
+	tbl_select("SysTS","SysTS")
+	tbl_field_sg("TS",lstr(ts),EN_TBL_SET)
+	w = ts_type
+	tbl_record_edit(w)
+	
+	'update the time for the next sensor read
+	if ts_type = EN_TS_LAST_SAMPLED then 
+		next_sensor_read_ts = ts + (sleep_time*60)
+	end if
+end sub
+
+
+sub callback_alicloud_debugprint(byref debug_msg as string)
+	alternate_debugprint("ALI", debug_msg)
+end sub
