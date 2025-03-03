@@ -377,7 +377,7 @@ sub alternate_debugprint(byref source as string, byref msg as string)
 			exit sub
 		end if
 	case 5:
-		if source <> "AZR" then
+		if source <> "ALI" then
 			exit sub
 		end if
 	case 6:	

@@ -29,7 +29,7 @@ I=SPT;T=INT;C=EDIT;D=Sensor Sampling Time (min);V=SPT<1?"Sampling Time cannont b
 I=RCN;T=INT;C=EDIT;D=No. of Samples to Aggregate;V=RCN<1?"No. of Samples to Aggregate cannont be 0":"";S=1==1?"i":"e";xIndex=28;
 I=ADV;D=Advanced;T=GROUP;
 I=CMD;T=STRING;D=Special Command;C=EDIT;xIndex=30;
-I=DBMD;T=BYTE;D=Diagnostics;C=STATIC;S=none;O=Disabled/0/Settings/1/MQTT/2/DNS\\HTTP/3/Cellular/4/Azure/5/All/6;xIndex=31;
+I=DBMD;T=BYTE;D=Diagnostics;C=STATIC;S=none;O=Disabled/0/Settings/1/MQTT/2/DNS\\HTTP/3/Cellular/4/Alicloud/5/All/6;xIndex=31;
 I=DBIP;T=STRING;D=Diagnostics Server IP;C=EDIT;xIndex=32;S=DBMD==0?"i":"e";
 I=DBPR;T=WORD;D=Diagnostics Server Port;C=EDIT;xIndex=33;S=DBMD==0?"i":"e";
 @@STG_RefPath=settings.xtxt

@@ -516,7 +516,7 @@ public sub alicloud_proc_mqtt_msg(byref topic as string, byref data as string, b
 		loop while pos3 > 0
 		'delete the shawdow after finish
 		if update = YES then
-			mqtt_publish(alicloud_topic_get(ALICLOUD_TOPIC_SHADOW_UPDATE,""),"{\x22method\x22: \x22delete\x22, \x22state\x22: {\x22reported\x22: \x22null\x22}, \x22version\x22:"+lstr(alicloud_shadow_version+1)+"}",QOS_AT_LEAST_ONCE)
+			mqtt_publish(alicloud_topic_get(ALICLOUD_TOPIC_SHADOW_UPDATE,""),"{\x22method\x22: \x22delete\x22, \x22state\x22: {\x22reported\x22: \x22null\x22, \x22desired\x22: \x22null\x22}, \x22version\x22:"+lstr(alicloud_shadow_version+1)+"}",QOS_AT_LEAST_ONCE)
 		end if
 	end if
 end sub
