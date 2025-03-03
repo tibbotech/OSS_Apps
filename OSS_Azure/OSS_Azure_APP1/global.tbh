@@ -1,8 +1,8 @@
 'DEFINES-------------------------------------------------------------
 const OSS_APP_FW_VER="AZR2.08.02"
-const OSS_SUPR_FW_VER = "027"
+const OSS_SUPR_FW_VER = "028"
 const OSS_SNS_FW_VER = "013"
-#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_027.hex"
+#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_028.hex"
 #define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_013.hex"
 
 includepp "settings.xtxt"
@@ -244,6 +244,7 @@ declare sub exit_LVP_mode()
 declare sub alternate_debugprint(byref source as string, byref msg as string)
 declare sub set_timestamp(ts_type as en_ts_type, ts as dword)
 declare function get_timestamp(ts_type as en_ts_type) as dword
+declare sub sys_reboot()
 
 declare sub time_to_str(byref ts_str as string(20),	
 	byref time_daycount as word,
@@ -254,3 +255,21 @@ declare sub time_to_str(byref ts_str as string(20),
 #if DEVICE_DEBUG_PRINT
 	declare sub device_debug_print(byref data as string)
 #endif
+
+
+'------------------------------------------------------------
+
+#define ModelCfg &hDB
+#define DesignCap &h18
+#define RepCap &h05
+#define FullCapRep &h10
+#define VEmpty &h3A
+#define RepSOC &h06
+#define TTE &h11
+#define VCell &h09
+#define Current &h0A
+#define QH &h4D
+
+declare function read_battery_PIC(register as byte) as word
+declare function detailed_battry_states(packet_number as byte) as string
+

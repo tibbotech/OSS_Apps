@@ -516,9 +516,11 @@ sub callback_azure_on_telemetry_sent()
 	
 	tbl_select("Azure","Azure")
 	tbl_get_num_records(active_rec_num,NO)
+	
 	if active_rec_num > 0 then
 		azure_send_telemetry()
 	else
+no_more_records:
 		if operation_mode = 0 then 
 			sensor_state = EN_SENSOR_SAMPLE_SENT
 
@@ -1138,9 +1140,11 @@ read_again:
 	if co2_invalid = NO then add_telemetry("co2",str_co2,ts)
 
 	'in power saving mode log battery level
-'	if operation_mode = 1 then
-'		add_telemetry("BAT_LVL",str(battery_level),ts)
-'	end if
+	if operation_mode = 1 then
+		add_telemetry("BAT_LVL",str(battery_level),ts)
+		device_add_event(EVENT_DEBUG_INFO,detailed_battry_states(1))
+		device_add_event(EVENT_DEBUG_INFO,detailed_battry_states(2))
+	end if
 	
 	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
 	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
@@ -1215,9 +1219,11 @@ read_again:
 	if humd_invalid = NO then add_telemetry("humidity",humd,ts)
 
 	'in power saving mode log battery level
-'	if operation_mode = 1 then
-'		add_telemetry("BAT_LVL",str(battery_level),ts)
-'	end if
+	if operation_mode = 1 then
+		add_telemetry("BAT_LVL",str(battery_level),ts)
+		device_add_event(EVENT_DEBUG_INFO,detailed_battry_states(1))
+		device_add_event(EVENT_DEBUG_INFO,detailed_battry_states(2))
+	end if
 	
 	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
 	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
@@ -1367,21 +1373,21 @@ sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref
 		field_counter = field_counter+1
 		
 		'in power saving mode log battery level
-'		if operation_mode = 1 then
-'			'for mulitple fields sensor, count back number of fields and add the BAT_LVL at then end	
-'			if number_of_fld - field_counter = 1 then
-'				add_telemetry("BAT_LVL",str(battery_level),sensor_telemetry_ts)
-'				sensor_state = EN_SENSOR_SAMPLE_READ
+		if operation_mode = 1 then
+			'for mulitple fields sensor, count back number of fields and add the BAT_LVL at then end	
+			if number_of_fld - field_counter = 1 then
+				add_telemetry("BAT_LVL",str(battery_level),sensor_telemetry_ts)
+				sensor_state = EN_SENSOR_SAMPLE_READ
 
-'				field_counter = 0
-'			end if
-'		else
+				field_counter = 0
+			end if
+		else
 			if number_of_fld - field_counter = 0 then
 				sensor_state = EN_SENSOR_SAMPLE_READ 
 
 				field_counter = 0
 			end if
-'		end if
+		end if
 	end if
 end sub
 
@@ -1912,4 +1918,78 @@ function get_timestamp(ts_type as en_ts_type) as dword
 	tbl_record_sg(w,EN_TBL_GET)
 	tbl_field_sg("TS",ts,EN_TBL_GET)
 	get_timestamp = lval(ts)
+end function
+
+sub sys_reboot()
+	if comm_mode = 1 then
+		dim wdaycount as word = 0
+		dim wmincount as word = 0
+		dim bsec as byte = 0
+		dim current_ts as dword = device_rtc_get_serialized(wdaycount, wmincount, bsec)
+		
+		current_ts = current_ts + 2
+		device_serialized_to_time(current_ts, wdaycount, wmincount, bsec)
+		sys.sleep(wdaycount, wmincount, bsec)		
+	else
+		sys.reboot()
+	end if
+end sub
+
+'-------------------------------------------------------------------------------
+
+function read_battery_PIC(register as byte) as word
+	
+	si2c_get(pic_channel)
+	si2c_start()
+	si2c_write(&h6C OR PIC_WR)
+	si2c_write(register)
+	si2c_stop()
+	si2c_start()
+	si2c_write(&h6C OR PIC_RD)
+	read_battery_PIC = si2c_read(true)
+	read_battery_PIC = read_battery_PIC + si2c_read(false) * 256
+	si2c_stop()
+	
+end function
+
+function detailed_battry_states(packet_number as byte) as string
+	dim tmp as dword
+	dim sign as integer
+	dim result as float 
+	dim s as string
+	
+	if packet_number = 1 then
+		' Read Full battery capacity
+		tmp = read_battery_PIC(FullCapRep)
+		s = "FullCapRep=" + str(tmp)+","
+		
+		' Read current battery capacity
+		tmp = read_battery_PIC(RepCap)
+		s = s + "RepCap=" + str(tmp)+","
+		
+		' Read current battery capacity in percentages
+		tmp = read_battery_PIC(RepSOC)
+		tmp = tmp / 256
+		detailed_battry_states = s + "RepSOC(%)=" + str(tmp)
+	else	
+		' Read predicted battery life at current consumption.
+		tmp = read_battery_PIC(TTE)
+		s = "TTE(min)=" + str(tmp) +","
+		
+		' Read battery voltage
+		tmp = read_battery_PIC(VCell)
+		result = 0.078125 * tmp
+		s = s + "VCell(mv)=" + ftostr(result, FTOSTR_MODE_PLAIN, 2) +","
+		
+		' Read current		
+		tmp = read_battery_PIC(Current)
+		sign = tmp
+		result = sign * 0.00015625
+		s = s +"Current(A)=" + ftostr(result, FTOSTR_MODE_PLAIN, 6) + ","
+
+		dim qh as integer
+		qh = read_battery_PIC(QH)
+		detailed_battry_states = s +"QH=" + stri(qh)
+		
+	end if
 end function

@@ -86,7 +86,7 @@ function luis_start(byref bt_name as string) as en_luis_status_codes
 		end if
 	end if
 	
-	if sys.runmode = PL_SYS_MODE_RELEASE then
+	if sys.runmode <>PL_SYS_MODE_DEBUG and sys.debugmode<>PL_SYS_DBG_NET then
 		while wln.task<>PL_WLN_TASK_IDLE
 		wend
 		wln.disable()	

@@ -55,7 +55,7 @@ sub boot()
 	dim i, rec_num as word
 	dim ts as string
 	tbl_select("SysTS","SysTS")
-	tbl_get_num_records(rec_num,NO)
+	tbl_get_num_records(rec_num,YES)
 	for i = rec_num to MAXIMUM_TS_NUM-1
 		tbl_field_sg("TS","0",EN_TBL_SET)
 		tbl_record_add("")
@@ -138,10 +138,16 @@ sub boot()
 	read_ntag()
 	if sys.debugmode <> PL_SYS_DBG_SERIAL then turn_sensor3v3_on()
 	'-----------------------------------------------------------------	
-	
-	dim bl as string(1) = pic_read(&h02,1)
-	battery_level = asc(bl)
-	if battery_level > 100 then battery_level=0
+	if operation_mode = 1 then
+		dim bl as string(1) = pic_read(&h02,1)
+		battery_level = asc(bl)
+		
+'		if battery_level >= 128 and battery_level <> 255 then 
+'			battery_level = battery_level - 128
+'		else
+'			battery_level=0
+'		end if		
+	end if
 
 	if sys.debugmode <> PL_SYS_DBG_SERIAL then sensor_init()	
 	
@@ -206,7 +212,7 @@ sub boot()
 		if wln.autoconnect<>YES or wln.autodhcp<>YES then	
 			wln.autodhcp=YES
 			wln.autoconnect=YES
-			sys.reboot 
+			sys_reboot()
 		end if		
 	
 		sock.num=SYS_DPRINT_SOCK_NUM
@@ -223,12 +229,12 @@ sub boot()
 		if connect_to_azure_required=YES then
 			if (comm_mode = 0 or (comm_mode = 2 and stg_get("FBL",0) = "0" )) and wln.autoconnect = NO then
 				wln.autoconnect = YES
-				sys.reboot()
+				sys_reboot()
 			end if
 			
 			if comm_mode = 1 and wln.autoconnect = YES and (sys.runmode =PL_SYS_MODE_RELEASE or sys.debugmode <> PL_SYS_DBG_NET) then
 				wln.autoconnect = NO
-				sys.reboot()
+				sys_reboot()
 			end if
 		end if
 	end if
@@ -513,7 +519,7 @@ sub sensor_init()
 	
 	sensor_state = EN_SENSOR_WAITTING_TO_READ
 	'in power saving mode log battery level
-'	if operation_mode = 1 then number_of_fld = number_of_fld + 1	
+	if operation_mode = 1 then number_of_fld = number_of_fld + 1	
 end sub
 
 sub read_ntag()
@@ -530,11 +536,11 @@ sub read_ntag()
 		if parameter <> "\x00\x00" then
 			config_mode = YES
 			config_bt_name=parameter+"-"+stg_get("DVNM",0)
-			if sys.runmode = PL_SYS_MODE_RELEASE then
+			if sys.runmode <>PL_SYS_MODE_DEBUG and sys.debugmode <> PL_SYS_DBG_NET then
 				if wln.autoconnect = YES then
 					stg_set("BTNM",0,parameter)
 					wln.autoconnect = NO
-					sys.reboot()
+					sys_reboot()
 				end if				
 			end if
 		end if
@@ -625,7 +631,7 @@ sub check_and_upgrade_sns_pic()
 			#if DEVICE_DEBUG_PRINT
 				device_debug_print("SNS PIC FW upgraded!")
 			#endif
-			sys.reboot()			
+			sys_reboot()
 		end if
 	end if
 	
@@ -660,7 +666,7 @@ sub check_and_upgrade_supr_pic()
 			device_add_event(EVENT_SUPERVISOR_UPGRADE_FAIL, "")
 		else
 			device_add_event(EVENT_SUPERVISOR_UPGRADE_SUCC, "")
-			sys.reboot()
+			sys_reboot()
 		end if
 	end if
 end sub

@@ -75,11 +75,12 @@ sub on_sys_timer()
 			end if
 			device_sleep()
 		end if
+		'if ble is disconnect, exit config mode by reboot
 		if sys.runmode <> PL_SYS_MODE_DEBUG then
 			if bt.connected = NO then
 				bt_timemout = bt_timemout + 1
 				if bt_timemout > 5  then
-					sys.reboot()
+					sys_reboot()
 				end if
 			else
 				bt_timemout = 0
