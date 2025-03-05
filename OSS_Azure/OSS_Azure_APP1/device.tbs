@@ -3,6 +3,8 @@ include "global.tbh"
 const CELL__SIMCARD_PIN = CELL__QUESTMARK	'<-- CHANGE THIS AS NEEDED
 const FAIL_CONN_COUNT_MAX = 3
 const CR_LF=chr(13)+chr(10)
+const SENSOR_ERROR_MAX_COUNT = 5
+const SENSOR_ERROR_DELAY = 3
 
 enum en_device_migrate_states
 	EN_DEVICE_MIGRATE_IDLE,
@@ -807,7 +809,7 @@ sub device_add_event(device_event as en_device_events, byref parameter as string
 	case EVENT_SUPERVISOR_UPGRADE_FAIL:
 		event_msg="Supervisor MCU’s FW upgrade failed! Version mismatch detected!"
 	case EVENT_SUPERVISOR_UPGRADE_SUCC:
-		event_msg="The FW of the supervisor MCU is upgraded!"
+		event_msg="The FW of the supervisor MCU is upgraded! ("+parameter+")"
 	case EVENT_MIGRATE_START:
 		event_msg="Device migration started! The destination device ID:"+parameter
 	case EVENT_MIGRATE_SUCC:
@@ -1038,7 +1040,6 @@ sub read_onboard_t_h_co2_sensor(byref ts as string)
 	dim co2_invalid as no_yes = NO
 	dim read_retry as byte = 0
 
-read_again:
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	si2c_get(sensor_channel)
 	
@@ -1054,7 +1055,6 @@ read_again:
 		
 	if data0 <> 0 then
 		sensor_state = EN_SENSOR_READ_ERROR
-
 		exit sub
 	end if
 '----------------------------
@@ -1122,17 +1122,11 @@ read_again:
 		device_debug_print(temp+"C "+humd+"% "+str_co2+" "+ts)
 	#endif
 
-	if temp_invalid = YES or humd_invalid = YES or co2_invalid = YES then
-		read_retry = read_retry + 1
-		if read_retry < 10 then
-			temp_invalid = NO
-			humd_invalid = NO 
-			co2_invalid = NO
-			delay_ms(1000)
-			goto read_again			
-		end if
+	if (temp_invalid = YES or humd_invalid = YES or co2_invalid = YES) and sensor_read_count < SENSOR_ERROR_MAX_COUNT then
+		sensor_state = EN_SENSOR_READ_ERROR
+		exit sub
 	end if
-
+	
 	if temp_invalid = NO then add_telemetry("temperature",temp,ts)
 	if humd_invalid = NO then add_telemetry("humidity",humd,ts)
 	if co2_invalid = NO then add_telemetry("co2",str_co2,ts)
@@ -1145,8 +1139,13 @@ read_again:
 	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
 	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
 	if co2_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[co2]: " + str_co2)
-	sensor_state = EN_SENSOR_SAMPLE_READ
-
+	
+	if temp_invalid = YES or humd_invalid = YES or co2_invalid = YES  then
+		sensor_state = EN_SENSOR_READ_ERROR
+	else
+		sensor_state = EN_SENSOR_SAMPLE_READ
+	end if
+	
 end sub
 ' This function is to read the sensor board that has a local MCU on it and T/H sensor is populated on it but CO2 sensor is NOT populated on it
 sub read_onboard_t_h_sensor(byref ts as string)
@@ -1156,9 +1155,7 @@ sub read_onboard_t_h_sensor(byref ts as string)
 	dim humd,temp as string(36)
 	dim temp_invalid as no_yes = NO
 	dim humd_invalid as no_yes = NO
-	dim read_retry as byte = 0
 	
-read_again:	
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	si2c_get(sensor_channel)
 	
@@ -1201,14 +1198,9 @@ read_again:
 		device_debug_print(temp+"C "+humd+"% "+ts)
 	#endif
 
-	if temp_invalid = YES or humd_invalid = YES then
-		read_retry = read_retry + 1
-		if read_retry < 3 then
-			temp_invalid = NO
-			humd_invalid = NO 
-			delay_ms(1000)
-			goto read_again			
-		end if
+	if (temp_invalid = YES or humd_invalid = YES) and sensor_read_count < SENSOR_ERROR_MAX_COUNT then
+		sensor_state = EN_SENSOR_READ_ERROR
+		exit sub
 	end if
 
 	if temp_invalid = NO then add_telemetry("temperature",temp,ts)
@@ -1221,7 +1213,12 @@ read_again:
 	
 	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
 	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
-	sensor_state = EN_SENSOR_SAMPLE_READ 
+
+	if temp_invalid = YES or humd_invalid = YES then
+		sensor_state = EN_SENSOR_READ_ERROR
+	else
+		sensor_state = EN_SENSOR_SAMPLE_READ
+	end if
 
 end sub
 
@@ -1627,6 +1624,7 @@ sub device_sampling()
 		end if
 		
 	case EN_SENSOR_SAMPLE_READ: 
+		sensor_read_count = 0
 		if operation_mode = 1 then
 			if connect_to_azure_required = NO then
 			'go to sleep in low power mode if not sending cycle
@@ -1648,9 +1646,18 @@ sub device_sampling()
 		end if
 		
 	case EN_SENSOR_READ_ERROR:
-		next_sensor_read_ts=device_rtc_get_serialized(0,0,0)+5
+		next_sensor_read_ts=device_rtc_get_serialized(0,0,0) + SENSOR_ERROR_DELAY
 		sensor_read_count = sensor_read_count + 1
-		if sensor_read_count > 5 then
+		
+		'for sensor 0 and 1 reset sensors
+		if (sensor_type = 0 or sensor_type = 1) and sensor_read_count = SENSOR_ERROR_MAX_COUNT - 2 then			
+			turn_sensor3v3_off()
+			delay_ms(500)
+			turn_sensor3v3_on()
+			next_sensor_read_ts = next_sensor_read_ts + (boot_up_delay/2) - SENSOR_ERROR_DELAY
+		end if
+		
+		if sensor_read_count > SENSOR_ERROR_MAX_COUNT then
 			device_add_event(EVENT_SENSOR_TIMEOUT, "")
 			sensor_read_count = 0
 			set_timestamp(EN_TS_LAST_SAMPLED,device_rtc_get_serialized(0,0,0))

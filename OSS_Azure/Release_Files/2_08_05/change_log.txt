@@ -1,0 +1,34 @@
+Changelog of OSS APP
+	-	Date of change:05/03/2025
+	-	New revision of OSS APP: AZR2.08.05
+	-	Previous revision of OSS APP: AZR2.08.02 - 12/02/2025
+	-	The reason for change: 
+			-- Disable WiFi radio in APP0
+			-- Reset sensor 3v3 power when the onboard sensor reading is out of range
+			-- New PIC firmware (battery fix)
+
+	-	Files changed:
+			-- OSS_Azure_APP0/main.tbs: Disable WiFi radio
+			-- OSS_Azure_APP1/boot.tbs: New PIC FW
+			-- OSS_Azure_APP1/device.tbs: Sensor 3v3 reset
+			-- OSS_Azure_APP1/settings.xtxt: VMOD
+			-- Release/2-08-02/OSS_Azure_Template_V4_12-FEB-2025: VMOD
+
+	-   Release files built:  
+			--2-08-05/OSS_Azure_APP0.tpc
+			--2-08-05/OSS_Azure_APP1.tpc
+			--2-08-05/OSS_Azure_FW_2-08-05.bin
+			--2-08-05/OSS_Azure_FW_2-08-05.tcu
+			--2-08-05/OSS_Azure_Template_V4_12-FEB-2025.json
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_08.bin
+			--OSS_SUPR_PIC_FW_029.hex
+			--OSS_SNS_PIC_FW_013.hex
+
+	- Level of change:Major
+	- Risk assessment and cons: New TiOS and New PIC FW, can cause unexpected bug.
+		Changes on how to read onboard sensor, when there is unexpected reading, it could have a longer delay.
+								
+	- Deprecated Features: none
+			

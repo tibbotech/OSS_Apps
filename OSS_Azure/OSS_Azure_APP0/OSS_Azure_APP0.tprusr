@@ -2,13 +2,13 @@
 watch=
 [file1]
 line=0
-cursor=364
-opened=yes
+cursor=542
+opened=active
 breakpoints=
 [file2]
 line=0
 cursor=701
-opened=active
+opened=yes
 breakpoints=
 [file3]
 line=0
