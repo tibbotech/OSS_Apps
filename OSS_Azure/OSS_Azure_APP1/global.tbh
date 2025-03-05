@@ -1,8 +1,8 @@
 'DEFINES-------------------------------------------------------------
 const OSS_APP_FW_VER="AZR2.08.02"
-const OSS_SUPR_FW_VER = "028"
+const OSS_SUPR_FW_VER = "029"
 const OSS_SNS_FW_VER = "013"
-#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_028.hex"
+#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_029.hex"
 #define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_013.hex"
 
 includepp "settings.xtxt"

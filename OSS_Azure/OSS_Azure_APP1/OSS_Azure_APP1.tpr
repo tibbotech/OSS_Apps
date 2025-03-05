@@ -335,9 +335,8 @@ condition=
 locked=no
 location=project
 [file46]
-path=OSS_SUPR_PIC_FW_028.hex
+path=OSS_SUPR_PIC_FW_029.hex
 type=binary
 format=
-condition=
 locked=no
 location=project
