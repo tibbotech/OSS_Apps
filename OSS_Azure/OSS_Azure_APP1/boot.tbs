@@ -659,7 +659,7 @@ sub check_and_upgrade_supr_pic()
 		if upgrade_success = false then
 			device_add_event(EVENT_SUPERVISOR_UPGRADE_FAIL, "")
 		else
-			device_add_event(EVENT_SUPERVISOR_UPGRADE_SUCC, "")
+			device_add_event(EVENT_SUPERVISOR_UPGRADE_SUCC, OSS_SUPR_FW_VER)
 			sys.reboot()
 		end if
 	end if

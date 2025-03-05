@@ -1,25 +1,25 @@
 [project]
-watch=operation_mode, comm_mode, wln.autoconnect
+watch=operation_mode, comm_mode, wln.autoconnect, sensor_read_count, sensor_state
 [file1]
-line=113
-cursor=3504
+line=24
+cursor=973
 opened=yes
-breakpoints=76,119
+breakpoints=
 [file2]
-line=66
-cursor=3120
-opened=active
+line=169
+cursor=6467
+opened=yes
 breakpoints=
 [file3]
-line=797
-cursor=22520
-opened=yes
-breakpoints=173,200,456,712,1006
+line=1169
+cursor=32950
+opened=active
+breakpoints=1130,1149,1627,1653,1660
 [file4]
-line=520
-cursor=15809
+line=631
+cursor=18809
 opened=yes
-breakpoints=192,209,223,226,231,537,628,663
+breakpoints=
 [file5]
 line=1103
 cursor=38207
@@ -126,7 +126,7 @@ breakpoints=
 line=271
 cursor=8471
 opened=yes
-breakpoints=288
+breakpoints=
 [file27]
 line=0
 cursor=0
@@ -210,4 +210,4 @@ breakpoints=
 [file45]
 opened=no
 [file46]
-opened=no
+opened=yes

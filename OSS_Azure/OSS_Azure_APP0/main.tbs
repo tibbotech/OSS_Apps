@@ -14,6 +14,9 @@ dim config_bt_name as string(16) = "BT-OSS-APP0"
 
 sub on_sys_init()
 
+	if not (sys.runmode = PL_SYS_MODE_DEBUG and sys.debugmode = PL_SYS_DBG_NET) then
+		wln.disablewifiradio()
+	end if
 	sys.debugprint("DEBUG MODE: " + str(sys.debugmode))
 	'for OSS
 	read_ntag()
