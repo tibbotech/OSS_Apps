@@ -48,6 +48,7 @@ dim number_of_fld as byte = 0
 dim field_counter as byte = 0
 dim next_sensor_read_ts as dword
 dim wifi_fallback_timer as word = 1 'start the timer at 1, 0 means never had any sock data activity
+dim part_downloaded as no_yes = NO
 
 declare sub device_sampling()
 declare sub device_migrating()
@@ -277,6 +278,10 @@ sub callback_http_request_failed(error_message as string)
 	http_conn_timeout = YES
 	if upgrade_state = 255 then
 		azure_http_request_failed()
+	else
+		if part_downloaded = NO then
+			device_add_event(EVENT_UPGRADE_FAIL, str(part_num+1)+"/"+str(total_chuncks) + " ")
+		end if
 	end if
 end sub
 
@@ -598,7 +603,6 @@ sub cell_callback_io_extender_setup()
 
 	'STATUS line
 	mcp23017_line_out_enable(CELL__STATUS_LINENUM,CELL__STATUS_PORT,NO,TBT00_3_S5_CHANNEL)
-
 	'TX_BUF line
 	mcp23017_line_out_enable(TX_BUF_LINENUM,TX_BUF_PORT,yes,TBT00_3_S5_CHANNEL)
 	mcp23017_line_set(TX_BUF_LINENUM,TX_BUF_PORT, HIGH, TBT00_3_S5_CHANNEL)
@@ -615,6 +619,11 @@ sub cell__callback_modem_off()
 end sub
 
 sub cell__callback_insufficient_buffer_pages()
+end sub
+
+sub cell__callback_sock_release_all()
+	dns_start(DNS_socket)
+	init_debug_port()
 end sub
 
 sub cell__callback_at_reply(phase as en_cell__op_at_phases,byref reply as string)
@@ -913,6 +922,7 @@ sub device_store_app_fw(data as string)
 	fd.setdata(data)
 	
 	if fd.filesize = part_size then
+		part_downloaded = YES
 		fd.flush()
 		dim checksum as dword=0
 		fd.setpointer(1)		
@@ -941,43 +951,51 @@ sub device_store_app_fw(data as string)
 end sub
 
 public sub upgrade_app_fw_init()
-	upgrade_state = val(stg_get("UPD",0))
 	dim fd_status as pl_fd_status_codes
 	
-	if upgrade_state = 255 then exit sub
-	
-	if app_fw_filenum = 255 then
-		app_fw_filenum=filenum_open("FMW",APP_FW_FILE,fd_status)
-	end if
-	
-	if part_filenum = 255 then 
-		part_filenum =filenum_open("PAR",PART_FILE,fd_status)
-		fd.filenum=part_filenum
-		fd.delete(PART_FILE)
-		fd.create(PART_FILE)
-	else
-		fd.filenum=part_filenum
-		fd.setfilesize(0)
-	end if
-
-	if upgrade_state = 0 then
-		fd.filenum=app_fw_filenum
-		fd.delete(APP_FW_FILE)
-		fd.create(APP_FW_FILE)		
-	end if
-	
-	if upgrade_state = 254 then
+	upgrade_state = val(stg_get("UPD",0))
+	part_downloaded = NO
+		
+	select case upgrade_state		
+	case 254: 'upgrade finish download everything
 		stg_set("UPD",0,"255")
+		app_fw_filenum = filenum_open("FMW",APP_FW_FILE,fd_status)
 		fd.filenum = app_fw_filenum
-		if fd.open(APP_FW_FILE) = PL_FD_STATUS_OK then
-			device_add_event(EVENT_UPGRADE_FULL_DOWNLOAD, "")
+		device_add_event(EVENT_UPGRADE_FULL_DOWNLOAD, "")
+		if fd.open(APP_FW_FILE) = PL_FD_STATUS_OK and fd.filesize > 0 then
 			'keep ACSIP alive
 			mcp23017_line_out_enable(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,yes,TBT00_3_S5_CHANNEL)
 			mcp23017_line_set(PMU_INHIBIT_LINE, PMU_INHIBIT_PORT, LOW, TBT00_3_S5_CHANNEL)
 			fd.copyfirmwarefromfilelzo()
 		end if
-	end if
-	
+		
+	case 255: 'no upgrade in progress
+		exit sub
+		
+	case else: 'downloading file parts
+		app_fw_filenum=filenum_open("FMW",APP_FW_FILE,fd_status)
+		if fd_status = PL_FD_STATUS_NOT_FOUND then
+			fd.create(APP_FW_FILE)
+			app_fw_filenum=filenum_open("FMW",APP_FW_FILE,fd_status)
+			stg_set("UPD",0,"0")
+			upgrade_state=0
+		else
+			if upgrade_state = 0 then
+				fd.filenum=app_fw_filenum
+				fd.setfilesize(0)		
+			end if
+		end if
+			
+		part_filenum =filenum_open("PAR",PART_FILE,fd_status)
+		if fd_status = PL_FD_STATUS_NOT_FOUND then
+			fd.create(PART_FILE)
+			part_filenum =filenum_open("PAR",PART_FILE,fd_status)
+		else
+			fd.filenum=part_filenum
+			fd.setfilesize(0)	
+		end if			
+	end select
+		
 end sub
 
 public sub connect_to_firmware_server()
@@ -1221,6 +1239,7 @@ sub read_onboard_t_h_sensor(byref ts as string)
 	end if
 
 end sub
+
 
 sub pic_write(addr as byte, byref data as string)
 	dim i as byte

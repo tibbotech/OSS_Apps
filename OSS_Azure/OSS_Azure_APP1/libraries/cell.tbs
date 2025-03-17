@@ -1881,6 +1881,7 @@ sub cell__sock_release_all()
 	for s=0 to CELL__SOCK_NUM_MAX
 		sock_release(s)
 	next s
+	cell__callback_sock_release_all()
 end sub
 sub cell__sock_flush_all()
 	'Define variables
@@ -4715,7 +4716,7 @@ sub cell__isretry_inprogr_in_idlemode()
 				cell__debugprint_at_phase(PHASE_AT_ISRETRY_IN_PROGRESS_IN_IDLE_MODE_EXCEEDED, cell__at_cmd, CELL__EMPTYSTRING)
 
 				cell__at_parse_message_retry(cell__op_pwr_phase, cell__op_at_phase, cell__op_ppp_phase, cell__op_gps_phase, PHASE_PARSE_IDLE)
-'				cell__modem_restart(PHASE_PWR_PWRKEY_ON)	'initiate a modem-restart
+				cell__modem_restart(PHASE_PWR_PWRKEY_ON)	'initiate a modem-restart
 			end if
 		end if
 	end if

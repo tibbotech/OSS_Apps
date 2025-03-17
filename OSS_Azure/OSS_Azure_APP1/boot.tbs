@@ -28,6 +28,7 @@ declare sub check_and_upgrade_sns_pic()
 declare sub init_cell_tech()
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
+
 declare modbus_device_id as byte
 declare command_issued as no_yes
 declare number_of_fld as byte
@@ -208,17 +209,7 @@ sub boot()
 			wln.autoconnect=YES
 			sys.reboot 
 		end if		
-	
-		sock.num=SYS_DPRINT_SOCK_NUM
-		sock.txbuffrq(3)
-		sys.buffalloc()
-		'sock.protocol=PL_SOCK_PROTOCOL_TCP
-		sock.protocol=PL_SOCK_PROTOCOL_UDP
-		sock.targetip=stg_get("DBIP",0)  'changes as see fit
-		sock.targetport=val(stg_get("DBPR",0))
-		sock.targetinterface = PL_SOCK_INTERFACE_WLN
-		sock.allowedinterfaces = "WLN"
-
+		init_debug_port()
 	else
 		if connect_to_azure_required=YES then
 			if (comm_mode = 0 or (comm_mode = 2 and stg_get("FBL",0) = "0" )) and wln.autoconnect = NO then
@@ -273,6 +264,7 @@ sub boot()
 		command_issued = YES
 	end if
 	device_debug_print("Device boot up")
+'	device_add_event(EVENT_DEBUG_INFO,"Device boot up")
 end sub
 
 sub check_app_fw_version()
@@ -349,6 +341,13 @@ fw209:
 			stg_set("FWV",0,OSS_APP_FW_VER)
 		end if
 		stg_set("FWV",0,OSS_APP_FW_VER)
+		'update all settings timestamp whenever there is a version change		
+		dim i as byte
+		for i = 1 to STG_MAX_NUM_SETTINGS 
+			stg_timestamp.ts_milsec = 0
+			stg_set_ts(str(i))
+		next i
+		
 		device_add_event(EVENT_UPGRADE_COMPLETE, OSS_APP_FW_VER)		
 	end if
 end sub
@@ -690,6 +689,18 @@ sub pic_init()
 
 		ssi.enabled=YES
 	end if
+end sub
+
+sub init_debug_port()
+	sock.num=SYS_DPRINT_SOCK_NUM
+	sock.txbuffrq(3)
+	sys.buffalloc()
+	'sock.protocol=PL_SOCK_PROTOCOL_TCP
+	sock.protocol=PL_SOCK_PROTOCOL_UDP
+	sock.targetip=stg_get("DBIP",0)  'changes as see fit
+	sock.targetport=val(stg_get("DBPR",0))
+	sock.targetinterface = PL_SOCK_INTERFACE_WLN
+	sock.allowedinterfaces = "WLN"
 end sub
 
 sub init_cell_tech()

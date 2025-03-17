@@ -1,5 +1,5 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="AZR2.08.05"
+const OSS_APP_FW_VER="AZR2.08.06"
 const OSS_SUPR_FW_VER = "029"
 const OSS_SNS_FW_VER = "013"
 #define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_029.hex"
@@ -244,6 +244,7 @@ declare sub exit_LVP_mode()
 declare sub alternate_debugprint(byref source as string, byref msg as string)
 declare sub set_timestamp(ts_type as en_ts_type, ts as dword)
 declare function get_timestamp(ts_type as en_ts_type) as dword
+declare sub init_debug_port()
 
 declare sub time_to_str(byref ts_str as string(20),	
 	byref time_daycount as word,

@@ -1187,6 +1187,7 @@ declare sub cell__callback_at_reply(phase as en_cell__op_at_phases,byref reply a
 declare sub cell__callback_at_reply_contains_error()
 '<b>METHOD. </b><br><br>
 'Callback to notify that AT reply contains an ERROR.
+declare sub cell__callback_sock_release_all()
 
 #if CELL__PPP_MODE_ISENABLED
 	declare sub cell__callback_ppp_fcs_is_bad()
