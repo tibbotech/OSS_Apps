@@ -606,7 +606,7 @@ sub check_and_upgrade_sns_pic()
 	ver = ver + chr(si2c_read(true))
 	si2c_stop()
 	#if DEVICE_DEBUG_PRINT
-		device_debug_print("Current version: " + ver)
+		device_debug_print("Current SNS version: " + ver)
 	#endif
 	if (ver <> OSS_SNS_FW_VER) then
 		' FLASHING
@@ -633,6 +633,10 @@ end sub
 sub check_and_upgrade_supr_pic()	
 	dim ver as string(3) = pic_read(&h98,3)
 	dim upgrade_success as boolean
+	
+	#if DEVICE_DEBUG_PRINT
+		device_debug_print("Current PIC version: " + ver)
+	#endif
 	
 	if ver <> OSS_SUPR_FW_VER then
 		#if DEVICE_DEBUG_PRINT

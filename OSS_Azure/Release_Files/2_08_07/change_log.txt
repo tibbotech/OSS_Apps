@@ -1,0 +1,32 @@
+Changelog of OSS APP
+	-	Date of change:18/04/2025
+	-	New revision of OSS APP: AZR2.08.07
+	-	Previous revision of OSS APP: AZR2.08.05 - 05/03/2025
+	-	The reason for change: 
+			-- Fix the bug that after cellular modem is restarted, debug print over wifi stop working.
+			-- Fix the but that azure_update_json create endless loop.
+			-- Resend all parameters after firmware version is changed.
+			-- Add partial download failed event, if partial download is interrupted.
+
+	-	Files changed:
+			-- OSS_Azure_APP1/device.tbs: Debug print bug; Partial download failed event;
+			-- OSS_Azure_APP1/boot.tbs: Debug print bug; Partial download failed event; Resend all parameters
+			-- OSS_Azure_APP1/cell.tbs: Debug print bug
+			-- OSS_Azure_APP1/azure.tbs: Endless loop bug
+
+	-   Release files built:  
+			--2-08-07/OSS_Azure_APP0.tpc
+			--2-08-07/OSS_Azure_APP1.tpc
+			--2-08-07/OSS_Azure_FW_2-08-07.bin
+			--2-08-07/OSS_Azure_FW_2-08-07.tcu
+			--2-08-07/OSS_Azure_Template_V4_12-FEB-2025.json
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_08.bin
+			--OSS_SUPR_PIC_FW_029.hex
+			--OSS_SNS_PIC_FW_013.hex
+
+	- Level of change:Minor
+	- Risk assessment and cons: none				
+	- Deprecated Features: none
+			

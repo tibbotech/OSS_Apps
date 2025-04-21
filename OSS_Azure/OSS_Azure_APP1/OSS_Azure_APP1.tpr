@@ -10,7 +10,7 @@ transport=udp_winpcap
 [address1]
 platform=WM2000
 transport=udp_winpcap
-address=156.101.249.68.115.87
+address=0.1.2.3.4.211
 [address2]
 platform=WM2000
 transport=serial

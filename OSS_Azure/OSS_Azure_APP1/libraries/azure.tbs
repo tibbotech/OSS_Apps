@@ -290,9 +290,13 @@ public sub azure_proc_timer()
 		end if
 	case EN_AZURE_CONNECTED:		
 	end select	
-end sub
+end sub	
 
 public function azure_update_json(byref original as string, byref attribute as string, byref value as string) as string
+	if len(original) + len(attribute) + len(value) > 255 then
+		exit function
+	end if
+	
 	if original="" then
 		original="{}"
 	end if
@@ -363,13 +367,13 @@ public sub azure_send_telemetry()
 			tbl_field_sg("time",ts,EN_TBL_GET)
 			tbl_field_sg("type", record_type,EN_TBL_GET)
 			tbl_field_sg("value",record_value ,EN_TBL_GET)	
-			json=azure_update_json(json,record_type,record_value)
-		
+			json = azure_update_json(json,record_type,record_value)
+			
 			dim next_ts as string
 			rec_num=rec_num+1
 			if tbl_record_read_active(rec_num)=EN_TBL_STATUS_OK then
 				tbl_field_sg("time",next_ts,EN_TBL_GET)
-				if ts <> next_ts then
+				if ts <> next_ts or (left(next_ts,4) = "2000" and record_type= "event") then
 					same_ts = false
 				end if
 			else
