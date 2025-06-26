@@ -43,6 +43,7 @@ declare sub azure_debugprint(byref print_data as string)
 declare sub azure_dps_device_provisioning()
 declare sub azure_http_reset()
 declare sub azure_mqtt_start()
+declare sub azure_send_server_bound_msg(byref ts as string, byref json as string)
 
 public sub azure_start(byref device_id as string, byref scope_id as string, byref dps_url as string, byref symmetricKey as string, interface as pl_sock_interfaces)
 '	azure_init_flag=AZURE_INIT_SIGNATURE
@@ -89,6 +90,13 @@ public sub azure_on_connected()
 	#endif
 	azure_state=EN_AZURE_CONNECTED
 	callback_azure_on_connected()
+end sub
+
+public sub azure_clear_credential()
+
+	azure_current_scope_id = ""
+	azure_current_device_id = ""
+	azure_current_primary_key = ""
 end sub
 
 public sub azure_on_disconnected()
@@ -220,7 +228,7 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string, byref
 							#if AZURE_DEBUG_PRINT
 								azure_debugprint("Remote value of \x22"+item_name+"\x22 was "+local_value+" changed to: "+value)
 							#endif
-							stg_sg(item_name,0,value,EN_STG_SET)
+							callback_azure_twin_changed(item_name, value)
 									
 							'Double confirm setting is set correctly here						
 							value="{\x22"+item_name+"\x22:\x22"+value+"\x22}"						
@@ -384,7 +392,11 @@ public sub azure_send_telemetry()
 		end if
 	wend
 	azure_telemetry_ts=ts
+	
+	azure_send_server_bound_msg(ts, json)	
+end sub
 
+sub azure_send_server_bound_msg(byref ts as string, byref json as string)
 	dim pos as byte
 	if ts<>"" then
 		pos=instr(1,server_bound_message_topic,TOPIC_TIMESTAMP,1)
@@ -397,8 +409,9 @@ public sub azure_send_telemetry()
 	
 	sock.num=mqtt_sock_num
 	sock.notifysent(0)
-	mqtt_publish(server_bound_message_topic,json,QOS_AT_MOST_ONCE)					
+	mqtt_publish(server_bound_message_topic,json,QOS_AT_MOST_ONCE)				
 end sub
+
 
 sub azure_set_datetime(byref dt_string as string)	
 	'Mon, 08 Feb 2021 03:16:19 GMT
@@ -493,7 +506,6 @@ sub iot_send_headers()
 		http_send_headers("Authorization", "SharedAccessSignature sr="+azure_current_scope_id+"%2Fregistrations%2F"+azure_current_device_id+"&sig="+azure_dps_authorization)
     end if
 end sub
-
 
 sub azure_mqtt_start()
 	dim user_name as string=azure_assigned_hub+"/"+azure_current_device_id+"/"+AZURE_MQTT_API_VERSION	

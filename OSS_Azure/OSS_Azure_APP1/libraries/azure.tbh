@@ -40,6 +40,7 @@ declare sub callback_azure_update_twin_version(byref ver as string)
 declare sub callback_azure_on_provisioning()
 declare sub callback_azure_rtc_correction(daycounts as word, mincounts as word, seconds as byte)
 declare sub callback_azure_provision_failed()
+declare sub callback_azure_twin_changed(byref stg_name as string, byref stg_value as string)
 declare sub callback_azure_debugprint(byref debug_msg as string)
 declare sub iot_send_headers()
 declare sub azure_content_arrival(data as string)
@@ -50,3 +51,5 @@ declare sub azure_send_telemetry()
 declare sub azure_send_property(prop_name as string, prop_value as string)
 declare sub azure_request_property()
 declare function azure_get_json_value(byref json_str as string, byref attribute as string) as string
+declare sub azure_clear_credential()
+

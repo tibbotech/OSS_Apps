@@ -1,0 +1,30 @@
+Changelog of OSS APP
+	-	Date of change:24/06/2025
+	-	New revision of OSS APP: AZR2.08.08
+	-	Previous revision of OSS APP: AZR2.08.07 - 18/04/2025
+	-	The reason for change: 
+			-- Neccessary changes to work with GateOSS
+			-- New SNS firmware
+			-- Fix the bug that when Device Migrate, properties value sync back to device from server.
+
+	-	Files changed:
+			-- OSS_Azure_APP1/global.tbh: New SNS firmware
+			-- OSS_Azure_APP1/device.tbs: Device Migrate bug fix; Neccessary changes to work with GateOSS
+			-- OSS_Azure_APP1/azure.tbs: Device Migrate bug fix; Neccessary changes to work with GateOSS
+
+	-   Release files built:  
+			--2-08-08/OSS_Azure_APP0.tpc
+			--2-08-08/OSS_Azure_APP1.tpc
+			--2-08-08/OSS_Azure_FW_2-08-08.bin
+			--2-08-08/OSS_Azure_FW_2-08-08.tcu
+			--2-08-08/OSS_Azure_Template_V4_24-JUN-2025.json
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_08.bin
+			--OSS_SUPR_PIC_FW_029.hex
+			--OSS_SNS_PIC_FW_014.hex
+
+	- Level of change:Minor
+	- Risk assessment and cons: none				
+	- Deprecated Features: none
+			
