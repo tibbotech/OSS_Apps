@@ -6,9 +6,9 @@ cursor=6194
 opened=yes
 breakpoints=
 [file2]
-line=0
-cursor=801
-opened=yes
+line=6
+cursor=1796
+opened=active
 breakpoints=
 [file3]
 line=1953
@@ -16,9 +16,9 @@ cursor=55436
 opened=yes
 breakpoints=
 [file4]
-line=163
+line=187
 cursor=6096
-opened=active
+opened=yes
 breakpoints=173
 [file5]
 line=1561

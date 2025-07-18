@@ -1,0 +1,24 @@
+Changelog of OSS APP
+	-	Date of change:18/07/2025
+	-	New revision of OSS APP: AZR2.08.09
+	-	Previous revision of OSS APP: AZR2.08.08 - 24/06/2025
+	-	The reason for change: 
+			-- New SNS firmware
+	-	Files changed:
+
+	-   Release files built:  
+			--2-08-09/OSS_Azure_APP0.tpc
+			--2-08-09/OSS_Azure_APP1.tpc
+			--2-08-09/OSS_Azure_FW_2-08-09.bin
+			--2-08-09/OSS_Azure_FW_2-08-09.tcu
+			--2-08-09/OSS_Azure_Template_V4_24-JUN-2025.json
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_08.bin
+			--OSS_SUPR_PIC_FW_029.hex
+			--OSS_SNS_PIC_FW_015.hex
+
+	- Level of change:Minor
+	- Risk assessment and cons: none				
+	- Deprecated Features: none
+			
