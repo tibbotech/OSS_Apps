@@ -1,0 +1,913 @@
+[
+  {
+    "@id": "dtmi:tibboiotdev:OSSV4_708;3",
+    "@type": "Interface",
+    "contents": [
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:event;3",
+        "@type": [
+          "Telemetry",
+          "EventValue",
+          "Event"
+        ],
+        "displayName": {
+          "en": "Event"
+        },
+        "name": "event",
+        "schema": "string",
+        "severity": "information"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:DLPT;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Download Point"
+        },
+        "name": "DLPT",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:co2;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "CO2"
+        },
+        "name": "co2",
+        "schema": "integer",
+        "displayUnit": {
+          "en": "ppm"
+        },
+        "maxValue": 10000,
+        "minValue": 100
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:TZ;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Time Zone"
+        },
+        "name": "TZ",
+        "schema": "string",
+        "writable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:DVNT;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Device Notes"
+        },
+        "name": "DVNT",
+        "schema": "string",
+        "writable": true,
+        "maxLength": 64
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:temperature;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Temperature"
+        },
+        "name": "temperature",
+        "schema": "float",
+        "unit": "degreeCelsius",
+        "displayUnit": {
+          "en": "°C"
+        }
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:humidity;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Humidity"
+        },
+        "name": "humidity",
+        "schema": "double",
+        "unit": "percent",
+        "displayUnit": {
+          "en": "%"
+        }
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:UPGRADE;3",
+        "@type": "Command",
+        "description": {
+          "en": "This link can be used to trigger the FOTA upgrade. It is fetched automatically. Just press Run and the upgrade will be initiated. If you want to update with your own firmware,go to https://oss-fota.azurewebsites.net/ for instructions and to generate the update link!"
+        },
+        "displayName": {
+          "en": "Upgrade Remotely"
+        },
+        "name": "UPGRADE",
+        "request": {
+          "@type": "CommandPayload",
+          "description": {
+            "en": "You can get this link from https://oss-fota.azurewebsites.net/"
+          },
+          "displayName": {
+            "en": "Download Point"
+          },
+          "name": "DLPT",
+          "schema": "string"
+        },
+        "durable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:RSTNTGPW;3",
+        "@type": "Command",
+        "description": {
+          "en": "This can be used to reset the NFC password in case it is forgotten! If you request this service, as soon as device gets connected to Azure, it will execute the command when a Phone with OSS Companion app taps the device.  Remember that the password will be removed and it is recommended the user to set a new password to ensure security is maintained!"
+        },
+        "displayName": {
+          "en": "Reset NTAG Password"
+        },
+        "name": "RSTNTGPW",
+        "durable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:DEVMIG;3",
+        "@type": "Command",
+        "description": {
+          "en": "You can use this command in case you would like to migrate your device from one Azure device instance to another one. Just enter the new credentials and click run! As soon as device gets this command, it will try to connect to the new instance. In case of failure, it will still connect to the current Azure instance; this is to prevent device from getting disconnected."
+        },
+        "displayName": {
+          "en": "Migrate Device"
+        },
+        "name": "DEVMIG",
+        "request": {
+          "@type": "CommandPayload",
+          "description": {
+            "en": "New Azure Device Instance"
+          },
+          "displayName": {
+            "en": "Connect"
+          },
+          "name": "Connect",
+          "schema": {
+            "@type": "Object",
+            "displayName": {
+              "en": "Object"
+            },
+            "fields": [
+              {
+                "displayName": {
+                  "en": "ID Scope (max. 16 char)"
+                },
+                "name": "SCID",
+                "schema": "string"
+              },
+              {
+                "displayName": {
+                  "en": "Devcie ID (max. 32 char)"
+                },
+                "name": "DVID",
+                "schema": "string"
+              },
+              {
+                "displayName": {
+                  "en": "Primary Key (max. 64 char)"
+                },
+                "name": "PKEY",
+                "schema": "string"
+              }
+            ]
+          }
+        },
+        "durable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:SPT;3",
+        "@type": [
+          "Property",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Sensor Sampling Time (min)"
+        },
+        "name": "SPT",
+        "schema": "integer",
+        "writable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:RCN;3",
+        "@type": [
+          "Property",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Number of Samples to Aggregate"
+        },
+        "name": "RCN",
+        "schema": "integer",
+        "writable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:CID;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Device (Customer) ID"
+        },
+        "name": "CID",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:FWV;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Firmware Version"
+        },
+        "name": "FWV",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:MNUM;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Model No."
+        },
+        "name": "MNUM",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:DVNM;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Device Name"
+        },
+        "name": "DVNM",
+        "schema": "string",
+        "writable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:MODE;3",
+        "@type": "Property",
+        "displayName": {
+          "en": "Communication Mode"
+        },
+        "name": "MODE",
+        "schema": {
+          "@id": "dtmi:tibboiotdev:OSSV4_708:MODE:schema;3",
+          "@type": "Enum",
+          "displayName": {
+            "en": "Enum"
+          },
+          "enumValues": [
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:MODE:schema:WiFi;3",
+              "displayName": {
+                "en": "Wi-Fi"
+              },
+              "enumValue": "0",
+              "name": "WiFi"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:MODE:schema:LTECATM1NBIoT;3",
+              "displayName": {
+                "en": "LTE-CAT-M1 / NB-IoT"
+              },
+              "enumValue": "1",
+              "name": "LTECATM1NBIoT"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:MODE:schema:WiFiWithCellularFallback;3",
+              "displayName": {
+                "en": "Wi-Fi with Cellular Fallback"
+              },
+              "enumValue": "2",
+              "name": "WiFiWithCellularFallback"
+            }
+          ],
+          "valueSchema": "string"
+        },
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:OPMD;3",
+        "@type": "Property",
+        "displayName": {
+          "en": "Operation Mode"
+        },
+        "name": "OPMD",
+        "schema": {
+          "@id": "dtmi:tibboiotdev:OSSV4_708:OPMD:schema;3",
+          "@type": "Enum",
+          "displayName": {
+            "en": "Enum"
+          },
+          "enumValues": [
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:OPMD:schema:AlwaysOn;3",
+              "displayName": {
+                "en": "Always On"
+              },
+              "enumValue": "0",
+              "name": "AlwaysOn"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:OPMD:schema:LowPowerMode;3",
+              "displayName": {
+                "en": "Low-Power Mode"
+              },
+              "enumValue": "1",
+              "name": "LowPowerMode"
+            }
+          ],
+          "valueSchema": "string"
+        },
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:STPY;3",
+        "@type": "Property",
+        "displayName": {
+          "en": "Sensor Type"
+        },
+        "name": "STPY",
+        "schema": {
+          "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema;3",
+          "@type": "Enum",
+          "displayName": {
+            "en": "Enum"
+          },
+          "enumValues": [
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema:TempHumidity;3",
+              "displayName": {
+                "en": "Temp / Humidity"
+              },
+              "enumValue": "0",
+              "name": "TempHumidity"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema:TempHumidityCO2;3",
+              "displayName": {
+                "en": "Temp / Humidity / CO2"
+              },
+              "enumValue": "1",
+              "name": "TempHumidityCO2"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema:MBP02TempHumidity;3",
+              "displayName": {
+                "en": "M-BP02 (Temp / Humidity)"
+              },
+              "enumValue": "128",
+              "name": "MBP02TempHumidity"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema:MSOILJXBS3001TRRS;3",
+              "displayName": {
+                "en": "M-SOIL(JXBS-3001-TR-RS)"
+              },
+              "enumValue": "129",
+              "name": "MSOILJXBS3001TRRS"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema:MBP01AmebientTemp;3",
+              "displayName": {
+                "en": "M-BP01 (Amebient Temp)"
+              },
+              "enumValue": "133",
+              "name": "MBP01AmebientTemp"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema:MBP05FloodLeak;3",
+              "displayName": {
+                "en": "M-BP05 (Flood / Leak) "
+              },
+              "enumValue": "130",
+              "name": "MBP05FloodLeak"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema:MSOILJXBS3001TRCGQRS;3",
+              "displayName": {
+                "en": "M-SOIL (JXBS-3001-TRCGQ-RS)"
+              },
+              "enumValue": "134",
+              "name": "MSOILJXBS3001TRCGQRS"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema:MH2S100PPMJXBS3005H2SRS;3",
+              "displayName": {
+                "en": "M-H2S100PPM (JXBS-3005-H2S-RS)"
+              },
+              "enumValue": "135",
+              "name": "MH2S100PPMJXBS3005H2SRS"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema:MUVJXBS3001UVRS;3",
+              "displayName": {
+                "en": "M-UV (JXBS-3001-UV-RS)"
+              },
+              "enumValue": "136",
+              "name": "MUVJXBS3001UVRS"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema:MNOISEJXBS3001ZSRS;3",
+              "displayName": {
+                "en": "M-NOISE (JXBS-3001-ZS-RS)"
+              },
+              "enumValue": "137",
+              "name": "MNOISEJXBS3001ZSRS"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema:MBP03AmbientLight;3",
+              "displayName": {
+                "en": "M-BP03 (Ambient Light)"
+              },
+              "enumValue": "131",
+              "name": "MBP03AmbientLight"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:STPY:schema:MBP06DigitalInput;3",
+              "displayName": {
+                "en": "M-BP06 (Digital Input)"
+              },
+              "enumValue": "132",
+              "name": "MBP06DigitalInput"
+            }
+          ],
+          "valueSchema": "string"
+        },
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:MBID;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Modbus Device ID"
+        },
+        "name": "MBID",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:IP;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Last IP"
+        },
+        "name": "IP",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:MAC;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Wi-Fi MAC Address"
+        },
+        "name": "MAC",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:Flood;3",
+        "@type": "Telemetry",
+        "displayName": {
+          "en": "Flood/Leak"
+        },
+        "name": "Flood",
+        "schema": {
+          "@id": "dtmi:tibboiotdev:OSSV4_708:Flood:schema;3",
+          "@type": "Enum",
+          "displayName": {
+            "en": "Enum"
+          },
+          "enumValues": [
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:Flood:schema:Dry;3",
+              "displayName": {
+                "en": "Dry"
+              },
+              "enumValue": 0,
+              "name": "Dry"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:Flood:schema:Wet;3",
+              "displayName": {
+                "en": "Wet"
+              },
+              "enumValue": 1,
+              "name": "Wet"
+            }
+          ],
+          "valueSchema": "integer"
+        }
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:Light;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Ambient Light"
+        },
+        "name": "Light",
+        "schema": "integer",
+        "unit": "lux",
+        "displayUnit": {
+          "en": "Lux"
+        },
+        "maxValue": 655258,
+        "minValue": 1
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:IMEI;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "IMEI"
+        },
+        "name": "IMEI",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:CCID;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "ICCID"
+        },
+        "name": "CCID",
+        "schema": "string",
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:AWK;3",
+        "@type": [
+          "Property",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Maximum Awake Time (min)"
+        },
+        "name": "AWK",
+        "schema": "integer",
+        "writable": true,
+        "maxValue": 4,
+        "minValue": 2
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:BAT_LVL;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Battery Level"
+        },
+        "name": "BAT_LVL",
+        "schema": "double",
+        "unit": "percent",
+        "maxValue": 100,
+        "minValue": 0
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:pH;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "pH"
+        },
+        "name": "pH",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:conductivity;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Conductivity"
+        },
+        "name": "conductivity",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:nitrogen;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Nitrogen"
+        },
+        "name": "nitrogen",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:phosphorus;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Phosphorus"
+        },
+        "name": "phosphorus",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:potassium;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Potassium"
+        },
+        "name": "potassium",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:H2S;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "H2S"
+        },
+        "name": "H2S",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:UV;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "UV"
+        },
+        "name": "UV",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:noise;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Noise"
+        },
+        "name": "noise",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:SoilTemp;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Temperature"
+        },
+        "name": "SoilTemp",
+        "schema": "float",
+        "unit": "degreeCelsius",
+        "displayUnit": {
+          "en": "°C"
+        }
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:SoilHumd;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Moisture"
+        },
+        "name": "SoilHumd",
+        "schema": "float",
+        "unit": "percent",
+        "displayUnit": {
+          "en": "%"
+        }
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:NEWDPS;3",
+        "@type": "Command",
+        "description": {
+          "en": "You can insert the new Microsoft Azure DPS Server Address for Migration. Device will take this command if only connects to Azure IoT Central! This migration is a critical action!"
+        },
+        "displayName": {
+          "en": "Assign New DPS"
+        },
+        "name": "NEWDPS",
+        "request": {
+          "@type": "CommandPayload",
+          "displayName": {
+            "en": "New Microsoft Azure DPS Server Address"
+          },
+          "name": "DPSS",
+          "schema": "string"
+        },
+        "durable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:VMOD;3",
+        "@type": "Property",
+        "comment": "Whether OSS generates and provides power or power is supplied externally to the sensors",
+        "description": {
+          "en": "Whether OSS generates and provides power or power is supplied externally to the sensors"
+        },
+        "displayName": {
+          "en": "Modbus Power"
+        },
+        "name": "VMOD",
+        "schema": {
+          "@id": "dtmi:tibboiotdev:OSSV4_708:VMOD:schema;3",
+          "@type": "Enum",
+          "displayName": {
+            "en": "Enum"
+          },
+          "enumValues": [
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:VMOD:schema:External;3",
+              "displayName": {
+                "en": "External"
+              },
+              "enumValue": "0",
+              "name": "External"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:VMOD:schema:OSSVMOD;3",
+              "displayName": {
+                "en": "OSS VMOD"
+              },
+              "enumValue": "1",
+              "name": "OSSVMOD"
+            }
+          ],
+          "valueSchema": "string"
+        },
+        "writable": false
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:DELETE;3",
+        "@type": "Command",
+        "displayName": {
+          "en": "Deleting device"
+        },
+        "name": "DELETE",
+        "durable": true
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:sysEvent;3",
+        "@type": [
+          "Telemetry",
+          "EventValue",
+          "Event"
+        ],
+        "displayName": {
+          "en": "System events"
+        },
+        "name": "sysEvent",
+        "schema": "integer",
+        "severity": "information"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:creationTS;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Telemetry Creation TS"
+        },
+        "name": "creationTS",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:BAT;3",
+        "@type": [
+          "Property",
+          "StringValue"
+        ],
+        "displayName": {
+          "en": "Current Battery"
+        },
+        "name": "BAT",
+        "schema": "string",
+        "writable": false,
+        "maxLength": 16
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:TDS;3",
+        "@type": [
+          "Telemetry",
+          "NumberValue"
+        ],
+        "displayName": {
+          "en": "Water Quality (TDS)"
+        },
+        "name": "TDS",
+        "schema": "double"
+      },
+      {
+        "@id": "dtmi:tibboiotdev:OSSV4_708:PSRC;3",
+        "@type": "Property",
+        "displayName": {
+          "en": "Power Source"
+        },
+        "name": "PSRC",
+        "schema": {
+          "@id": "dtmi:tibboiotdev:OSSV4_708:PSRC:schema;3",
+          "@type": "Enum",
+          "displayName": {
+            "en": "Enum"
+          },
+          "enumValues": [
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:PSRC:schema:Battery;3",
+              "displayName": {
+                "en": "Battery "
+              },
+              "enumValue": "0",
+              "name": "Battery"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:PSRC:schema:LineInModbus;3",
+              "displayName": {
+                "en": "Line In / Modbus"
+              },
+              "enumValue": "1",
+              "name": "LineInModbus"
+            },
+            {
+              "@id": "dtmi:tibboiotdev:OSSV4_708:PSRC:schema:AuxiliaryInput;3",
+              "displayName": {
+                "en": "Auxiliary Input"
+              },
+              "enumValue": "2",
+              "name": "AuxiliaryInput"
+            }
+          ],
+          "valueSchema": "string"
+        },
+        "writable": false
+      }
+    ],
+    "displayName": {
+      "en": "OSS v4"
+    },
+    "@context": [
+      "dtmi:iotcentral:context;2",
+      "dtmi:dtdl:context;2"
+    ]
+  }
+]

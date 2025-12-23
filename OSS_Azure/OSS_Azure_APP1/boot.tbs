@@ -1,7 +1,7 @@
 include "global.tbh"
 
 'CONSTANTS-----------------------------------------------------------
-
+const VOLTAGE_THRESHOLD = 3200
 const CELL__SIMCARD_PIN = CELL__QUESTMARK	'<-- CHANGE THIS AS NEEDED
 
 dim DNS_socket as byte
@@ -19,6 +19,8 @@ dim CELL__AT_CMNB as string(16)
 dim SYS_SOCK_DEBUGPRINT as byte
 dim sensor_type as byte
 dim operation_mode as byte '0: always on, 1: low power mode
+dim battery_in_use as boolean = false
+dim battery_level as byte = 0
 
 declare sub check_app_fw_version()
 declare sub sensor_init()
@@ -28,14 +30,16 @@ declare sub check_and_upgrade_sns_pic()
 declare sub init_cell_tech()
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
+declare function pic_read_reliable(addres as byte, len as byte) as string
+declare function readMAXRegister(register as byte) as word
+declare sub init_battery()
 
 declare modbus_device_id as byte
 declare command_issued as no_yes
 declare number_of_fld as byte
 
 sub boot()
-
-    'Fd(flash disk) setup
+	'Fd(flash disk) setup
     '================================================================
     if fd.mount<>PL_FD_STATUS_OK then
         if fd.formatj(fd.availableflashspace,32,100)<>PL_FD_STATUS_OK then
@@ -54,7 +58,7 @@ sub boot()
     end if
 	
 	dim i, rec_num as word
-	dim ts as string
+	
 	tbl_select("SysTS","SysTS")
 	tbl_get_num_records(rec_num,NO)
 	for i = rec_num to MAXIMUM_TS_NUM-1
@@ -103,7 +107,6 @@ sub boot()
 	SYS_SOCK_DEBUGPRINT = val(stg_get("DBMD",0))
 	
     '-----------------------------------------------------------------
-	
     dim f as byte
     for f=0 to MAX_NUM_INTERFACES-1
         interface_ready(f)=NO
@@ -125,9 +128,27 @@ sub boot()
 	case MCP23017_NO_SSI_AVAILABLE:
 		sys.debugprint("SSI channel could not be allocated, using bit banging instead.\r\n")
 	end select
-	
+
+	' Supervisor PIC init
 	pic_init()
 	check_and_upgrade_supr_pic()
+	
+	'=====================================
+	' Battery handling
+	'check voltage
+	dim voltage as real
+	
+	voltage = readMAXRegister(&h09)
+	voltage = 0.078125 * voltage
+	
+	init_battery()
+	'=====================================
+
+	dim scid as string(2) = pic_read(&h03,2)
+	dim msb as word = asc(left(scid,1))
+	dim lsb as word = asc(right(scid,1))
+	dim cid as word = msb*256+lsb
+	stg_set("CID",0,str(cid))
 	
 	mcp23017_line_out_enable(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,YES,TBT00_3_S5_CHANNEL)
 	mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,LOW,TBT00_3_S5_CHANNEL)
@@ -140,17 +161,7 @@ sub boot()
 	if sys.debugmode <> PL_SYS_DBG_SERIAL then turn_sensor3v3_on()
 	'-----------------------------------------------------------------	
 	
-	dim bl as string(1) = pic_read(&h02,1)
-	battery_level = asc(bl)
-	if battery_level > 100 then battery_level=0
-
 	if sys.debugmode <> PL_SYS_DBG_SERIAL then sensor_init()	
-	
-	dim scid as string(2) = pic_read(&h03,2)
-	dim msb as word = asc(left(scid,1))
-	dim lsb as word = asc(right(scid,1))
-	dim cid as word = msb*256+lsb
-	stg_set("CID",0,str(cid))
 	
 	'---------timers--------------------------------------------------
 	sleep_time=val(stg_get("SPT",0))
@@ -201,6 +212,15 @@ sub boot()
 	if comm_mode <> "2" and stg_get("FBL", 0) = "1" then
 		stg_set("FBL", 0, "0")
 	end if
+	
+	'if voltage is low, don't establish connection.
+	if voltage < VOLTAGE_THRESHOLD then	
+		if battery_in_use then
+			device_add_event(EVENT_VOLTAGE_LOW, ftostr(voltage, FTOSTR_MODE_PLAIN, 5))
+			connect_to_azure_required = NO
+		end if
+	end if
+
 	'if sock debugprint is on, autoconnect no matter what comm mode is
 	
 	if SYS_SOCK_DEBUGPRINT>0 then
@@ -264,7 +284,6 @@ sub boot()
 		command_issued = YES
 	end if
 	device_debug_print("Device boot up")
-'	device_add_event(EVENT_DEBUG_INFO,"Device boot up")
 end sub
 
 sub check_app_fw_version()
@@ -335,6 +354,11 @@ fw208:
 				goto fw209
 			else if w1>=208 and w1<209 then
 fw209:
+				stg_set("BAT",0,"No Battery")
+				stg_set("PSRC",0,"2")
+				goto fw210
+			else if w1>=209 and w1<210 then
+fw210:
 			end if			
 		else
 			stg_restore_multiple(EN_STG_INIT_MODE_NORMAL)
@@ -405,6 +429,22 @@ sub alternate_debugprint(byref source as string, byref msg as string)
 	sock.num=b
 end sub
 
+function pic_read_reliable(address as byte, len as byte) as string
+	
+	dim try_counter as byte = 0
+	dim read_1 as string
+	dim read_2 as string
+
+	do
+		read_2 = read_1
+		read_1 = pic_read(address, len)
+		try_counter = try_counter + 1
+	loop while (read_1 <> read_2 and try_counter < 10)
+	
+	pic_read_reliable = read_1
+
+end function
+
 sub init_i2c_sensor()
 
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
@@ -455,7 +495,7 @@ sub init_modbus_sensor()
 	select case sensor_type
 	case 128, 130, 131, 132, 133:
 		ser.baudrate=PL_SER_BAUD_38400 '38400 for the BP01,BP02,BP03,BP04,BP05
-	case 129, 134, 135, 136, 137, 138:
+	case 129, 134, 135, 136, 137, 138, 140:
 		ser.baudrate=PL_SER_BAUD_9600 '9600 for JXBS sensors
 	case 139:
 		ser.baudrate=PL_SER_BAUD_4800
@@ -488,7 +528,7 @@ sub sensor_init()
 		number_of_fld = 2
 	case 134:
 		number_of_fld = 7
-	case 1, 135, 136: 
+	case 1, 135, 136, 140: 
 		number_of_fld = 3
 	case 139:
 		number_of_fld = 5
@@ -502,7 +542,7 @@ sub sensor_init()
 		init_i2c_sensor()
 		check_and_upgrade_sns_pic()
 		
-	case 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139: 'modbus sensor
+	case 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140: 'modbus sensor
 		boot_up_delay = 10
 		init_modbus_sensor()
 		
@@ -512,7 +552,7 @@ sub sensor_init()
 	
 	sensor_state = EN_SENSOR_WAITTING_TO_READ
 	'in power saving mode log battery level
-'	if operation_mode = 1 then number_of_fld = number_of_fld + 1	
+	if battery_in_use = true and operation_mode = 1 then number_of_fld = number_of_fld + 1	
 end sub
 
 sub read_ntag()
@@ -608,6 +648,7 @@ sub check_and_upgrade_sns_pic()
 	#if DEVICE_DEBUG_PRINT
 		device_debug_print("Current SNS version: " + ver)
 	#endif
+	
 	if (ver <> OSS_SNS_FW_VER) then
 		' FLASHING
 		pic_lvp_start(SENSOR_CLK_PIN, SENSOR_DAT_PIN, SENSOR_CONTROL_PIN)
@@ -626,7 +667,7 @@ sub check_and_upgrade_sns_pic()
 			#endif
 			sys.reboot()			
 		end if
-	end if
+	end if	
 	
 end sub
 
@@ -740,4 +781,84 @@ sub init_cell_tech()
 	end select
 	CELL__AT_CNMP = CELL__AT_PLUS + "CNMP" + "=" + cnmp
 	CELL__AT_CMNB = CELL__AT_PLUS + "CMNB" + "=" + cmnb
+end sub
+
+function readMAXRegister(register as byte) as word
+	si2c_get(pic_channel)
+	si2c_start()
+	si2c_write(MAX_ADDR OR PIC_WR)
+	si2c_write(register)
+	si2c_stop()
+	si2c_start()
+	si2c_write(MAX_ADDR OR PIC_RD)
+	readMAXRegister = si2c_read(true)
+	readMAXRegister = readMAXRegister + si2c_read(false) * 256
+	si2c_stop()
+	
+end function
+
+sub init_battery()
+	' Battery level
+	dim aux_v, line_v as string(1)	
+	aux_v = pic_read(&h81,1)
+	line_v = pic_read(&h82,1)
+	
+	dim batt as string(1) = pic_read_reliable(&h02, 1)
+		
+	if (asc(batt) AND &h80) <> 0 then
+		'battery detected
+		batt = pic_read_reliable(&h9B, 1)
+		battery_level = asc(batt)
+		stg_set("BAT",0,str(battery_level)+"%")
+		
+		'check if using external power source
+		if aux_v = chr(&h77) and line_v = chr(&h77) then
+			battery_in_use = true
+			stg_set("PSRC", 0, "0")
+		end if
+	else
+		stg_set("BAT",0,"No Battery")
+	end if
+	
+	if aux_v = chr(&h00) then
+		stg_set("PSRC", 0, "2")
+	end if
+	
+	if line_v = chr(&h00) then
+		stg_set("PSRC", 0, "1")
+	end if
+	
+	' Battery flags
+	batt = pic_read_reliable(&hB0, 1)
+	dim v as string = pic_read_reliable(&h09, 1)
+	dim flags as byte
+	flags = asc(batt)
+	
+	if battery_in_use then
+		if (flags AND &h01) <> 0 then
+			'  New battery set
+			device_add_event(EVENT_NEW_BATTERY,"")
+		end if
+		
+		if (flags AND &h02) <> 0 then
+			'  Battery limit charge
+			device_add_event(EVENT_BATTERY_LOW, str(battery_level))
+		end if
+		
+		if (flags AND &h04) <> 0 then
+			'  Battery connected
+			device_add_event(EVENT_BATTERY_CONNECTED, "")
+		end if
+	end if
+
+	if (flags AND &h08) <> 0 then
+		'  Cold system start
+		device_add_event(EVENT_COLD_SYSTEM_START, "")
+	end if
+	
+	' Clear flags
+	pic_write(&hB0, 0)
+	
+	' battery handling END
+	
 end sub

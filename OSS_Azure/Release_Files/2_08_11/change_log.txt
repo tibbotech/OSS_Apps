@@ -1,0 +1,27 @@
+Changelog of OSS APP
+	-	Date of change:24/11/2025
+	-	New revision of OSS APP: AZR2.08.11
+	-	Previous revision of OSS APP: AZR2.08.08 - 18/07/2025
+	-	The reason for change: 
+			-- Log event creation date as part of telemetry.
+
+	-	Files changed:
+			-- OSS_Azure_APP1/azure.tbs: Add creationTS
+			-- OSS_Azure_APP1/Platforms/src/0_00/time/time.tbs: Add creationTS
+
+	-   Release files built:  
+			--2-08-11/OSS_Azure_APP0.tpc
+			--2-08-11/OSS_Azure_APP1.tpc
+			--2-08-11/OSS_Azure_FW_2-08-11.bin
+			--2-08-11/OSS_Azure_FW_2-08-11.tcu
+			--2-08-11/OSS_Azure_Template_V4_24-NOV-2025.json
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_08.bin
+			--OSS_SUPR_PIC_FW_029.hex
+			--OSS_SNS_PIC_FW_015.hex
+
+	- Level of change:Minor
+	- Risk assessment and cons: none				
+	- Deprecated Features: none
+			

@@ -1,0 +1,30 @@
+Changelog of OSS APP
+	-	Date of change:24/11/2025
+	-	New revision of OSS APP: AZR2.09.01
+	-	Previous revision of OSS APP: AZR2.08.11 - 24/11/2025
+	-	The reason for change: 
+			-- Battery management
+			-- New water quality sensor
+	-	Files changed:
+			-- OSS_Azure_APP1/boot.tbs: Battery management
+			-- OSS_Azure_APP1/device.tbs: Battery management, New sensor
+			-- OSS_Azure_APP1/global.tbh Battery management
+			-- OSS_Azure_APP1/luix.xtxt: New sensor
+			-- OSS_Azure_APP1/settings.xtxt: New sensor
+
+	-   Release files built:  
+			--2-09-01/OSS_Azure_APP0.tpc
+			--2-09-01/OSS_Azure_APP1.tpc
+			--2-09-01/OSS_Azure_FW_2-09-01.bin
+			--2-09-01/OSS_Azure_FW_2-09-01.tcu
+			--2-09-01/OSS_Azure_Template_V4_23-DEC-2025.json
+
+	-   Build machine and toolset versions: 
+			--tios-wm2000-4_03_08.bin
+			--OSS_SUPR_PIC_FW_038.hex
+			--OSS_SNS_PIC_FW_015.hex
+
+	- Level of change:Minor
+	- Risk assessment and cons: none				
+	- Deprecated Features: none
+			

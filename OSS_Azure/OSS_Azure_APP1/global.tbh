@@ -1,8 +1,8 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="AZR2.08.09"
-const OSS_SUPR_FW_VER = "029"
+const OSS_APP_FW_VER="AZR2.09.01"
+const OSS_SUPR_FW_VER = "038"
 const OSS_SNS_FW_VER = "015"
-#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_029.hex"
+#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_038.hex"
 #define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_015.hex"
 
 includepp "settings.xtxt"
@@ -13,8 +13,8 @@ includepp "tables.xtxt"
 #define STG_DEBUG_PRINT 1
 #define MQTT_DEBUG_PRINT 2
 #define LUIS_DEBUG_PRINT 0
-#define DNS_DEBUG_PRINT 1
-#define HTTP_DEBUG_PRINT 1
+#define DNS_DEBUG_PRINT 2
+#define HTTP_DEBUG_PRINT 2
 #define CELL__DEBUG_PRINT 2
 #define AZURE_DEBUG_PRINT 2
 #define DEVICE_DEBUG_PRINT 2
@@ -55,6 +55,8 @@ const PIC_WR=0
 const PIC_CLK_PIN=PL_IO_NUM_9
 const PIC_DAT_PIN=PL_IO_NUM_4
 const PIC_ADDR=16
+
+const MAX_ADDR=108
 
 const MODBUS_UART = 1
 const MODBUS_RTS = PL_IO_NUM_6
@@ -193,7 +195,12 @@ enum en_device_events
 	EVENT_ADVANCE_ACCEPTED_CMD,
 	EVENT_ADVANCE_REJECTED_CMD,
 	EVENT_NEW_DPS,
-	EVENT_DEBUG_INFO
+	EVENT_DEBUG_INFO,
+	EVENT_NEW_BATTERY,
+	EVENT_BATTERY_LOW,
+	EVENT_BATTERY_CONNECTED,
+	EVENT_COLD_SYSTEM_START,
+	EVENT_VOLTAGE_LOW
 end enum
 
 declare interface_ready(MAX_NUM_INTERFACES) as no_yes
@@ -224,6 +231,7 @@ declare operation_mode as byte '0: always on, 1: low power mode
 declare sensor_state as en_sensor_states
 declare SYS_SOCK_DEBUGPRINT as byte
 declare next_sensor_read_ts as dword
+declare battery_in_use as boolean
 
 declare sub device_add_event(device_event as en_device_events, byref parameter as string)
 declare sub connect_to_firmware_server()

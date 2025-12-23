@@ -68,8 +68,12 @@ public function td_from_str(byref td_str as string, byref day_count as word, byr
 	case 0,4,6,8,10,12,14,17:
 		time_str=td_str+right(TD_DEFAULT_TD_STR,17-len(td_str))
 	case else
-		td_from_str=NG
-		exit function
+		if right(td_str,1) = "Z" then
+			time_str = left(td_str,len(td_str)-1)
+		else
+			td_from_str=NG
+			exit function
+		end if
 	end select
 		
 	year_str=left(time_str,4)
@@ -201,9 +205,13 @@ end function
 '------------------------------------------------------------------------------ 
 public function td_str_date_time_reformat(byref td_str as string,op as en_td_string_ops, date_format as en_td_date_formats) as ok_ng
 	dim length as byte
-	dim year_str as string(4)
-	dim ms_str as string(3)
-	dim month_str, date_str, hour_str, minute_str, second_str as string(2)
+	dim year_str as string(4) =""
+	dim ms_str as string(3) = ""
+	dim month_str as string(2)=""
+	dim date_str as string(2)=""
+	dim hour_str as string(2)="" 
+	dim minute_str as string(2)="" 
+	dim second_str as string(2)=""
 	
 	length=len(td_str)
 	if op=TD_STR_ADD_FORMATTING then	
@@ -242,9 +250,11 @@ public function td_str_date_time_reformat(byref td_str as string,op as en_td_str
 		select case length
 		case 0,10,16,19,23:
 		case else
-			td_str=""
-			td_str_date_time_reformat=NG
-			exit function
+			if right(td_str,1) <> "Z" then
+				td_str=""
+				td_str_date_time_reformat=NG
+				exit function				
+			end if
 		end select
 	
 		select case date_format
@@ -268,18 +278,8 @@ public function td_str_date_time_reformat(byref td_str as string,op as en_td_str
 		minute_str=mid(td_str,15,2)
 		second_str=mid(td_str,18,2)
 		ms_str=mid(td_str,21,3)
-		select case length
-		case 0: 
-			td_str=""
-		case 10:
-			td_str=year_str+month_str+date_str
-		case 16:
-			td_str=year_str+month_str+date_str+hour_str+minute_str
-		case 19:
-			td_str=year_str+month_str+date_str+hour_str+minute_str+second_str
-		case 23:
-			td_str=year_str+month_str+date_str+hour_str+minute_str+second_str+ms_str
-		end select
+		td_str=year_str+month_str+date_str+hour_str+minute_str+second_str+ms_str
+
 	end if
 	td_str_date_time_reformat=OK
 end function

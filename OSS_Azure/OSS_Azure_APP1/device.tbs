@@ -34,7 +34,6 @@ dim part_checksum as dword
 dim http_conn_timeout as no_yes = NO
 dim total_chuncks as byte = 0
 dim part_num as byte = 255
-dim battery_level as byte = 0
 dim property_modified as no_yes = YES
 dim sensor_telemetry_ts as string(36) = ""
 dim modbus_device_id as byte
@@ -195,7 +194,7 @@ sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref
 		case "DVID","SCID","PKEY":
 			if config_mode = YES then credential_changed = YES
 			
-		case "FWV", "CID", "MNUM", "DVNM", "MODE", "OPMD", "STPY", "MBID", "IP", "GI", "VMOD": 'device side settings
+		case "FWV", "CID", "MNUM", "MODE", "OPMD", "STPY", "MBID", "IP", "GI", "VMOD", "BAT", "PSRC": 'device side settings
 			property_modified = YES
 			stg_timestamp.ts_milsec = 0
 			stg_set_ts(stg_name_or_num)
@@ -206,7 +205,7 @@ sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref
 				sys.reboot()
 			end if
 			
-		case "RCN", "SPT", "AWK", "DVNT", "TZ": 'server side settings
+		case "RCN", "SPT", "AWK", "DVNT", "TZ", "DVNM": 'server side settings
 		case else
 		
 	end select
@@ -431,7 +430,7 @@ end sub
 
 sub callback_azure_twin_changed(byref stg_name as string, byref stg_value as string)
 	select case stg_name
-	case "RCN", "SPT", "AWK", "DVNT", "TZ": 'server side settings
+	case "RCN", "SPT", "AWK", "DVNT", "TZ", "DVNM": 'server side settings
 		stg_sg(stg_name,0,stg_value,EN_STG_SET)
 	case else:
 		callback_stg_eeprom_set(stg_name,0,stg_value)
@@ -459,10 +458,15 @@ sub callback_azure_command_triggered(byref command as string, byref param as str
 
     select case command
     case "UPGRADE": 'offline command, not expecting response
-		stg_set("DLPT",0,param)
-		stg_set("UPD",0,"0")
-		device_add_event(EVENT_UPGRADE_START,"")
-		
+		if param <> "" then
+			if instr(1,param,"DLPT",1) > 0 then
+				param = get_json_value(param,"DLPT")
+			end if
+			stg_set("DLPT",0,param)
+			stg_set("UPD",0,"0")
+			device_add_event(EVENT_UPGRADE_START,"")
+		end if
+	
 	case "RSTNTGPW":
 		pic_write(&hA3,"\x77")
 		delay_ms(5)
@@ -496,9 +500,13 @@ sub callback_azure_command_triggered(byref command as string, byref param as str
 			new_pkey = ""
 		end if
 	case "NEWDPS":
-		device_add_event(EVENT_NEW_DPS,param)
-		stg_set("DPSS",0,param)
-		
+		if param <> "" then
+			if instr(1,param,"DPSS",1) > 0 then
+				param = get_json_value(param,"DPSS")
+			end if	
+			device_add_event(EVENT_NEW_DPS,param)
+			stg_set("DPSS",0,param)
+		end if
 	case "DELETE":
 		stg_set("SCID",0,"")
 		stg_set("DVID",0,"")
@@ -855,6 +863,16 @@ sub device_add_event(device_event as en_device_events, byref parameter as string
 		event_msg="Switch to new DPS server: "+ parameter
 	case EVENT_DEBUG_INFO:
 		event_msg="[DEBUG]"+parameter
+	case EVENT_NEW_BATTERY:
+		event_msg="New battery detected."
+	case EVENT_BATTERY_LOW:
+		event_msg="Battery is low! Current battery: "+parameter+"%"
+	case EVENT_BATTERY_CONNECTED:
+		event_msg="Battery connected."
+	case EVENT_COLD_SYSTEM_START:
+		event_msg="Cold system start."
+	case EVENT_VOLTAGE_LOW:
+		event_msg="Voltage is too low to connect. ("+parameter +" mV)"
 	end select
 	
 	rand_event_num = rand_event_num+1
@@ -1169,10 +1187,10 @@ sub read_onboard_t_h_co2_sensor(byref ts as string)
 	if humd_invalid = NO then add_telemetry("humidity",humd,ts)
 	if co2_invalid = NO then add_telemetry("co2",str_co2,ts)
 
-	'in power saving mode log battery level
-'	if operation_mode = 1 then
-'		add_telemetry("BAT_LVL",str(battery_level),ts)
-'	end if
+	'if battery detected log battery level
+	if battery_in_use = true and operation_mode = 1 then
+		add_telemetry("BAT_LVL",str(battery_level),ts)
+	end if
 	
 	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
 	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
@@ -1244,10 +1262,10 @@ sub read_onboard_t_h_sensor(byref ts as string)
 	if temp_invalid = NO then add_telemetry("temperature",temp,ts)
 	if humd_invalid = NO then add_telemetry("humidity",humd,ts)
 
-	'in power saving mode log battery level
-'	if operation_mode = 1 then
-'		add_telemetry("BAT_LVL",str(battery_level),ts)
-'	end if
+	'if battery detected log battery level
+	if battery_in_use = true and operation_mode = 1 then
+		add_telemetry("BAT_LVL",str(battery_level),ts)
+	end if
 	
 	if temp_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[temp]: " + temp)
 	if humd_invalid = YES then device_add_event(EVENT_SENSOR_INVALID_VALUE, "[humd]: " + humd)
@@ -1396,28 +1414,28 @@ sub callback_modbus_slave_reply(byref request_item as modbus_request_item, byref
 		select case sensor_type
 		case 128, 130, 131, 132, 133: 
 			proc_modbus_bp(request_item, reply)
-		case 129, 134, 135, 136, 137, 138, 139:
+		case 129, 134, 135, 136, 137, 138, 139, 140:
 			proc_modbus_jx(request_item, reply)
 		end select
 		sensor_read_count = 0
 		field_counter = field_counter+1
-		
-		'in power saving mode log battery level
-'		if operation_mode = 1 then
-'			'for mulitple fields sensor, count back number of fields and add the BAT_LVL at then end	
-'			if number_of_fld - field_counter = 1 then
-'				add_telemetry("BAT_LVL",str(battery_level),sensor_telemetry_ts)
-'				sensor_state = EN_SENSOR_SAMPLE_READ
 
-'				field_counter = 0
-'			end if
-'		else
+		'if battery detected log battery level
+		if battery_in_use = true and operation_mode = 1 then
+			'for mulitple fields sensor, count back number of fields and add the BAT_LVL at then end	
+			if number_of_fld - field_counter = 1 then
+				add_telemetry("BAT_LVL",str(battery_level),sensor_telemetry_ts)
+				sensor_state = EN_SENSOR_SAMPLE_READ
+
+				field_counter = 0
+			end if
+		else
 			if number_of_fld - field_counter = 0 then
 				sensor_state = EN_SENSOR_SAMPLE_READ 
 
 				field_counter = 0
 			end if
-'		end if
+		end if
 	end if
 end sub
 
@@ -1517,6 +1535,17 @@ sub proc_modbus_jx(byref request_item as modbus_request_item, byref reply as str
 			telemetry_name = "PM1.0"
 		case else:		
 		end select
+	case 140:
+		decimal = modbus_read_word(bytes,2)
+		select case request_item.start_register
+		case 0:
+			telemetry_name = "conductivity"
+		case 2:
+			telemetry_name = "temperature"
+		case 4:
+			telemetry_name = "TDS"
+		case else:
+		end select:
 	case else
 		exit sub
 	end select
@@ -1595,6 +1624,9 @@ sub update_server_properties()
 		update_stg_ts_and_send_azure("RCN")
 		update_stg_ts_and_send_azure("SPT")
 		update_stg_ts_and_send_azure("VMOD")
+		update_stg_ts_and_send_azure("BAT")
+		update_stg_ts_and_send_azure("PSRC")
+		
 		property_modified = NO
 	end if
 end sub
@@ -1879,6 +1911,11 @@ sub read_sensor()
 			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 1, "", MODBUS_UART, modbus_RTU) 'PM2.5
 			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 3, 1, "", MODBUS_UART, modbus_RTU) 'PM10
 			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 4, 1, "", MODBUS_UART, modbus_RTU) 'PM1.0
+		case 140: 'TDS
+			sensor_telemetry_ts = ts
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 0, 2, "", MODBUS_UART, modbus_RTU) 'conductivity
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 2, 2, "", MODBUS_UART, modbus_RTU) 'temperature
+			modbus_master_request(modbus_device_id, ReadHoldingRegisters, 4, 2, "", MODBUS_UART, modbus_RTU) 'TDS
 		end select
 	else
 		sensor_state = EN_SESNOR_TS_ERROR
@@ -1966,7 +2003,8 @@ sub send_sysevent(byref msg as string)
 	dim daycounts, mincounts as word
 	dim seconds as byte
 	dim ts as string(36)
-		
+	dim dts as dword
+	
 	tbl_select("Azure","Azure")
 	tbl_clear()
 	rtc.getdata(daycounts,mincounts,seconds)
@@ -1975,4 +2013,8 @@ sub send_sysevent(byref msg as string)
 	ts=ts+"."+str(rand_event_num)+"Z"
 	add_telemetry("sysEvent",msg,ts)	
 	azure_send_telemetry()
+	dts = sys.timercount32
+	'wait for data to be sent
+	while sock.txlen > 0 and sys.timercount32 < dts+4
+	wend
 end sub

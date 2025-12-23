@@ -393,6 +393,22 @@ public sub azure_send_telemetry()
 	wend
 	azure_telemetry_ts=ts
 	
+	dim day_count as word
+	dim min_count as word
+	dim seconds as byte
+	dim mseconds as word
+	dim dcreationTS as dword
+	dim creationTS as string(36) = ts
+	
+	td_str_date_time_reformat(creationTS,TD_STR_REMOVE_FORMATTING,TD_DATE_FORMAT_YYYYMMDD)
+	if td_from_str(creationTS,day_count, min_count,seconds,mseconds) =OK and day_count > 0 then
+		dcreationTS = day_count + 10957
+		dcreationTS = dcreationTS * 24 * 60 + min_count
+		dcreationTS = dcreationTS * 60
+		creationTS=lstr(dcreationTS)
+		json = azure_update_json(json,"creationTS",creationTS)
+	end if
+	
 	azure_send_server_bound_msg(ts, json)	
 end sub
 

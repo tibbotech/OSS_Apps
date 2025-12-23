@@ -1,0 +1,1 @@
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\tcu-pack.ps1" -ReleaseTag "AZR2.08.11" 
