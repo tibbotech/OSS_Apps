@@ -7,9 +7,11 @@ dim TBT00_3_S5_CHANNEL as byte
 dim ntag_pw_reset_timer as byte = 0
 dim button_press_counter as byte = 0
 dim bt_timemout as byte = 0
+dim comm_timer as word = 0
 
 const NTAG_PW_WAIT_TIME = 10
 const NTAG_PW_RESET_TIME = 4
+const COMM_MODE_FAIL_SAFE_TOUT = 3600 '30 minutes
 
 declare mqtt_state as en_mqtt_states
 declare credential_changed as no_yes
@@ -34,6 +36,10 @@ sub on_sock_data_arrival()
 		'in power saving mode, rest timer when ever there is sock data activity
 			wifi_fallback_timer = 0
 		end if
+	end if
+	'fail safe for comm
+	if sock.num = sock_get("MQT") then
+		comm_timer = 0
 	end if
 end sub
 
@@ -103,10 +109,15 @@ sub on_sys_timer()
 		modbus_proc_timer()
 	end if
 	device_proc_timer()
+	
+	comm_timer = comm_timer + 1
+	if comm_timer > COMM_MODE_FAIL_SAFE_TOUT then
+		sys.reboot()
+	end if
 end sub
 
 sub on_sock_event(newstate as pl_sock_state,newstatesimple as pl_sock_state_simple)
-
+	print_sock_state(newstate,newstatesimple)
     http_sock_state_update(newstatesimple)
 	mqtt_sock_event(newstate, newstatesimple)
 end sub

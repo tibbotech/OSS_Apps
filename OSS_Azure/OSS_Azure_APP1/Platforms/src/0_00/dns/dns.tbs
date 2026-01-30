@@ -144,6 +144,7 @@ l1:
 end function
 
 sub dns_disconnect()
+	dim i as word
 	if dns_init_flag<>DNS_INIT_SIGNATURE then
 		#if DNS_DEBUG_PRINT
 			dns_debug_print_status(EN_STATUS_DNS_NOT_STARTED)
@@ -157,8 +158,15 @@ sub dns_disconnect()
 	#endif
 	dns_rpl_tmr=0
 	dns_domain=""
+	
+	sock.txclear()
 	sock.rxclear()
-	sock.close()	
+	i=sys.timercount
+	sock.close()
+	while sock.statesimple<>PL_SSTS_CLOSED and sys.timercount-i<3 and sys.timercount>=i
+	wend
+	sock.discard()
+	
 end sub
 
 sub dns_query(byref query_name as string)

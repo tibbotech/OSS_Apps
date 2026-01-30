@@ -11,15 +11,15 @@ includepp "tables.xtxt"
 
 'XXX_DEBUG_PRINT value 0: don't print, 1: send to other output (tcp etc...) 2: 1+print to output pane
 #define STG_DEBUG_PRINT 1
-#define MQTT_DEBUG_PRINT 2
+#define MQTT_DEBUG_PRINT 1
 #define LUIS_DEBUG_PRINT 0
-#define DNS_DEBUG_PRINT 2
-#define HTTP_DEBUG_PRINT 2
-#define CELL__DEBUG_PRINT 2
-#define AZURE_DEBUG_PRINT 2
-#define DEVICE_DEBUG_PRINT 2
+#define DNS_DEBUG_PRINT 1
+#define HTTP_DEBUG_PRINT 1
+#define CELL__DEBUG_PRINT 1
+#define AZURE_DEBUG_PRINT 1
+#define DEVICE_DEBUG_PRINT 1
 #define SYS_EVENT_DEBUGPRINT 0 'save as telemetry
-#define SYS_DPRINT_SOCK_NUM 10
+#define SYS_DPRINT_SOCK_NUM 15
 #define LUIS_CONFIG_FILE "luis.xtxt"
 
 #define WLN_AVAILABLE 1
@@ -144,7 +144,6 @@ declare cell__reset_setto_off as low_high
 'INCLUDES------------------------------------------------------------
 
 include "settings\settings.tbh"
-include "sock\sock.tbh"
 include "dns\dns.tbh"
 include "time\time.tbh"
 include "filenum\filenum.tbh"
@@ -253,6 +252,10 @@ declare sub alternate_debugprint(byref source as string, byref msg as string)
 declare sub set_timestamp(ts_type as en_ts_type, ts as dword)
 declare function get_timestamp(ts_type as en_ts_type) as dword
 declare sub init_debug_port()
+declare function sock_get(byref signature as string) as byte
+declare sub sock_release(sock_num as byte)
+declare sub stop_all_comm()
+declare sub print_sock_state(newstate as pl_sock_state,newstatesimple as pl_sock_state_simple)
 
 declare sub time_to_str(byref ts_str as string(20),	
 	byref time_daycount as word,

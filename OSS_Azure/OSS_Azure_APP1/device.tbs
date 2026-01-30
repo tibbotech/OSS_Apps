@@ -7,7 +7,10 @@ const SENSOR_ERROR_MAX_COUNT = 5
 const SENSOR_ERROR_DELAY = 3
 const SYSEVENT_DEV_DELETE = "Deleting device."
 const SYSEVENT_DEV_MIGRATE = "Device migrated."
-
+const SOCK__DNS = 0
+const SOCK__MQTT = 1
+const SOCK__HTTP = 2
+const SOCK__UTX = 3
 enum en_device_migrate_states
 	EN_DEVICE_MIGRATE_IDLE,
 	EN_DEVICE_MIGRATE_STARTING,
@@ -50,7 +53,7 @@ dim field_counter as byte = 0
 dim next_sensor_read_ts as dword
 dim wifi_fallback_timer as word = 1 'start the timer at 1, 0 means never had any sock data activity
 dim part_downloaded as no_yes = NO
-
+declare cell__modem_restart_retry_param as byte
 declare sub device_sampling()
 declare sub device_migrating()
 declare function get_json_value(byref json_str as string, byref attribute as string) as string 
@@ -273,6 +276,7 @@ sub callback_dns_buff_released()
 end sub
 
 sub callback_dns_debugprint(byref debug_msg as string)
+	
 	alternate_debugprint("DNS", debug_msg)
 end sub
         
@@ -533,6 +537,8 @@ end sub
         
 sub callback_azure_conn_timeout()
     if comm_mode = 1 or fallback_to_LTE = Yes then
+		device_debug_print("Azure connection timeout.")
+		stop_all_comm()
 		cell__start(CELL__SIMCARD_PIN, CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD)
 	else
 		azure_on_disconnected()
@@ -735,6 +741,7 @@ sub cell__callback_ppp_link_established()
 			pat.play("G-~",PL_PAT_CANINT)
 		end if
 	end if
+	cell__modem_restart_retry_param = 0
 end sub
 
 sub cell__callback_after_switching_from_DATA_to_CMD()
@@ -1038,17 +1045,8 @@ end sub
 
 public sub connect_to_firmware_server()
 	dim url as string
-	
-	mqtt_disconnect()
-	http_stop()
-	dns_disconnect()
-	if sock.tlscurrentnum<>255 then
-		sock.num=sock.tlscurrentnum
-		sock.tlsdeinit()	
-		if sock.statesimple = PL_SSTS_EST then
-			sock.discard()
-		end if
-	end if
+	device_debug_print("Connecting to firmware server.")
+	stop_all_comm()
 	upgrade_app_fw_init()
 	url=stg_get("DLPT",0)
 	http_request(HTTP_GET, url, current_interface,"")		
@@ -1070,17 +1068,8 @@ public sub connect_to_azure_server()
 	AZURE_PRIMARY_KEY = stg_get("PKEY",0)
 	
 	'when switching between server making sure all previous connection is closed
-	http_stop()
-	dns_disconnect()
-	mqtt_disconnect()
-	
-	if sock.tlscurrentnum<>255 then
-		sock.num=sock.tlscurrentnum
-		sock.tlsdeinit()	
-		if sock.statesimple = PL_SSTS_EST then
-			sock.discard()
-		end if
-	end if
+	device_debug_print("Connecting to IOTCentral.")
+	stop_all_comm()
 	upgrade_state=255
 	azure_start(AZURE_DEVICE_ID,AZURE_SCOPE_ID,AZURE_DPS_SERVER,AZURE_PRIMARY_KEY,current_interface)
 end sub
@@ -1754,17 +1743,8 @@ sub device_migrating()
 	case EN_DEVICE_MIGRATE_STARTING:
 		device_migrate_state = EN_DEVICE_MIGRATE_PROVISIONING
 		property_modified = YES
-		mqtt_disconnect()
-		http_stop()
-		dns_disconnect()
-		 
-		if sock.tlscurrentnum<>255 then
-			sock.num=sock.tlscurrentnum
-			sock.tlsdeinit()	
-			if sock.statesimple = PL_SSTS_EST then
-				sock.discard()
-			end if
-		end if
+		device_debug_print("Device migration starting.")
+		stop_all_comm()
 		upgrade_state=255
 		stg_set("HUBN",0,"") 'clear hub name
 		dim AZURE_DPS_SERVER as string=stg_get("DPSS",0)
@@ -2017,4 +1997,117 @@ sub send_sysevent(byref msg as string)
 	'wait for data to be sent
 	while sock.txlen > 0 and sys.timercount32 < dts+4
 	wend
+end sub
+
+function sock_get(byref signature as string) as byte
+	select case signature
+	case "DNS":
+		sock_get = SOCK__DNS
+	case "HTT":
+		sock_get = SOCK__HTTP
+	case "MQT":
+		sock_get = SOCK__MQTT
+	case "UTX":
+		sock_get = SOCK__UTX
+	case else:
+		sock_get = 15		
+	end select
+end function
+
+sub sock_release(sock_num as byte)
+	
+end sub
+
+sub stop_all_comm()
+	device_debug_print("Stop all communication.")
+	mqtt_disconnect()
+	http_stop()
+	dns_disconnect()
+	if sock.tlscurrentnum<>255 then
+		sock.num=sock.tlscurrentnum
+		sock.tlsdeinit()	
+		if sock.statesimple = PL_SSTS_EST then
+			sock.discard()
+		end if
+	end if	
+end sub
+
+sub print_sock_state(newstate as pl_sock_state,newstatesimple as pl_sock_state_simple)
+	dim s as string
+	
+	select case sock.num
+	case SOCK__DNS: s = "DNS "
+    case SOCK__MQTT: s = "MQTT "
+	case SOCK__HTTP: s = "HTTP "
+	case SOCK__UTX: s = "UTX "
+	case else:
+		s = str(sock.num)+ " "
+	end select
+	
+	select case newstate
+	case PL_SST_CLOSED:
+		s = s+ "PL_SST_CLOSED"
+	case PL_SST_CL_PCLOSED:
+		s = s+ "PL_SST_CL_PCLOSED"
+	case PL_SST_CL_ACLOSED:
+		s = s+ "PL_SST_CL_ACLOSED"
+	case PL_SST_CL_PRESET_POPENING:
+		s = s+ "PL_SST_CL_PRESET_POPENING"
+	case PL_SST_CL_PRESET_AOPENING:
+		s = s+ "PL_SST_CL_PRESET_AOPENING"
+	case PL_SST_CL_PRESET_EST:
+		s = s+ "PL_SST_CL_PRESET_EST"
+	case PL_SST_CL_PRESET_PCLOSING:
+		s = s+ "PL_SST_CL_PRESET_PCLOSING"
+	case PL_SST_CL_PRESET_ACLOSING:
+		s = s+ "PL_SST_CL_PRESET_ACLOSING"
+	case PL_SST_CL_PRESET_STRANGE:
+		s = s+ "PL_SST_CL_PRESET_STRANGE"
+	case PL_SST_CL_ARESET_CMD:
+		s = s+ "PL_SST_CL_ARESET_CMD"
+	case PL_SST_CL_ARESET_RE_PO:
+		s = s+ "PL_SST_CL_ARESET_RE_PO"
+	case PL_SST_CL_ARESET_RE_AO:
+		s = s+ "PL_SST_CL_ARESET_RE_AO"
+	case PL_SST_CL_ARESET_RE_EST:
+		s = s+ "PL_SST_CL_ARESET_RE_EST"
+	case PL_SST_CL_ARESET_RE_PC:
+		s = s+ "PL_SST_CL_ARESET_RE_PC"
+	case PL_SST_CL_ARESET_RE_AC:
+		s = s+ "PL_SST_CL_ARESET_RE_AC"
+	case PL_SST_CL_ARESET_TOUT:
+		s = s+ "PL_SST_CL_ARESET_TOUT"
+	case PL_SST_CL_ARESET_DERR:
+		s = s+ "PL_SST_CL_ARESET_DERR"
+	case PL_SST_CL_DISCARDED_CMD:
+		s = s+ "PL_SST_CL_DISCARDED_CMD"
+	case PL_SST_CL_DISCARDED_PO_WCS:
+		s = s+ "PL_SST_CL_DISCARDED_PO_WCS"
+	case PL_SST_CL_DISCARDED_AO_WCS:
+		s = s+ "PL_SST_CL_DISCARDED_AO_WCS"
+	case PL_SST_CL_DISCARDED_ARPFL:
+		s = s+ "PL_SST_CL_DISCARDED_ARPFL"
+	case PL_SST_CL_DISCARDED_TOUT:
+		s = s+ "PL_SST_CL_DISCARDED_TOUT"
+	case PL_SST_ARP:
+		s = s+ "PL_SST_ARP"
+	case PL_SST_PO:
+		s = s+ "PL_SST_PO"
+	case PL_SST_AO:
+		s = s+ "PL_SST_AO"
+	case PL_SST_EST:
+		s = s+ "PL_SST_EST"
+	case PL_SST_EST_POPENED:
+		s = s+ "PL_SST_EST_POPENED"
+	case PL_SST_EST_AOPENED:
+		s = s+ "PL_SST_EST_AOPENED"
+	case PL_SST_EST_TLS:
+		s = s+ "PL_SST_EST_TLS"
+	case PL_SST_PC:
+		s = s+ "PL_SST_PC"
+	case PL_SST_AC:
+		s = s+ "PL_SST_AC"
+	end select
+	
+	device_debug_print(s)
 end sub

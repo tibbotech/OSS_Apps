@@ -283,7 +283,6 @@ sub http_get_content()
 		http_request_item.remaining_response_content_length=http_request_item.remaining_response_content_length-len(data)
 		callback_http_content_arrival(data)
 		#if HTTP_DEBUG_PRINT 
-'		http_debugprint(data)
 		dim bytes_received as dword=http_chunk_length - http_request_item.remaining_response_content_length
 		if http_request_item.chunked=false then
 			http_debugprint(lstr(bytes_received) + " out of " + lstr(http_chunk_length)  + " bytes received\t" + lstr((bytes_received*100)/http_chunk_length) + "%")
@@ -356,7 +355,8 @@ end function
 sub http_init_request_socket()
 	dim dns_socket as byte=sock.num
 	dim sock_error as boolean = false
-
+	
+	http_debugprint("HTTP sock initialization.")
 	sock.num=http_request_item.socket
 	sock.connectiontout=HTTP_TIMEOUT
 	sock.targetip=http_request_item.ip
@@ -409,10 +409,10 @@ sub http_init_request_socket()
 		while sock.statesimple<>PL_SSTS_CLOSED and sys.timercount-i<3 and sys.timercount>=i
 		wend
 		http_last_domain=http_request_item.domain_name
+		http_debugprint("Connecting to "+sock.targetip+":"+str(sock.targetport))
 		sock.connect()
 	end if
 	sock.num=dns_socket
-	
 	
 end sub
 
@@ -640,13 +640,15 @@ sub http_sock_state_update(newstatesimple as enum pl_sock_state_simple)
 	 
 	if http_request_item.tls=true then		
 #if TLS_AVAILABLE 
+		dim handshake_res as pl_tls_result
 		if sock.state=PL_SST_EST_AOPENED then
 			dim domain as string = http_request_item.domain_name
-			dim handshake_res as pl_tls_result = sock.tlshandshake(domain)
+			handshake_res = sock.tlshandshake(domain)
 			if handshake_res<>PL_TLS_SUCCESS then
 				http_failed("Handshake Error")
 			end if
 		end if
+		
 		if sock.state<>PL_SST_EST_TLS then
 			exit sub
 		end if
