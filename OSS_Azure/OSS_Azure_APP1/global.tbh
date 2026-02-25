@@ -15,7 +15,7 @@ includepp "tables.xtxt"
 #define LUIS_DEBUG_PRINT 0
 #define DNS_DEBUG_PRINT 1
 #define HTTP_DEBUG_PRINT 1
-#define CELL__DEBUG_PRINT 1
+#define CELL_DEBUG_PRINT 1
 #define AZURE_DEBUG_PRINT 1
 #define DEVICE_DEBUG_PRINT 1
 #define SYS_EVENT_DEBUGPRINT 0 'save as telemetry
@@ -41,7 +41,6 @@ includepp "tables.xtxt"
 #define FILENUM_MAX_FILES 4
 #define MODBUS_TIMEOUT 10000
 
-const MAX_NUM_INTERFACES=4
 
 const APP_FW_FILE="APP_FW"
 const PART_FILE="part"
@@ -73,6 +72,9 @@ const MAXIMUM_TS_NUM=5
 #define CELL__AT_USERMODE_ISENABLED	0
 #define CELL__GPS_MODE_ISENABLED	0
 #define CELL__DATA_SER_PORT 0
+#define CELL_COMMAND_QUEUE_SIZE 3
+
+#define CELL_SER_PORT 0
 
 const TBT00_3_S5_CLK = PL_IO_NUM_9
 const TBT00_3_S5_DATA = PL_IO_NUM_4
@@ -101,46 +103,6 @@ const TBT00_3_S5_DATA = PL_IO_NUM_4
 #define LVP_ENABLE_LINE			EXT_LINE_7
 #define LVP_ENABLE_PORT			EXT_PORT_B
 
-'MACROS--------------------------------------------------------------
-declare cell__shdn_setto_off as low_high
-declare cell__shdn_setto_on as low_high
-declare cell__reset_setto_off as low_high
-
-#ifndef CELL__MODEM_STATUS	
-	#define CELL__MODEM_STATUS mcp23017_line_get2(CELL__STATUS_LINENUM, CELL__STATUS_PORT, TBT00_3_S5_CHANNEL)  'get STATUS current line state
-#endif
-
-#ifndef CELL__SET_RESET_ON
-	#define CELL__SET_RESET_ON  mcp23017_line_set(CELL__RESET_LINENUM, CELL__RESET_PORT, cell__reset_setto_on, TBT00_3_S5_CHANNEL)	'set RESET line to Active
-#endif
-#ifndef CELL__SET_RESET_OFF
-	#define CELL__SET_RESET_OFF mcp23017_line_set(CELL__RESET_LINENUM, CELL__RESET_PORT, cell__reset_setto_off, TBT00_3_S5_CHANNEL)	'set RESET line to Inactive
-#endif
-
-#ifndef CELL__SET_SHDN_ON
-	#define CELL__SET_SHDN_ON   mcp23017_line_set(CELL__SHDN_LINENUM, CELL__SHDN_PORT, cell__shdn_setto_on, TBT00_3_S5_CHANNEL)		'set SHDN line to Active
-#endif
-#ifndef CELL__SET_SHDN_OFF
-	#define CELL__SET_SHDN_OFF  mcp23017_line_set(CELL__SHDN_LINENUM, CELL__SHDN_PORT, cell__shdn_setto_off, TBT00_3_S5_CHANNEL)	'set SHDN line to Inactiveh
-#endif
-
-#ifndef CELL__SET_PWRKEY_ON
-	#define CELL__SET_PWRKEY_ON		mcp23017_line_set(CELL__PWRKEY_LINENUM, CELL__PWRKEY_PORT, cell__pwrkey_setto_on, TBT00_3_S5_CHANNEL)	'set PWRKEY line to Inactive
-#endif
-#ifndef CELL__SET_PWRKEY_OFF
-	#define CELL__SET_PWRKEY_OFF	mcp23017_line_set(CELL__PWRKEY_LINENUM, CELL__PWRKEY_PORT, cell__pwrkey_setto_off, TBT00_3_S5_CHANNEL)	'set PWRKEY line to Inactive
-#endif
-
-#ifndef CELL__PWRKEY_STATE
-	#define CELL__PWRKEY_STATE		mcp23017_line_get2(CELL__PWRKEY_LINENUM, CELL__PWRKEY_PORT, TBT00_3_S5_CHANNEL)	'get STATUS current line state
-#endif
-#ifndef CELL__RESET_STATE
-	#define CELL__RESET_STATE		mcp23017_line_get2(CELL__RESET_LINENUM, CELL__RESET_PORT, TBT00_3_S5_CHANNEL)	'get STATUS current line state
-#endif
-#ifndef CELL__SHDN_STATE
-	#define CELL__SHDN_STATE		mcp23017_line_get2(CELL__SHDN_LINENUM, CELL__SHDN_PORT, TBT00_3_S5_CHANNEL)		'get STATUS current line state
-#endif
-
 'INCLUDES------------------------------------------------------------
 
 include "settings\settings.tbh"
@@ -156,7 +118,7 @@ include "luis\luis.tbh"
 include "libraries\mcp23017.tbh"
 include "ssi\ssi.tbh"
 include "libraries\super_i2c.tbh"
-include "libraries\cell.tbh"
+include "libraries\cellular.tbh"
 include "libraries\modbus.tbh"
 include "PIC_LVP.tbh"
 'DECLARATIONS--------------------------------------------------------
@@ -202,7 +164,6 @@ enum en_device_events
 	EVENT_VOLTAGE_LOW
 end enum
 
-declare interface_ready(MAX_NUM_INTERFACES) as no_yes
 declare current_interface as pl_sock_interfaces
 declare DNS_socket as byte
 declare luis_bt_enabled as boolean
@@ -218,11 +179,7 @@ declare min_rec_num_to_send as word
 declare upgrade_state as byte 'upgrade over air state, 0~7(above) indicate the parts that is being downloading, 255: no upgrade in progress, 254: whole file completed
 declare config_mode as no_yes
 declare config_bt_name as string(16)
-declare CELL__AT_APN as string(24)
-declare CELL__MYUSERNAME as string(16)
-declare CELL__MYPASSWORD as string(16)
-declare CELL__AT_CNMP as string(16)
-declare CELL__AT_CMNB as string(16)
+
 declare sensor_type as byte
 declare boot_up_delay as byte
 declare battery_level as byte

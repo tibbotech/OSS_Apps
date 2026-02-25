@@ -8,7 +8,6 @@ const AZURE_TOPIC_TWIN="$iothub/twin/"
 const AZURE_TOPIC_STREAMS="$iothub/streams/POST/"
 const AZURE_TOPIC_RESULT="$iothub/twin/res/"
 const AZURE_API_VERSION="?api-version=2019-03-31"
-'const AZURE_MQTT_API_VERSION="?api-version=2018-06-30"
 const AZURE_MQTT_API_VERSION="?api-version=2021-04-12"
 const TOPIC_TIMESTAMP="iothub-creation-time-utc="
 const AZURE_CONNECTION_TOUT=150
