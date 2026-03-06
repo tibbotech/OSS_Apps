@@ -542,14 +542,23 @@ sub callback_azure_conn_timeout()
     if comm_mode = 1 or fallback_to_LTE = Yes then
 		device_debug_print("Azure connection timeout.")
 		stop_all_comm()
-		cell_start()
+		if cell_state = CELL_STATE_PPP_IDLE then
+			'PPP is up but Azure timed out - retry Azure only, no cellular restart needed
+			connect_to_azure_server()
+		else if cell_state >= CELL_STATE_AT_TRY and cell_state < CELL_STATE_PPP_IDLE then
+			'Cellular is still establishing PPP - don't interrupt it
+			'callback_ppp_connected() will call connect_to_azure_server() once PPP is ready
+		else
+			'Cellular is stopped, idle, or in error - do a full restart
+			cell_start()
+		end if
 	else
 		azure_on_disconnected()
 		azure_fail_to_connect_count = azure_fail_to_connect_count + 1
 		if azure_fail_to_connect_count >= FAIL_CONN_COUNT_MAX then
 			'reset hub name
 			stg_set("HUBN",0,"")
-		end if	
+		end if
 	end if
 end sub
 

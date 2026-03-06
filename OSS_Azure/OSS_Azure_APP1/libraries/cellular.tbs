@@ -16,6 +16,7 @@ dim cell_password as string(50) = ""
 dim cell_pin as string(10) = ""
 dim cell_ppp_current_id as byte = 0
 dim cell_ppp_enabled as boolean = true
+dim cell_ppp_idle_no_sock_count as byte = 0
 dim cell_pdp_context as byte = 1
 dim cell_ppp_authenticated as boolean = false
 dim cell_cnmp as byte = CELL_MODE_AUTO
@@ -344,6 +345,7 @@ end sub
 
 sub cell_start()
     cell_retry_countdown = 0
+    cell_ppp_idle_no_sock_count = 0
     cell_state = CELL_STATE_POWER1
     cell_timeout = sys.timercountms + 1000
     cell_buf = ""
@@ -355,6 +357,7 @@ sub cell_stop()
     cell_current_response = ""
     cell_current_command = ""
     cell_retry_countdown = 0
+    cell_ppp_idle_no_sock_count = 0
     cell_timeout = sys.timercountms + 100
     cell_state = CELL_STATE_POWER_OFF1
 end sub
@@ -1386,9 +1389,17 @@ sub cell_proc_state()
             end if
         next f
         if has_connected_socket = false then
-            cell_command_queue_push("CGREG", "?")
-            cell_enter_command_mode()
+            'grace period: allow application layer time to reconnect before tearing down PPP
+            cell_ppp_idle_no_sock_count = cell_ppp_idle_no_sock_count + 1
+            if cell_ppp_idle_no_sock_count >= 3 then
+                cell_ppp_idle_no_sock_count = 0
+                cell_command_queue_push("CGREG", "?")
+                cell_enter_command_mode()
+            else
+                cell_timeout = sys.timercountms + 15000
+            end if
         else
+            cell_ppp_idle_no_sock_count = 0
             cell_timeout = sys.timercountms + 60000
         end if
 
