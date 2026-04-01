@@ -1,5 +1,5 @@
 'DEFINES-------------------------------------------------------------
-const OSS_APP_FW_VER="AZR2.09.02"
+const OSS_APP_FW_VER="AZR2.09.03"
 const OSS_SUPR_FW_VER = "038"
 const OSS_SNS_FW_VER = "015"
 #define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_038.hex"
@@ -21,6 +21,8 @@ includepp "tables.xtxt"
 #define SYS_EVENT_DEBUGPRINT 0 'save as telemetry
 #define SYS_DPRINT_SOCK_NUM 15
 #define LUIS_CONFIG_FILE "luis.xtxt"
+#define SUPPORTS_TLS 1
+#define TLS_AVAILABLE 1
 
 #define WLN_AVAILABLE 1
 
@@ -30,6 +32,8 @@ includepp "tables.xtxt"
 #define TBL_SECTOR_SIZE 512
 #define MQTT_CER_FILE "DigiCert.cer"
 #define HTTP_CER_FILE "DigiCert.cer"
+'#define MQTT_CER_FILE "ca.cer"
+'#define HTTP_CER_FILE "ca.cer"
 #define PIC_LVP_TARGET_TYPE PIC_16LF18345
 
 #define MQTT_LARGE_PACKETS 1

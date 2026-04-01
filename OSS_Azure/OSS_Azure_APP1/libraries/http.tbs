@@ -642,8 +642,12 @@ sub http_sock_state_update(newstatesimple as enum pl_sock_state_simple)
 #if TLS_AVAILABLE 
 		dim handshake_res as pl_tls_result
 		if sock.state=PL_SST_EST_AOPENED then
-			dim domain as string = http_request_item.domain_name
-			handshake_res = sock.tlshandshake(domain)
+			'check if domain name is ip
+			if http_request_item.domain_name <> http_request_item.ip then
+				handshake_res = sock.tlshandshake(http_request_item.domain_name)
+			else
+				handshake_res = sock.tlshandshake("")
+			end if
 			if handshake_res<>PL_TLS_SUCCESS then
 				http_failed("Handshake Error")
 			end if

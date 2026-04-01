@@ -499,7 +499,7 @@ sub azure_device_lookup()
 	azure_current_url = "https://" + azure_current_dps_server  + "/" + azure_current_scope_id + "/registrations/"+azure_current_device_id+AZURE_API_VERSION
 	azure_http_reset()
 	
-	http_request(HTTP_POST, azure_current_url, azure_interface,"{registrationId: \x22"+azure_current_device_id+"\x22}")
+	http_request(HTTP_POST, azure_current_url, azure_interface,"{\x22registrationId\x22: \x22"+azure_current_device_id+"\x22}")
 	azure_state=EN_AZURE_DEVICE_LOOKUP	
 
 end sub
@@ -511,7 +511,7 @@ sub azure_dps_device_provisioning()
 		
 		azure_current_url = "https://" + azure_current_dps_server + "/" + azure_current_scope_id +"/registrations/"+azure_current_device_id+"/register"+AZURE_API_VERSION
 		azure_http_reset()
-		http_request(HTTP_PUT, azure_current_url, azure_interface,"{registrationId: \x22"+azure_current_device_id+"\x22}")			
+		http_request(HTTP_PUT, azure_current_url, azure_interface,"{\x22registrationId\x22: \x22"+azure_current_device_id+"\x22}")			
 	end if
 end sub
 

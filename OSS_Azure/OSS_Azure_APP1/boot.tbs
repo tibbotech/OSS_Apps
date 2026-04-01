@@ -134,7 +134,10 @@ sub boot()
 	
 	voltage = readMAXRegister(&h09)
 	voltage = 0.078125 * voltage
-	
+
+'<<<<<<<<<<<<<<<<<<<<<<<<<
+'stg_set("DVNT",0,stri(voltage))
+
 	init_battery()
 	'=====================================
 
@@ -824,7 +827,6 @@ sub init_battery()
 	
 	' Battery flags
 	batt = pic_read_reliable(&hB0, 1)
-	dim v as string = pic_read_reliable(&h09, 1)
 	dim flags as byte
 	flags = asc(batt)
 	

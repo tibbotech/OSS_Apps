@@ -197,7 +197,7 @@ sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref
 	'use stg_timestamp.ts_milsec as a flag to detect if the setting has been changed
 	'set it to 0 after change occured
 	select case stg_name_or_num
-		case "DVID","SCID","PKEY":
+		case "DVID","SCID","PKEY","DPSS":
 			if config_mode = YES then credential_changed = YES
 			
 		case "FWV", "CID", "MNUM", "MODE", "OPMD", "STPY", "MBID", "IP", "GI", "VMOD", "BAT", "PSRC": 'device side settings
