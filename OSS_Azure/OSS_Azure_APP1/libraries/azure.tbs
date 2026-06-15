@@ -178,9 +178,15 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string, byref
 			end if
 			
 			do 
-				if remaining_byte > 0 and (255 - len(data)) > remaining_byte then
-					data = data + sock.tlsgetdata(remaining_byte)
-					remaining_byte = 0
+				if remaining_byte > 0 then
+					dim get_byte as byte = 255 - len(data)
+					
+					if get_byte > remaining_byte then
+						remaining_byte = 0
+					else
+						remaining_byte = remaining_byte - get_byte
+					end if
+					data = data + sock.tlsgetdata(get_byte)
 				end if
 
 				pos1 = instr(1,data,"\x22",1)
@@ -221,7 +227,7 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string, byref
 						processed_bytes = processed_bytes+2
 					end if
 					data = right(data,len(data)-processed_bytes)
-										
+					
 					if stg_result=EN_STG_STATUS_OK and value<>local_value then						
 						if processing_desired = YES then
 							#if AZURE_DEBUG_PRINT
