@@ -200,7 +200,7 @@ sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref
 		case "DVID","SCID","PKEY","DPSS":
 			if config_mode = YES then credential_changed = YES
 			
-		case "FWV", "CID", "MNUM", "MODE", "OPMD", "STPY", "MBID", "IP", "GI", "VMOD", "BAT", "PSRC": 'device side settings
+		case "FWV", "CID", "MNUM", "MODE", "OPMD", "STPY", "MBID", "IP", "GI", "VMOD", "BAT", "PSRC", "CCID", "IEMI": 'device side settings
 			property_modified = YES
 			stg_timestamp.ts_milsec = 0
 			stg_set_ts(stg_name_or_num)

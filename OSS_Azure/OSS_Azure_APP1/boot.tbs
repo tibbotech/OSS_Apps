@@ -4,6 +4,13 @@ include "global.tbh"
 const VOLTAGE_THRESHOLD = 3200
 const CELL__SIMCARD_PIN = chr(63)	'<-- CHANGE THIS AS NEEDED
 
+enum EN_MODBUS_POWER
+	MODBUS_POWER_OFF,
+	MODBUS_POWER_5V,
+	MODBUS_POWER_12V,
+	MODBUS_POWER_24V
+end enum
+
 dim DNS_socket as byte
 dim comm_mode as byte 
 dim fallback_to_LTE as no_yes = NO
@@ -23,12 +30,15 @@ declare sub sensor_init()
 declare sub pic_init()
 declare sub check_and_upgrade_supr_pic()
 declare sub check_and_upgrade_sns_pic()
-declare sub init_cell_tech()
+declare sub cell_tech_init()
 declare function turn_sensor3v3_on() as boolean
 declare function turn_sensor3v3_off() as boolean
 declare function pic_read_reliable(addres as byte, len as byte) as string
 declare function readMAXRegister(register as byte) as word
-declare sub init_battery()
+declare sub battery_init()
+declare sub modbus_power(power as EN_MODBUS_POWER)
+declare function add_telemetry(byref telemetry_name as string, byref telemetry_value as string, byref ts as string) as en_tbl_status_codes
+declare sub battery_log()
 
 declare modbus_device_id as byte
 declare command_issued as no_yes
@@ -138,7 +148,14 @@ sub boot()
 '<<<<<<<<<<<<<<<<<<<<<<<<<
 'stg_set("DVNT",0,stri(voltage))
 
-	init_battery()
+	battery_init()
+	
+	if val(OSS_SUPR_FW_VER) >= 42 then
+		if battery_in_use = true then
+			battery_log()
+		end if			
+	end if
+		
 	'=====================================
 
 	dim scid as string(2) = pic_read(&h03,2)
@@ -260,7 +277,7 @@ sub boot()
 		if comm_mode=0 or (comm_mode = 2 and fallback_to_LTE = NO) then
 			current_interface = PL_SOCK_INTERFACE_WLN
 		else
-			init_cell_tech()
+			cell_tech_init()
 			current_interface = PL_SOCK_INTERFACE_PPP
 			cell_init(CELL__AT_APN, CELL__MYUSERNAME, CELL__MYPASSWORD,CELL__SIMCARD_PIN)
 			cell_start()
@@ -427,7 +444,7 @@ sub alternate_debugprint(byref source as string, byref msg as string)
 	sock.num=b
 end sub
 
-function pic_read_reliable(address as byte, len as byte) as string
+function pic_read_reliable(address as byte, l as byte) as string
 	
 	dim try_counter as byte = 0
 	dim read_1 as string
@@ -435,7 +452,7 @@ function pic_read_reliable(address as byte, len as byte) as string
 
 	do
 		read_2 = read_1
-		read_1 = pic_read(address, len)
+		read_1 = pic_read(address, l)
 		try_counter = try_counter + 1
 	loop while (read_1 <> read_2 and try_counter < 10)
 	
@@ -470,8 +487,14 @@ end sub
 
 sub init_modbus_sensor()
 	'enable modbus voltage
-	if stg_get("VMOD",0) = "1" then
-		mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,HIGH,TBT00_3_S5_CHANNEL)
+	dim vmod as byte = val(stg_get("VMOD",0))
+	'new power board with new PIC starting at PIC version 42
+	if val(OSS_SUPR_FW_VER)<42 then
+		if vmod > 0 then
+			mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,HIGH,TBT00_3_S5_CHANNEL)
+		end if
+	else
+		modbus_power(vmod)
 	end if
 	
 	sensor_level_shift_on()
@@ -746,7 +769,7 @@ sub init_debug_port()
 	sock.allowedinterfaces = "WLN"
 end sub
 
-sub init_cell_tech()
+sub cell_tech_init()
 	dim ctech as string(1)
 	dim cmnb as string(2) '0:cat_m1, 1:nb_iot, 2: both
 	dim cnmp as string(2) '2:automatic, 13:gsm only, 38:lte only, 51:gsm and lte only
@@ -794,14 +817,18 @@ function readMAXRegister(register as byte) as word
 	
 end function
 
-sub init_battery()
+sub battery_init()
 	' Battery level
-	dim aux_v, line_v as string(1)	
-	aux_v = pic_read(&h81,1)
+	dim aux_v, line_v, power_board_type as string(1)
+	dim LVDC as string(2)
+	
+	LVDC = pic_read(&h84,2)
+	power_board_type = pic_read(&h83,1)
 	line_v = pic_read(&h82,1)
+	aux_v = pic_read(&h81,1)
 	
 	dim batt as string(1) = pic_read_reliable(&h02, 1)
-		
+batt = chr(&h80)'<<<<<<<<<<<<<<<		
 	if (asc(batt) AND &h80) <> 0 then
 		'battery detected
 		batt = pic_read_reliable(&h9B, 1)
@@ -855,6 +882,89 @@ sub init_battery()
 	' Clear flags
 	pic_write(&hB0, 0)
 	
-	' battery handling END
+	' battery handling END	
+end sub
+
+sub modbus_power(power as EN_MODBUS_POWER)
+	
+	dim new_value as byte
+	dim old_value as byte
+	
+	select case power 
+	case MODBUS_POWER_OFF:
+		new_value = &b00000000
+		
+	case MODBUS_POWER_5V:
+		new_value = &b00000100
+		
+	case MODBUS_POWER_12V:
+		new_value = &b00000101
+		
+	case MODBUS_POWER_24V:
+		new_value = &b00000110
+		
+	case else:
+		new_value = &b00000000
+	end select
+	
+	si2c_get(pic_channel)
+	' Read current IO state
+	si2c_start()
+	si2c_write(MCP_ADDR OR PIC_WR)
+	si2c_write(&h09)	'GPIO address
+	si2c_start()
+	si2c_write(MCP_ADDR OR PIC_RD)
+	old_value = si2c_read(false)
+	si2c_stop()
+
+	' The input/output register contains the state of the supply voltage control pins for the MODBAS devices,
+	' as well as the voltage input selector control pins for the supervisor ADC.
+	' It is prohibited to change the state of the ADC voltage selector pins.
+	' GP7 n/a
+	' GP6 n/a
+	' GP5 ADC Input Selector Enable (SENS_EN)
+	' GP4 ADC Input Select (SENS_SEL_B, MSB)
+	' GP3 ADC Input Select (SENS_SEL_A, LSB)
+	' GP2 MODBUS Power Enable (VMOD_EN2)
+	' GP1 MODBUS 24V Select (VMOD_24V_SEL)
+	' GP0 MODBUS 12V (VMOD_12V_SEL)
+	new_value = (new_value AND &b00000111) OR (old_value AND &b11111000)
+	
+	' Write new value
+	si2c_start()
+	si2c_write(MCP_ADDR OR PIC_WR)
+	si2c_write(&h09)	'GPIO address
+	si2c_write(new_value)
+	si2c_stop()
+
+end sub
+
+sub battery_log()
+	
+	' Get battery log
+	dim i, counter_value as byte
+	dim value as byte
+	dim prev_sensor_read_ts as dword = get_timestamp(EN_TS_LAST_SAMPLED)
+	dim daycounts, mincounts as word
+	dim seconds as byte
+	dim ts as string
+	
+	counter_value=asc(pic_read(&h93,1))
+	
+	stg_set("DVNT",0,"log count: " + str(counter_value))
+	
+	if counter_value > 0 then
+		for i = 0 to counter_value - 1
+			value = asc(pic_read(&h94,1))
+			
+			'add 10 min to timestamp
+			prev_sensor_read_ts = prev_sensor_read_ts+600
+			
+			device_serialized_to_time(prev_sensor_read_ts, daycounts, mincounts, seconds)
+			time_to_str(ts,daycounts,mincounts,seconds,YES)
+			ts=ts+".000Z"
+			add_telemetry("BAT_LVL",str(value),ts)
+		next i
+	end if	
 	
 end sub

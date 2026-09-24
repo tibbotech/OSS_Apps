@@ -10,7 +10,7 @@ transport=udp_winpcap
 [address1]
 platform=WM2000
 transport=udp_winpcap
-address=156.101.249.68.115.93
+address=156.101.249.68.79.83
 [address2]
 platform=WM2000
 transport=serial
@@ -328,7 +328,7 @@ condition=
 locked=no
 location=project
 [file45]
-path=OSS_SUPR_PIC_FW_039.hex
+path=OSS_SUPR_PIC_FW_043.hex
 type=binary
 format=
 locked=no
