@@ -467,7 +467,7 @@ sub init_i2c_sensor()
         ssi.channel=sensor_channel
         ssi.enabled=NO
         ssi.baudrate=PL_SSI_BAUD_100kHz
-
+		
         io.num=SENSOR_DAT_PIN
         io.state=HIGH
         io.num=SENSOR_CLK_PIN
@@ -736,8 +736,9 @@ sub pic_init()
 	if pic_channel<4 then
 		ssi.channel=pic_channel
 		ssi.enabled=NO
-		ssi.baudrate=PL_SSI_BAUD_100kHz
-
+'		ssi.baudrate=PL_SSI_BAUD_100kHz
+		ssi.baudrate=200
+		
 		io.num=PIC_DAT_PIN
 		io.enabled = YES
 		io.state=HIGH
@@ -828,30 +829,40 @@ sub battery_init()
 	aux_v = pic_read(&h81,1)
 	
 	dim batt as string(1) = pic_read_reliable(&h02, 1)
-batt = chr(&h80)'<<<<<<<<<<<<<<<		
+	
 	if (asc(batt) AND &h80) <> 0 then
 		'battery detected
 		batt = pic_read_reliable(&h9B, 1)
 		battery_level = asc(batt)
 		stg_set("BAT",0,str(battery_level)+"%")
 		
-		'check if using external power source
-		if aux_v = chr(&h77) and line_v = chr(&h77) then
+		'solar power board
+		if asc(power_board_type) = 2 then
 			battery_in_use = true
-			stg_set("PSRC", 0, "0")
+			stg_set("PSRC", 0, "3")
+		else
+			'check if using external power source
+			if aux_v = chr(&h77) and line_v = chr(&h77) then
+				battery_in_use = true
+				stg_set("PSRC", 0, "0")
+			end if		
 		end if
 	else
 		stg_set("BAT",0,"No Battery")
 	end if
 	
-	if aux_v = chr(&h00) then
-		stg_set("PSRC", 0, "2")
+	if asc(power_board_type) < 2 then
+
+		if aux_v = chr(&h00) then
+			stg_set("PSRC", 0, "2")
+		end if
+		
+		'solar is also connected to line_v
+		if line_v = chr(&h00) then
+			stg_set("PSRC", 0, "1")
+		end if		
 	end if
-	
-	if line_v = chr(&h00) then
-		stg_set("PSRC", 0, "1")
-	end if
-	
+		
 	' Battery flags
 	batt = pic_read_reliable(&hB0, 1)
 	dim flags as byte

@@ -1,6 +1,6 @@
 I=SYS;D=System;T=GROUP;items=[object Object],[object Object],[object Object],[object Object],[object Object],[object Object],[object Object];
 I=DVNM;T=STRING;D=Device Name;C=EDIT;xIndex=1;S=1==1?"i":"e";
-I=PSRC;T=BYTE;D=Power Source;C=STATIC;V=none;S=1==1?"i":"e";O=Battery/0/Line In \\ Modbus/1/Auxiliary Input/2;xIndex=2;
+I=PSRC;T=BYTE;D=Power Source;C=STATIC;V=none;S=1==1?"i":"e";O=Battery/0/Line In \\ Modbus/1/Auxiliary Input/2/Solar/3;xIndex=2;
 I=BAT;T=STRING;D=Battery Level;C=EDIT;V=none;S=1==1?"i":"e";xIndex=3;
 I=MNUM;T=STRING;D=Model No.;C=EDIT;xIndex=4;S=none;
 I=DVNT;T=STRING;D=Device Note;C=EDIT;xIndex=5;S=1==1?"i":"e";

@@ -1,13 +1,13 @@
 [project]
-watch=data, topic, item_name, value, sock.rxlen, sock.tlsrxlen, remaining_byte
+watch=data, topic, item_name, value, sock.rxlen, sock.tlsrxlen, remaining_byte, config_mode
 [file1]
 line=104
 cursor=2875
 opened=no
 breakpoints=
 [file2]
-line=0
-cursor=346
+line=96
+cursor=1473
 opened=yes
 breakpoints=
 [file3]
@@ -16,10 +16,10 @@ cursor=33057
 opened=yes
 breakpoints=
 [file4]
-line=943
-cursor=25871
-opened=yes
-breakpoints=154,703,952
+line=119
+cursor=4741
+opened=active
+breakpoints=138,198,312,735,831
 [file5]
 line=1868
 cursor=62164
@@ -124,8 +124,8 @@ opened=no
 breakpoints=
 [file26]
 line=59
-cursor=2212
-opened=no
+cursor=2601
+opened=yes
 breakpoints=
 [file27]
 line=0
@@ -148,9 +148,9 @@ cursor=3436
 opened=no
 breakpoints=
 [file31]
-line=45
-cursor=2450
-opened=no
+line=73
+cursor=2794
+opened=yes
 breakpoints=
 [file32]
 line=0
@@ -179,7 +179,7 @@ line=0
 cursor=0
 opened=no
 [file38]
-opened=active
+opened=yes
 [file39]
 opened=yes
 [file40]
@@ -202,4 +202,4 @@ breakpoints=
 [file44]
 opened=no
 [file45]
-opened=no
+opened=yes
