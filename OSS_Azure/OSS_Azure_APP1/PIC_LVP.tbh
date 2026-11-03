@@ -1,6 +1,7 @@
 
 #ifndef PIC_LVP_MAX_DATA_LEN
-	#define PIC_LVP_MAX_DATA_LEN        8192
+	'#define PIC_LVP_MAX_DATA_LEN        8192  <<<<<<<<<<<<<<<<<<<<< old PIC
+	#define PIC_LVP_MAX_DATA_LEN        16384  '<<<<<<<<<<<<<<<< new PIC
 #endif
 
 #ifndef PIC_LVP_MAX_EEPROM_LEN
