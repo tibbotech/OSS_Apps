@@ -1107,9 +1107,14 @@ sub read_onboard_t_h_sensor(byref ts as string)
 		
 	humidity=(data3 and &h3F)*256 + data4
 	humidity=humidity/163.82
-	
+
+
+humidity = 50  '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+temperature = 25  '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
 	humd=ftostr(humidity,FTOSTR_MODE_AUTO,5)
 	temp=ftostr(temperature,FTOSTR_MODE_AUTO,5)
+
 
 	if temperature < -40 or temperature > 85 then
 		temp_invalid = YES

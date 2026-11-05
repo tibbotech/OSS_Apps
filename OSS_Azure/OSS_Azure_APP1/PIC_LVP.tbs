@@ -1,5 +1,7 @@
 include "global.tbh"
 
+public dim PIC_LVP_TARGET_TYPE as word = 0
+
 dim icsp_sda as pl_io_num = PL_IO_NULL
 dim icsp_scl as pl_io_num = PL_IO_NULL
 dim icsp_mclr as pl_io_num = PL_IO_NULL
@@ -39,13 +41,39 @@ enum pic_lvp_cmd_new
 	NEW_CMD_READ_DATA_FROM_NVM_INC		       = &hFE
 end enum
 
+' Program memory is NOT buffered in RAM any more. It is streamed from the
+' HEX file one 32-word row at a time, once for programming and once for
+' verification. Only config words and EEPROM data are kept here (~290 bytes).
 type firmware
-	datalen as word 
-	data(PIC_LVP_MAX_DATA_LEN) as word
 	eepromlen as word
 	eeprom(PIC_LVP_MAX_EEPROM_LEN) as byte
 	config(PIC_LVP_MAX_CFG_LEN) as word
 end type
+
+' ---- Streaming HEX reader state ----
+#define PIC_LVP_MAX_REC_LEN	80	' ':' + 10 header chars + up to 32 data bytes (64 chars)
+
+#define HX_PGM		0
+#define HX_CFG		1
+#define HX_EE		2
+#define HX_OTHER	3
+
+dim hx_p as dword					' Position of the next record in romfile
+dim hx_lba as dword					' Extended linear address (upper 16 bits)
+dim hx_rec as string(PIC_LVP_MAX_REC_LEN)	' Current record text
+dim hx_rlen as byte					' Data byte count of current record
+dim hx_offs as word					' Address field of current record
+dim hx_idx as byte					' Next word index inside current record
+dim hx_err as boolean				' Set on malformed HEX
+dim hx_crlf as string(2)
+dim hx_crlfsize as byte
+
+' ---- Row buffer: the only program-memory data held in RAM ----
+dim row_buf(32) as word
+dim pend_valid as boolean			' A word for the next row was already read
+dim pend_addr as word
+dim pend_val as word
+dim pic_pc as word					' Tracked PC (needed for old PICs without LOAD_PC)
 
 
 ' Global flag to enable/disable SSI use
@@ -501,7 +529,7 @@ function pic_send_cfg_word(w as word) as boolean
 	pic_command(CMD_READ_DATA_FROM_PROGRAM_MEMORY)
 	temp = pic_recv_bits()
 	if temp <> w then
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 		sys.debugprint(" Config check error. Read "+hex(temp)+", expected "+hex(w)+"\r\n")
 #endif
 		exit function
@@ -786,140 +814,235 @@ function pic_id(id as word, byref model as string, byref rev as byte, byref opti
 			
 end function
 
-' Parses .HEX file and fills buffer with parsed data
+' Rewinds the HEX reader to the beginning of the opened romfile
+'
+sub hex_rewind()
+	hx_p = 0
+	hx_lba = 0
+	hx_rlen = 0
+	hx_idx = 0
+	hx_err = false
+	pend_valid = false
+end sub
+
+' Returns the next data word of the HEX file.
+'   kind = HX_PGM   : addr is the program memory word address
+'   kind = HX_CFG   : addr is the offset from 0x8000 (user ID / config)
+'   kind = HX_EE    : addr is the EEPROM byte index
+'   kind = HX_OTHER : anything else
+' Returns false at end of file, or on error (then hx_err = true).
+'
+function hex_next_word(byref addr as word, byref value as word, byref kind as byte) as boolean
+
+	dim e as dword
+	dim rtyp as byte
+
+	hex_next_word = false
+
+	while hx_idx >= hx_rlen / 2
+		' Find Start-Of-Record mark
+		hx_p = romfile.find32(hx_p, ":", 1)
+		if hx_p = 0 then
+			exit function
+		end if
+
+		' Find end of line
+		e = romfile.find32(hx_p, hx_crlf, 1)
+		if e = 0 then
+			e = romfile.size
+		end if
+
+		if e - hx_p > PIC_LVP_MAX_REC_LEN then
+			hx_err = true
+			exit function
+		end if
+
+		romfile.pointer32 = hx_p
+		hx_rec = romfile.getdata(e - hx_p)
+		hx_p = e + hx_crlfsize
+
+		hx_rlen = val("&h" + mid(hx_rec, 2, 2))
+		hx_offs = val("&h" + mid(hx_rec, 4, 4))
+		rtyp = val("&h" + mid(hx_rec, 8, 2))
+		hx_idx = 0
+
+		select case rtyp
+		case &h00: ' DATA
+			if hx_rlen mod 2 <> 0 then
+				hx_err = true
+				exit function
+			end if
+
+		case &h01: ' EOF
+			hx_rlen = 0
+			exit function
+
+		case &h04: ' Extended Linear Address
+			if hx_rlen <> 2 then
+				hx_err = true
+				exit function
+			end if
+			hx_lba = val("&h" + mid(hx_rec, 10, 4))
+			hx_lba = hx_lba shl 16
+			hx_rlen = 0
+
+		case else: ' 02, 03, 05: no data we need
+			hx_rlen = 0
+		end select
+	wend
+
+	addr = hx_offs / 2 + hx_idx
+	value = val("&h" + mid(hx_rec, 10 + hx_idx * 4, 4))
+	hx_idx = hx_idx + 1
+
+	kind = HX_OTHER
+	if hx_lba = 0 then
+		kind = HX_PGM
+	else if hx_lba = &h10000 then
+		if hx_offs >= &hE000 then
+			kind = HX_EE
+			addr = addr - &h7000
+		else
+			kind = HX_CFG
+		end if
+	end if
+
+	hex_next_word = true
+
+end function
+
+' Returns the next program memory word, skipping config/EEPROM words
+'
+function hex_next_pgm_word(byref addr as word, byref value as word) as boolean
+
+	dim k as byte
+
+	hex_next_pgm_word = false
+
+	while hex_next_word(addr, value, k)
+		if k = HX_PGM then
+			hex_next_pgm_word = true
+			exit function
+		end if
+	wend
+
+end function
+
+' Fills row_buf with the next 32-word row that contains data.
+' Words not present in the HEX file are left blank (&hFF3F = 0x3FFF swapped).
+' Requires program records in ascending row order (checked by load_firmware).
+'
+function hex_next_row(byref row as word) as boolean
+
+	dim a, v as word
+	dim j as byte
+
+	hex_next_row = false
+
+	if not pend_valid then
+		if not hex_next_pgm_word(pend_addr, pend_val) then
+			exit function
+		end if
+	end if
+	pend_valid = false
+
+	row = pend_addr and &hFFE0
+	for j = 0 to 31
+		row_buf(j) = &hFF3F
+	next j
+	row_buf(pend_addr and 31) = pend_val
+
+	while hex_next_pgm_word(a, v)
+		if (a and &hFFE0) <> row then
+			' First word of the next row: keep it for the next call
+			pend_addr = a
+			pend_val = v
+			pend_valid = true
+			exit while
+		end if
+		row_buf(a and 31) = v
+	wend
+
+	hex_next_row = true
+
+end function
+
+' Opens and validates the .HEX file and collects config words and EEPROM data.
+' Program memory is not stored; it is streamed later by program_programm().
+' The romfile must stay open until programming is finished.
 '
 function load_firmware(byref name as string, byref fw as firmware) as boolean
 
-	dim i, offs, temp, addr as word
-	dim p, e, lba as dword
-	dim s, st as string
-	dim rlen, rtyp as byte
-	dim crlf as string(2)
-	dim crlfsize as byte
-	
+	dim i, a, v, last_row as word
+	dim k as byte
+
 	load_firmware = false
 
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 	sys.debugprint("Parsing HEX file\r\n")
 #endif
 
-	fw.datalen = 0
 	fw.eepromlen = 0
-	for i = 0 to PIC_LVP_MAX_DATA_LEN - 1
-		fw.data(i) = &hFF3F
-	next i
 	for i = 0 to PIC_LVP_MAX_EEPROM_LEN - 1
 		fw.eeprom(i) = &hFF
 	next i
-		
+	for i = 0 to PIC_LVP_MAX_CFG_LEN - 1
+		fw.config(i) = &hFF3F
+	next i
+
 	romfile.open(name)
 	if romfile.size = 0 then
 		exit function
 	end if
 
-	p = 0
 	' Determine, whether line endings in hex file is Windows-style or Unix-style
 	if 0 = romfile.find32(0, "\r\n", 1) then
-		crlf = "\n"
-		crlfsize = 1
+		hx_crlf = "\n"
+		hx_crlfsize = 1
 	else
-		crlf = "\r\n"
-		crlfsize = 2
+		hx_crlf = "\r\n"
+		hx_crlfsize = 2
 	end if
-	
-	lba = 0
-	
-	while 1
-		' Find Start-Of-Record mark
-		p = romfile.find32(p, ":", 1)
-		if p = 0 then
-			exit while
-		end if
-		
-		' Find end of line
-		e = romfile.find32(p, crlf, 1)
-		if e = 0 then
-			e = romfile.size
-		end if
-		
-		' Check line length
-		if e - p > 255 then
-			exit while
-		end if
-		
-		' Get the record
-		romfile.pointer32 = p
-		s = romfile.getdata(e - p)
-		p = e + crlfsize
-		
-		' Parse the record
-		rlen = val("&h" + mid(s, 2, 2))
-		offs = val("&h" + mid(s, 4, 4))
-		rtyp = val("&h" + mid(s, 8, 2))
-		
-		select case rtyp
-			case &h00: ' DATA
-				' Data record must be word-aligned
-				'
-				if rlen mod 2 <> 0 then
-					exit function
-				end if
-				
-				for i = 0 to (rlen / 2) - 1
-					addr = offs/2 + i
-					st = mid(s, 10 + i*4, 4)
-					temp = val("&h" + st)
-					if lba = 0 then
-							fw.data(addr) = temp
-							if addr > fw.datalen then
-								fw.datalen = addr
-							end if
-					else if lba = &h10000 then
-						' Check address for EEPROM area
-						if offs >= &hE000 then
-							' This EEPROM area
-							if (addr - &h7000) < PIC_LVP_MAX_EEPROM_LEN then
-								fw.eepromlen = addr - &h7000 + 1
-								fw.eeprom(addr - &h7000) = swab(temp)
-							end if
-						else
-							' This config area
-							if addr < PIC_LVP_MAX_CFG_LEN then
-								fw.config(addr) = temp
-							end if
-						end if
-					end if
-				next i
 
-				
-			case &h01: ' EOF
-				exit while
-				
-			case &h02: ' Extended Segment Address 
-				False ' Breakpoint placeholder
-				
-			case &h03: ' Start Segment Address
-				False ' Breakpoint placeholder
-				
-			case &h04: ' Extended Linead Address
-				' The 32-bit Extended Linear Address Record is used to specify bits 16-31 of 
-				' the Linear Base Address (LBA), where bits 0-15 of the LBA are zero.
-				if rlen <> 2 then
-					exit function
-				end if
-				st = mid(s, 10, 4)
-				lba = val("&h" + st)
-				lba = lba shl 16
-				
-			case &h05: ' Start Linear Address
-				False ' Breakpoint placeholder
-				
-			case else:
+	hex_rewind()
+	last_row = 0
+
+	while hex_next_word(a, v, k)
+		select case k
+		case HX_PGM:
+			' Streaming needs rows in ascending order (XC8/MPLAB output is sorted)
+			if (a and &hFFE0) < last_row then
+#if PIC_LVP_DEBUG_PRINT
+				sys.debugprint("HEX file is not sorted by address\r\n")
+#endif
 				exit function
+			end if
+			last_row = a and &hFFE0
+
+		case HX_CFG:
+			if a < PIC_LVP_MAX_CFG_LEN then
+				fw.config(a) = v
+			end if
+
+		case HX_EE:
+			if a < PIC_LVP_MAX_EEPROM_LEN then
+				fw.eeprom(a) = swab(v)
+				if a + 1 > fw.eepromlen then
+					fw.eepromlen = a + 1
+				end if
+			end if
 		end select
 	wend
-	
+
+	if hx_err then
+#if PIC_LVP_DEBUG_PRINT
+		sys.debugprint("HEX file is malformed\r\n")
+#endif
+		exit function
+	end if
+
 	load_firmware = true
+
 end function
 
 function program_user_id(byref fw as firmware, n as byte, nn as byte, options as byte) as boolean
@@ -929,7 +1052,7 @@ function program_user_id(byref fw as firmware, n as byte, nn as byte, options as
 	
 	program_user_id = false
 	
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 	sys.debugprint("USER ID. TRY " + str(n) + " OF " + str(nn) + "\r\n")
 	sys.debugprint(" Uploading ")
 #endif
@@ -942,7 +1065,7 @@ function program_user_id(byref fw as firmware, n as byte, nn as byte, options as
 		pic_recv_bits()
 		
 		for i = 0 to PIC_LVP_MAX_USER_ID_LEN - 1
-	#ifdef PIC_LVP_DEBUG_PRINT
+	#if PIC_LVP_DEBUG_PRINT
 			sys.debugprint("#")
 	#endif
 			if pic_send_cfg_word(swab(fw.config(i))) <> true then
@@ -968,7 +1091,7 @@ function program_user_id(byref fw as firmware, n as byte, nn as byte, options as
 			for i = 0 to PIC_LVP_MAX_USER_ID_LEN - 1
 				temp = swab(pic_command_payload_get_new(NEW_CMD_READ_DATA_FROM_NVM_INC))
 				if temp <> fw.config(i) then
-	#ifdef PIC_LVP_DEBUG_PRINT
+	#if PIC_LVP_DEBUG_PRINT
 					sys.debugprint("\r\n Data check error: " + hex(i+&h8007) + ": read " + hex(swab(temp)) + ", expected " + hex(swab(fw.config(i))) + "\r\n")
 	#endif
 					exit function
@@ -979,7 +1102,7 @@ function program_user_id(byref fw as firmware, n as byte, nn as byte, options as
 
 program_user_id = true
 
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 		sys.debugprint("\r\n Success\r\n")
 #endif
 
@@ -993,7 +1116,7 @@ function program_config_words(byref fw as firmware, n as byte, nn as byte, optio
 	
 	program_config_words = false
 	
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 	sys.debugprint("CONFIGURATION WORDS. TRY " + str(n) + " OF " + str(nn) + "\r\n")
 	sys.debugprint(" Uploading ")
 #endif
@@ -1018,7 +1141,9 @@ function program_config_words(byref fw as firmware, n as byte, nn as byte, optio
 		config0 = swab(fw.config(7)) and &h3FFF
 		config1 = swab(fw.config(8)) and &h3FFF
 		
+#if PIC_LVP_DEBUG_PRINT
 		sys.debugprint(" CONFIG1 and CONFIG2 words are " + hex(config0) + " and " + hex(config1) + "\r\n")
+#endif
 		
 		if pic_send_cfg_word(config0) <> true then			' 0x8007
 			exit function
@@ -1046,7 +1171,9 @@ function program_config_words(byref fw as firmware, n as byte, nn as byte, optio
 		config0 = swab(fw.config(7)) and &h3FFF
 		config1 = swab(fw.config(8)) and &h3FFF
 		
+#if PIC_LVP_DEBUG_PRINT
 		sys.debugprint(" CONFIG1 and CONFIG2 words are " + hex(config0) + " and " + hex(config1) + "\r\n")
+#endif
 		
 		if pic_send_cfg_word(config0) <> true then			' 0x8007
 			exit function
@@ -1072,7 +1199,7 @@ function program_config_words(byref fw as firmware, n as byte, nn as byte, optio
 		for i = 0 to 3
 			temp = swab(pic_command_payload_get_new(NEW_CMD_READ_DATA_FROM_NVM_INC))
 			if temp <> fw.config(i + 7) then
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 				sys.debugprint("\r\n Data check error: " + hex(i+&h8007) + ": read " + hex(swab(temp)) + ", expected " + hex(swab(fw.config(i+7))) + "\r\n")
 #endif
 				exit function
@@ -1083,133 +1210,166 @@ function program_config_words(byref fw as firmware, n as byte, nn as byte, optio
 	
 	program_config_words = true
 
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 	sys.debugprint(" Success\r\n")
 #endif
 
 end function
 
+' Resets the PIC address pointer tracking
+'
+sub pic_reset_pc(options as byte)
+	if options = 0 then
+		pic_command(CMD_RESET_ADDRESS)
+	end if
+	pic_pc = 0
+end sub
+
+' Moves the PIC address pointer to addr.
+' Old PICs (options 0) have no LOAD_PC command, so they can only move forward
+' with INCREMENT_ADDRESS. Rows come in ascending order, so this is enough.
+'
+sub pic_goto(addr as word, options as byte)
+
+	select case options
+	case 0:
+		while pic_pc < addr
+			pic_command(CMD_INCREMENT_ADDRESS)
+			pic_pc = pic_pc + 1
+		wend
+
+	case 1:
+		pic_command_payload_new(NEW_CMD_LOAD_PC_ADDRESS, addr)
+
+	case 2:
+		pic_load_pc_address(addr)
+
+	end select
+
+	pic_pc = addr
+
+end sub
+
+' Programs row_buf into the 32-word row starting at 'row'
+'
+sub pic_write_row(row as word, options as byte)
+
+	dim j as byte
+
+	pic_goto(row, options)
+
+	select case options
+	case 0, 2:
+		for j = 0 to 31
+			pic_send_pgm_word(row_buf(j), j < 31, options)
+		next j
+		pic_command(CMD_BEGIN_INTERNALLY_TIMED_PROGRAMMING)
+		pic_command(CMD_INCREMENT_ADDRESS)
+
+	case 1:
+		for j = 0 to 31
+			if j < 31 then
+				pic_command_payload_new(NEW_CMD_LOAD_DATA_FOR_NVM_INC, swab(row_buf(j)))
+			else
+				pic_command_payload_new(NEW_CMD_LOAD_DATA_FOR_NVM, swab(row_buf(j)))
+			end if
+		next j
+		pic_command_new(NEW_CMD_BEGIN_INTERNALLY_TIMED_PROGRAMMING)
+		pic_command_new(NEW_CMD_INCREMENT_ADDRESS)
+
+	end select
+
+	pic_pc = row + 32
+
+end sub
+
+' Reads the 32-word row starting at 'row' and compares it with row_buf
+'
+function pic_verify_row(row as word, options as byte) as boolean
+
+	dim j as byte
+	dim temp as word
+
+	pic_verify_row = false
+
+	pic_goto(row, options)
+
+	for j = 0 to 31
+		select case options
+		case 0, 2:
+			temp = pic_recv_pgm_word(options)
+
+		case 1:
+			temp = swab(pic_command_payload_get_new(NEW_CMD_READ_DATA_FROM_NVM_INC))
+
+		end select
+
+		if temp <> row_buf(j) then
+#if PIC_LVP_DEBUG_PRINT
+			sys.debugprint("\r\n Data check error: "+hex(row+j)+": read "+hex(swab(temp))+", expected "+hex(swab(row_buf(j)))+"\r\n")
+#endif
+			exit function
+		end if
+	next j
+
+	pic_pc = row + 32
+
+	pic_verify_row = true
+
+end function
+
+' Programs and verifies program memory, streaming it from the HEX file.
+' RAM used: one 32-word row buffer instead of the whole program image.
+'
 function program_programm(byref fw as firmware, n as byte, nn as byte, options as byte) as boolean
 
-	dim i, j, temp, datalen as word
-	
-	program_programm = false
-	
-	datalen = fw.datalen
-	if datalen mod 32 <> 0 then
-		datalen = (datalen or 31) + 1 ' Round to next power of 32
-	end if
-	
-#ifdef PIC_LVP_DEBUG_PRINT
-	sys.debugprint("PROGRAMM MEMORY. TRY " + str(n) + " OF " + str(nn) + "\r\n")
-#endif
+	dim row as word
 
-#ifdef PIC_LVP_DEBUG_PRINT
+	program_programm = false
+
+#if PIC_LVP_DEBUG_PRINT
+	sys.debugprint("PROGRAMM MEMORY. TRY " + str(n) + " OF " + str(nn) + "\r\n")
 	sys.debugprint(" Uploading ")
 #endif
 
-	select case options
-	case 0
-		pic_command(CMD_RESET_ADDRESS)
-	
-	case 1
-		pic_command_payload_new(NEW_CMD_LOAD_PC_ADDRESS, 0)
-		
-	case 2
-		pic_load_pc_address(0)
-		
-	end select 
+	pic_reset_pc(options)
+	hex_rewind()
 
-	for i = 0 to datalen - 1 step 32
-#ifdef PIC_LVP_DEBUG_PRINT
+	while hex_next_row(row)
+#if PIC_LVP_DEBUG_PRINT
 		sys.debugprint("#")
 #endif
-		select case options
-		case 0
-			for j = 0 to 31
-				pic_send_pgm_word(fw.data(i + j), j < 31, options)
-			next j
-			pic_command(CMD_BEGIN_INTERNALLY_TIMED_PROGRAMMING)
-			pic_command(CMD_INCREMENT_ADDRESS)
-			
-		case 1
-			for j = 0 to 31
-				if j < 31 then 
-					pic_command_payload_new(NEW_CMD_LOAD_DATA_FOR_NVM_INC, swab(fw.data(i + j)))
-				else
-					pic_command_payload_new(NEW_CMD_LOAD_DATA_FOR_NVM, swab(fw.data(i + j)))
-				end if
-			next j
-			pic_command_new(NEW_CMD_BEGIN_INTERNALLY_TIMED_PROGRAMMING)
-			pic_command_new(NEW_CMD_INCREMENT_ADDRESS)
-			
-		case 2
-			for j = 0 to 31
-				pic_send_pgm_word(fw.data(i + j), j < 31, options)
-			next j
-			pic_command(CMD_BEGIN_INTERNALLY_TIMED_PROGRAMMING)
-			pic_command(CMD_INCREMENT_ADDRESS)
-		
-		end select
-	next i
+		pic_write_row(row, options)
+	wend
 
-#ifdef PIC_LVP_DEBUG_PRINT
-	sys.debugprint("\r\n")
+	if hx_err then
+		exit function
+	end if
+
+#if PIC_LVP_DEBUG_PRINT
+	sys.debugprint("\r\n Verifying ")
 #endif
 
-	' Now verify what we just programmed
-	'
-#ifdef PIC_LVP_DEBUG_PRINT
-	sys.debugprint(" Verifying ")
-#endif
-	
-	select case options
-	case 0
-		pic_command(CMD_RESET_ADDRESS)
-	
-	case 1
-		pic_command_payload_new(NEW_CMD_LOAD_PC_ADDRESS, 0)
-			
-	case 2
-		pic_load_pc_address(0)
-	
-	end select
+	pic_reset_pc(options)
+	hex_rewind()
 
-	for i = 0 to datalen - 1 step 32
-#ifdef PIC_LVP_DEBUG_PRINT
+	while hex_next_row(row)
+#if PIC_LVP_DEBUG_PRINT
 		sys.debugprint("#")
 #endif
+		if not pic_verify_row(row, options) then
+			exit function
+		end if
+	wend
 
-		dim fail as boolean
-		fail = false
-		for j = 0 to 31
-			select case options
-			case 0:
-			case 2:
-				temp = pic_recv_pgm_word(options)
-			
-			case 1:
-				temp = swab(pic_command_payload_get_new(NEW_CMD_READ_DATA_FROM_NVM_INC))
-				
-			end select
-			
-			if temp <> fw.data(i + j) then
-#ifdef PIC_LVP_DEBUG_PRINT
-				sys.debugprint("\r\n Data check error: "+hex(i+j)+": read "+hex(swab(temp))+", expected "+hex(swab(fw.data(i+j)))+"\r\n")
-#endif
-				'exit function
-				fail = true
-			end if
-		next j
-		
-		if fail then exit function
-		
-	next i
+	if hx_err then
+		exit function
+	end if
 
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 	sys.debugprint("\r\n Success\r\n")
 #endif
-	
+
 	program_programm = true
 
 end function
@@ -1221,7 +1381,7 @@ function program_data(byref fw as firmware, n as byte, nn as byte, options as by
 	
 	program_data = false
 
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 	sys.debugprint("DATA MEMORY. TRY " + str(n) + " OF " + str(nn) + "\r\n")
 #endif
 
@@ -1239,12 +1399,12 @@ function program_data(byref fw as firmware, n as byte, nn as byte, options as by
 		
 	end select
 	
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 	sys.debugprint(" Uploading ")
 #endif
 
 	for i = 0 to fw.eepromlen - 1
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 		sys.debugprint("#")
 #endif
 
@@ -1279,7 +1439,7 @@ function program_data(byref fw as firmware, n as byte, nn as byte, options as by
 		end select
 
 		if fw.eeprom(i) <> temp then
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 			sys.debugprint("\r\n Data check error: "+hex(i)+": read "+hex(temp)+", expected "+hex(fw.eeprom(i))+"\r\n")
 #endif
 			exit function
@@ -1296,7 +1456,7 @@ function program_data(byref fw as firmware, n as byte, nn as byte, options as by
 
 	next i
 
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 	sys.debugprint("\r\n Success\r\n")
 #endif
 	
@@ -1315,7 +1475,7 @@ function check_pic(options as byte) as boolean
 	
 	check_pic = false
 	
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 	sys.debugprint("PIC CHECKING\r\n")
 #endif
 
@@ -1338,17 +1498,17 @@ function check_pic(options as byte) as boolean
 		config2 = pic_recv_cfg_word(options)
 		
 		if pic_id(pic, model, rev, options, mask) = true then
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 			sys.debugprint(" Detected old " + model + " revision " + str(rev) + "\r\n")
 #endif
 			if (pic and mask) <> PIC_LVP_TARGET_TYPE then
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 				sys.debugprint(" Wrong PIC!!!\r\n")
 #endif
 				exit function
 			end if
 		else
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 			sys.debugprint(" Not detected! PIC is not connected or LVP is disabled\r\n")
 #endif
 			exit function
@@ -1361,17 +1521,17 @@ function check_pic(options as byte) as boolean
 		if pic_id(pic, model, rev, options, mask) = true then
 			' New PIC detected
 			
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 			sys.debugprint(" Detected new " + model + "\r\n")
 #endif
 			if pic <> PIC_LVP_TARGET_TYPE then
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 				sys.debugprint(" Wrong PIC!!!\r\n")
 #endif
 				exit function
 			end if
 		else
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 			sys.debugprint(" Not detected! PIC is not connected or LVP is disabled\r\n")
 #endif
 			exit function
@@ -1411,7 +1571,7 @@ function program_firmware(byref fw as firmware) as boolean
 	program_firmware = false
 	
 	if pic_id(PIC_LVP_TARGET_TYPE, name, rev, options, mask) <> true then
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 		sys.debugprint("Unknown TARGET PIC\r\n")
 #endif
 	exit function
@@ -1423,7 +1583,7 @@ function program_firmware(byref fw as firmware) as boolean
 
 	pic_enter_lvp_mode(options)
 
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 	sys.debugprint("LVP mode entered\r\n")
 #endif
 
@@ -1432,7 +1592,7 @@ function program_firmware(byref fw as firmware) as boolean
 		exit function
 	end if
 	
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 	sys.debugprint("Erasing device\r\n")
 #endif
 
@@ -1519,14 +1679,20 @@ function pic_lvp_upload_firmware(byref fwname as string) as boolean
 
 	dim fw as firmware
 	
-	load_firmware(fwname, fw)
+	if not load_firmware(fwname, fw) then
+#if PIC_LVP_DEBUG_PRINT
+		sys.debugprint("HEX FILE ERROR\r\n")
+#endif
+		pic_lvp_upload_firmware = false
+		exit function
+	end if
 	if not program_firmware(fw) then
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 		sys.debugprint("UPLOADING FAILED\r\n")
 #endif
 		pic_lvp_upload_firmware = false
 	else
-#ifdef PIC_LVP_DEBUG_PRINT
+#if PIC_LVP_DEBUG_PRINT
 		sys.debugprint("PROGRAMMING IS DONE\r\n")
 #endif
 		pic_lvp_upload_firmware = true

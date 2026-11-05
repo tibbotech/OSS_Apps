@@ -1,13 +1,17 @@
 'DEFINES-------------------------------------------------------------
-'const OSS_APP_FW_VER="DOCK2.09.04"
-'const OSS_APP_FW_VER="AZR2.09.04"
-'const OSS_SUPR_FW_VER = "039"
-'#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_039.hex"
 
+const OSS_APP_FW_VER="AZR2.10.03"
+const OSS_PIC_16LF18345_FW_VER = "039"
+const OSS_PIC_16LF18345_FW_FILE = "OSS_SUPR_PIC_FW_039.hex"
 
-const OSS_APP_FW_VER="AZR2.10.02"
-const OSS_SUPR_FW_VER = "044"
-#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_044.hex"
+const OSS_PIC_16LF18346_FW_VER = "044"
+const OSS_PIC_16LF18346_FW_FILE = "OSS_SUPR_PIC_FW_044.hex"
+
+'#define PIC_LVP_TARGET_TYPE PIC_16LF18345 '<<<<<<<<<<<<<<<<<<<<<<< old PIC
+'#define PIC_LVP_TARGET_TYPE PIC_16LF18346	'<<<<<<<<<<<<<<<<<<<<<<<< new PIC
+
+'const OSS_SUPR_FW_VER = "044"
+'#define OSS_SUPR_PIC_FILE "OSS_SUPR_PIC_FW_044.hex"
 
 const OSS_SNS_FW_VER = "015"
 #define OSS_SNS_PIC_FILE "OSS_SNS_PIC_FW_015.hex"
@@ -41,8 +45,6 @@ includepp "tables.xtxt"
 #define HTTP_CER_FILE "DigiCert.cer"
 '#define MQTT_CER_FILE "ca.cer"
 '#define HTTP_CER_FILE "ca.cer"
-'#define PIC_LVP_TARGET_TYPE PIC_16LF18345 <<<<<<<<<<<<<<<<<<<<<<< old PIC
-#define PIC_LVP_TARGET_TYPE PIC_16LF18346	'<<<<<<<<<<<<<<<<<<<<<<<< new PIC
 
 #define MQTT_LARGE_PACKETS 1
 #define HTTP_TX_BUFF 6

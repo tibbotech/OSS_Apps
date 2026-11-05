@@ -18,6 +18,8 @@ dim connect_to_azure_required as no_yes=NO
 dim min_rec_num_to_send as word
 dim config_mode as no_yes=NO
 dim config_bt_name as string(16) = "BT-OSS-APP1"
+dim low_voltage_detected as no_yes = NO
+dim power_board_type as byte = 0
 
 dim SYS_SOCK_DEBUGPRINT as byte
 dim sensor_type as byte
@@ -131,31 +133,7 @@ sub boot()
 		#endif
 	case MCP23017_NO_SSI_AVAILABLE:
 		sys.debugprint("SSI channel could not be allocated, using bit banging instead.\r\n")
-	end select
-
-	' Supervisor PIC init
-	pic_init()
-	check_and_upgrade_supr_pic()
-	
-	'=====================================
-	' Battery handling
-	'check voltage
-	dim voltage as real
-	
-	voltage = readMAXRegister(&h09)
-	voltage = 0.078125 * voltage
-
-'<<<<<<<<<<<<<<<<<<<<<<<<<
-'stg_set("DVNT",0,stri(voltage))
-
-	battery_init()
-	
-	if val(OSS_SUPR_FW_VER) >= 42 then
-		if battery_in_use = true then
-			battery_log()
-		end if			
-	end if
-		
+	end select		
 	'=====================================
 
 	dim scid as string(2) = pic_read(&h03,2)
@@ -171,6 +149,26 @@ sub boot()
 	mcp23017_line_out_enable(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,yes,TBT00_3_S5_CHANNEL)
 	mcp23017_line_set(PMU_INHIBIT_LINE,PMU_INHIBIT_PORT,HIGH,TBT00_3_S5_CHANNEL)
 	
+	
+'=====================================
+	' Supervisor PIC init 
+	pic_init()
+		
+	'Battery handling
+	'check voltage
+	dim voltage as real
+	voltage = readMAXRegister(&h09)
+	voltage = 0.078125 * voltage
+	
+	battery_init()
+	
+	if voltage < VOLTAGE_THRESHOLD then	low_voltage_detected = YES
+	
+	check_and_upgrade_supr_pic()
+
+	battery_log()
+
+'=======================================
 	read_ntag()
 	if sys.debugmode <> PL_SYS_DBG_SERIAL then turn_sensor3v3_on()
 	'-----------------------------------------------------------------	
@@ -228,11 +226,9 @@ sub boot()
 	end if
 	
 	'if voltage is low, don't establish connection.
-	if voltage < VOLTAGE_THRESHOLD then	
-		if battery_in_use then
-			device_add_event(EVENT_VOLTAGE_LOW, ftostr(voltage, FTOSTR_MODE_PLAIN, 5))
-			connect_to_azure_required = NO
-		end if
+	if battery_in_use and low_voltage_detected = YES then
+		device_add_event(EVENT_VOLTAGE_LOW, ftostr(voltage, FTOSTR_MODE_PLAIN, 5))
+		connect_to_azure_required = NO
 	end if
 
 	'if sock debugprint is on, autoconnect no matter what comm mode is
@@ -461,7 +457,6 @@ function pic_read_reliable(address as byte, l as byte) as string
 end function
 
 sub init_i2c_sensor()
-
 	sensor_channel = si2c_register("SNR", SENSOR_DAT_PIN, SENSOR_CLK_PIN, NO)
 	if sensor_channel<4 then
         ssi.channel=sensor_channel
@@ -488,8 +483,8 @@ end sub
 sub init_modbus_sensor()
 	'enable modbus voltage
 	dim vmod as byte = val(stg_get("VMOD",0))
-	'new power board with new PIC starting at PIC version 42
-	if val(OSS_SUPR_FW_VER)<42 then
+	'new powerboard feature
+	if power_board_type = 2 then
 		if vmod > 0 then
 			mcp23017_line_set(VMOD_SHDN_LINENUM,VMOD_SHDN_PORT,HIGH,TBT00_3_S5_CHANNEL)
 		end if
@@ -695,18 +690,34 @@ end sub
 sub check_and_upgrade_supr_pic()	
 	dim ver as string(3) = pic_read(&h98,3)
 	dim upgrade_success as boolean
+	dim latest_fw_ver as string(3)
+	dim pic_fw_file_name as string(32)
 	
 	#if DEVICE_DEBUG_PRINT
 		device_debug_print("Current PIC version: " + ver)
 	#endif
 	
-	if ver <> OSS_SUPR_FW_VER then
+	'check if it is the old PIC
+	if val(ver) <= val(OSS_PIC_16LF18345_FW_VER) then
+		latest_fw_ver = OSS_PIC_16LF18345_FW_VER
+		pic_fw_file_name = OSS_PIC_16LF18345_FW_FILE
+		PIC_LVP_TARGET_TYPE = PIC_16LF18345
+	else
+		latest_fw_ver = OSS_PIC_16LF18346_FW_VER
+		pic_fw_file_name = OSS_PIC_16LF18346_FW_FILE
+		PIC_LVP_TARGET_TYPE = PIC_16LF18346
+	end if
+	
+	'skip the PIC upgarde if device is on solar, and voltage is low
+	if low_voltage_detected = YES and stg_get("PSRC",0) = "3" then exit sub
+	
+	if ver <> latest_fw_ver then
 		#if DEVICE_DEBUG_PRINT
-			device_debug_print("Running PIC: "+ver+ "/ Current PIC: "+OSS_SUPR_FW_VER)
+			device_debug_print("Running PIC: "+ver+ "/ Current PIC: "+pic_fw_file_name)
 		#endif
 		pic_write(&h30,"\x77")
 		enter_LVP_mode()
-		upgrade_success = pic_lvp_upload_firmware(OSS_SUPR_PIC_FILE)
+		upgrade_success = pic_lvp_upload_firmware(pic_fw_file_name)
 		
 		io.num=PL_IO_NUM_1_TX0
 		io.state=HIGH
@@ -724,7 +735,7 @@ sub check_and_upgrade_supr_pic()
 		if upgrade_success = false then
 			device_add_event(EVENT_SUPERVISOR_UPGRADE_FAIL, "")
 		else
-			device_add_event(EVENT_SUPERVISOR_UPGRADE_SUCC, OSS_SUPR_FW_VER)
+			device_add_event(EVENT_SUPERVISOR_UPGRADE_SUCC, pic_fw_file_name)
 			sys.reboot()
 		end if
 	end if
@@ -820,24 +831,25 @@ end function
 
 sub battery_init()
 	' Battery level
-	dim aux_v, line_v, power_board_type as string(1)
-	dim LVDC as string(2)
-	
-	LVDC = pic_read(&h84,2)
-	power_board_type = pic_read(&h83,1)
-	line_v = pic_read(&h82,1)
-	aux_v = pic_read(&h81,1)
+	dim aux_v, line_v as string(1)
+	dim LVDC as word 'line in voltage (close to 0 if line_in is used for solar)
+
+	LVDC = asc(pic_read(&h85,1))*256 + asc(pic_read(&h84,1))
+	power_board_type = asc(pic_read(&h83,1))
+	line_v = pic_read(&h82,1) 'line in or solar
+	aux_v = pic_read(&h81,1) 'usb
 	
 	dim batt as string(1) = pic_read_reliable(&h02, 1)
 	
 	if (asc(batt) AND &h80) <> 0 then
-		'battery detected
+	
+		'battery detected !!proper value can only be read after a sleep!!
 		batt = pic_read_reliable(&h9B, 1)
-		battery_level = asc(batt)
+		battery_level = asc(batt) 
 		stg_set("BAT",0,str(battery_level)+"%")
 		
 		'solar power board
-		if asc(power_board_type) = 2 then
+		if power_board_type = 2 then
 			battery_in_use = true
 			stg_set("PSRC", 0, "3")
 		else
@@ -851,7 +863,7 @@ sub battery_init()
 		stg_set("BAT",0,"No Battery")
 	end if
 	
-	if asc(power_board_type) < 2 then
+	if power_board_type < 2 then
 
 		if aux_v = chr(&h00) then
 			stg_set("PSRC", 0, "2")
@@ -951,7 +963,6 @@ sub modbus_power(power as EN_MODBUS_POWER)
 end sub
 
 sub battery_log()
-	
 	' Get battery log
 	dim i, counter_value as byte
 	dim value as byte
@@ -959,6 +970,11 @@ sub battery_log()
 	dim daycounts, mincounts as word
 	dim seconds as byte
 	dim ts as string
+	
+	'only available for new PIC
+	if PIC_LVP_TARGET_TYPE <> PIC_16LF18346 or battery_in_use = false then		
+		exit sub
+	end if
 	
 	counter_value=asc(pic_read(&h93,1))
 	

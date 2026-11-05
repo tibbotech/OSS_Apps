@@ -47,6 +47,26 @@
     #define LOG_DEBUG 3
 #endif
 
+' Time allowed for network registration before the forbidden network list is
+' cleared and the modem is restarted (ms). After moving to a new area the modem
+' may scan all bands and try several networks, which can take several minutes.
+#ifndef CELL_REG_TIMEOUT_MS
+    #define CELL_REG_TIMEOUT_MS 600000
+#endif
+
+' Size of the SIM's forbidden network list file (EF_FPLMN) in bytes, 3 per entry.
+' 12 (4 entries) is the minimum and most common size.
+#ifndef CELL_FPLMN_LEN
+    #define CELL_FPLMN_LEN 12
+#endif
+
+' Optional: restrict the bands the modem scans (SIMCom AT+CBANDCFG). Scanning
+' only the bands used in your deployment regions makes the first connection in
+' a new area much faster. Leave undefined to keep the module's setting.
+' Example (define in global.tbh before including this file):
+'   #define CELL_CATM_BANDS "1,3,8,18,19,20,26,28"
+'   #define CELL_NBIOT_BANDS "3,8,20"
+
 #ifndef CELL_LOG_LEVEL
     #define CELL_LOG_LEVEL LOG_DEBUG
 #endif
@@ -138,7 +158,7 @@ enum en_cell_states
     CELL_STATE_PING_WAIT,
     CELL_STATE_PPP_IDLE,
     CELL_STATE_READY,
-    CELL_STATE_ERROR
+    CELL_STATE_ERROR,
 
 'reboot states
     CELL_STATE_REBOOT_RESET_SETTINGS,
@@ -217,14 +237,16 @@ const CELL_PPP_PROTOCOL_LCP = &hC021	'Link Control Protocol
 const CELL_PPP_PROTOCOL_PAP=&hC023	'Password Authentication Protocol
 const CELL_PPP_PROTOCOL_CHAP=&hC223	'Challenge Handshake Authentication Protocol
 
-const CELL__PPP_LCP_OPTION_MRU_STR = chr(&h01) + chr(&h04) + chr(&h08) + chr(&h00)
+const CELL__PPP_LCP_OPTION_MRU_STR = chr(&h01) + chr(&h04) + chr(&h05) + chr(&hDC)	'MRU 1500
 const CELL__PPP_LCP_OPTION_ACCM_STR = chr(&h02) + chr(&h06) + chr(&h0) + chr(&h0) + chr(&h0) + chr(&h0)
 const CELL__PPP_LCP_OPTION_PAP_STR = chr(&h03) + chr(&h04) + chr(&hc0) + chr(&h23)	'Authentication Protocol (<span style="color: gray;">0x0304 C023</span>) (<span style="color: gray;">note: 0xC023=PAP</span>)
 const CELL__PPP_LCP_OPTION_QP_STR = chr(&h04) + chr(&h04) + chr(&hc0) + chr(&h25)	'Quality Control (<span style="color: gray;">0x0404 C025</span>)
 'const CELL__PPP_LCP_OPTION_MAGIC_DUMMY_STR = chr(&h05) + chr(&h06) + chr(&hff) + chr(&hff) + chr(&hff) + chr(&hff)	'Magic-Number which is used as dummy input arg
 'const CELL__PPP_LCP_OPTION_PFC_STR = chr(&h07) + chr(&h02)	'Protocol Field Compression (<span style="color: gray;">0x7002</span>)
 'const CELL__PPP_LCP_OPTION_ACFC_STR = chr(&h08) + chr(&h02)	'ADDRESS AND CONTROL FIELD COMPRESSION (<span style="color: gray;">0x0802</span>)
-const CELL__PPP_LCP_CONFREQ_DATA_STR = CELL__PPP_LCP_OPTION_MRU_STR + CELL__PPP_LCP_OPTION_ACCM_STR + CELL__PPP_LCP_OPTION_PAP_STR + CELL__PPP_LCP_OPTION_QP_STR
+' Only MRU and ACCM: the PAP option would ask the modem to authenticate to us
+' (backwards for a client) and the QP option was malformed; both got rejected.
+const CELL__PPP_LCP_CONFREQ_DATA_STR = CELL__PPP_LCP_OPTION_MRU_STR + CELL__PPP_LCP_OPTION_ACCM_STR
 
 
 declare cell_state as en_cell_states
