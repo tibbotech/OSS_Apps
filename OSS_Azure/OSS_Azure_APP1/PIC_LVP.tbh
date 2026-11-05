@@ -1,8 +1,7 @@
 
-#ifndef PIC_LVP_MAX_DATA_LEN
-	'#define PIC_LVP_MAX_DATA_LEN        8192  <<<<<<<<<<<<<<<<<<<<< old PIC
-	#define PIC_LVP_MAX_DATA_LEN        16384  '<<<<<<<<<<<<<<<< new PIC
-#endif
+' Program memory is streamed from the HEX file row by row, so there is no
+' PIC_LVP_MAX_DATA_LEN buffer any more. The HEX file must be sorted by address
+' (MPLAB/XC8 output is).
 
 #ifndef PIC_LVP_MAX_EEPROM_LEN
 	#define PIC_LVP_MAX_EEPROM_LEN      256
@@ -20,15 +19,20 @@
 	#define PIC_LVP_MAX_TRY_FLASHING	4
 #endif
 
+' Define as 0 before including this file to remove all debug strings
 #ifndef PIC_LVP_DEBUG_PRINT
 	#define PIC_LVP_DEBUG_PRINT 1
 #endif
 
 '	You must define this define in your code with the type of the PIC processor that needs to be flashed.
 '   See enum PIC_TYPE
-#ifndef PIC_LVP_TARGET_TYPE
-	#define PIC_LVP_TARGET_TYPE 0	' Unknown PIC type
-#endif
+'#ifndef PIC_LVP_TARGET_TYPE
+'	#define PIC_LVP_TARGET_TYPE 0	' Unknown PIC type
+'#endif
+
+' change PIC_LVP_TARGET_TYPE to global variable to make project flexible
+declare PIC_LVP_TARGET_TYPE as word
+
 
 ' PIC TYPE
 enum PIC_TYPE
