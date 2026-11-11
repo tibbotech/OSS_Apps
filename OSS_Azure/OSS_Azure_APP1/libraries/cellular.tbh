@@ -274,6 +274,8 @@ declare sub callback_cell_ioext_init()
 declare sub callback_cell_debugprint(byref debug_msg as string)
 declare sub callback_cell_proc_response(byref response as string, state as en_cell_states)
 declare function cell_get_ip_address() as string
+declare function cell_get_dns_server(index as byte) as string
+'Network DNS server received during PPP setup: 0 = primary, 1 = secondary, "" = none
 declare function ppp_create_frame(protocol as word, code as byte, id as byte, byref data as string) as string
 
 ' GPS functions

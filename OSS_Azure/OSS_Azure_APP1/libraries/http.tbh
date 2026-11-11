@@ -1,6 +1,18 @@
 
+#ifndef HTTP_DEBUG_PRINT
+	#define HTTP_DEBUG_PRINT 0
+#endif
+
+' DNS server for name lookups. Empty = the DNS library chooses: the cellular network's
+' DNS on PPP (if it gave one), otherwise DNS_DEFAULT_SERVER. Define e.g. "8.8.8.8" in
+' global.tbh to always use a fixed server.
 #ifndef HTTP_DNS_SERVER
-	#define HTTP_DNS_SERVER "8.8.8.8"
+	#define HTTP_DNS_SERVER ""
+#endif
+
+' Give up a request if no data could be sent for this long (ms)
+#ifndef HTTP_SEND_TIMEOUT
+	#define HTTP_SEND_TIMEOUT 2000
 #endif
 #ifndef HTTP_TX_BUFF
 	#define HTTP_TX_BUFF 2

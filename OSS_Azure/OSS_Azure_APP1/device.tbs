@@ -118,6 +118,20 @@ sub device_proc_timer()
 	execute_special_command()
 end sub
 
+function device_load_tls_certificate() as dword
+	dim cerfile_name as string(16)
+	
+	if stg_get("DPSS",0) = "global.azure-devices-provisioning.net" then
+		cerfile_name = AZURE_CER_FILE
+	else
+		cerfile_name = DOCKER_CER_FILE
+	end if
+
+	romfile.open(cerfile_name)
+	device_load_tls_certificate=romfile.offset    
+		
+end function
+
 sub callback_stg_error(byref stg_name_or_num as string,index as byte,status as en_stg_status_codes)
     
 end sub
@@ -377,13 +391,7 @@ sub callback_http_response_code_arrival(http_response as string)
 end sub
 
 function callback_http_open_romfile() as dword
-    #ifdef HTTP_CER_FILE
-		romfile.open(HTTP_CER_FILE)
-		callback_http_open_romfile=romfile.offset    
-	
-	#else 
-		callback_http_open_romfile=0
-	#endif    
+	callback_http_open_romfile = device_load_tls_certificate
 end function
 
 sub callback_mqtt_connect_ok()
@@ -407,6 +415,12 @@ end sub
 sub callback_mqtt_notif(byref topic as string,byref data as string, byref remaining_bytes as word)
     azure_proc_mqtt_msg(topic,data,remaining_bytes)	
 end sub
+
+function callback_mqtt_open_romfile() as dword
+	callback_mqtt_open_romfile = device_load_tls_certificate
+    
+end function
+
 
 sub callback_mqtt_debugprint(byref debug_msg as string)
 	alternate_debugprint("MQTT", debug_msg)

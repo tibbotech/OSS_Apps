@@ -33,6 +33,13 @@ dim cell_band_need_nb as boolean = true            ' NB-IoT band list differs fr
 dim cell_lcp_our_acked as boolean = false          ' peer acknowledged our LCP ConfReq
 dim cell_lcp_peer_acked as boolean = false         ' we acknowledged peer's LCP ConfReq
 dim cell_peer_wants_pap as boolean = false         ' peer asked for PAP authentication
+dim cell_ipcp_ip as string(4) = ""                 ' IPCP: our IP address (4 bytes)
+dim cell_ipcp_dns1 as string(4) = ""               ' IPCP: primary DNS (4 bytes)
+dim cell_ipcp_dns2 as string(4) = ""               ' IPCP: secondary DNS (4 bytes)
+dim cell_ipcp_want_dns1 as boolean = true          ' ask for primary DNS (false once rejected)
+dim cell_ipcp_want_dns2 as boolean = true          ' ask for secondary DNS (false once rejected)
+dim cell_dns1 as string(15) = ""                   ' network DNS servers from IPCP, "" = none
+dim cell_dns2 as string(15) = ""
 
 ' GPS variables
 dim cell_gps_data as cell_gps_data_struct
@@ -64,6 +71,8 @@ declare sub cell_log(level as byte, byref message as string)
 declare function cell_reg_stat(byref prefix as string) as byte
 declare function cell_wants_data() as boolean
 declare sub cell_lcp_reset()
+declare function cell_ipcp_request() as string
+declare sub cell_ipcp_take_options(byref data as string)
 declare sub cell_lcp_check_open()
 ' GPS Functions Implementation
 function cell_gps_get_data() as cell_gps_data_struct
@@ -1397,12 +1406,12 @@ sub cell_proc_state()
         end if
         
     case CELL_STATE_PPP_IPCP:
-        ' IPCP negotiation - request an IP address
+        ' IPCP negotiation - request an IP address and the network's DNS servers
+        ' (0.0.0.0 = "please tell me"; the modem answers with a Nak carrying the values)
         dim ipcp_data as string
-        ' IP address option (code 3) with length 6, requesting 0.0.0.0 (will be filled by network)
-        ipcp_data = chr(3) + chr(6) + chr(0) + chr(0) + chr(0) + chr(0)
+        ipcp_data = cell_ipcp_request()
         
-        cell_log(LOG_DEBUG, "ipcp: " + ipcp_data)
+        cell_log(LOG_DEBUG, "ipcp request")
         dim ipcp_frame as string
         ipcp_frame = ppp_create_frame(CELL_PPP_PROTOCOL_IPCP, PPP_PEER_CONFREQ, cell_ppp_current_id, ipcp_data)
         cell_ppp_current_id = cell_ppp_current_id + 1
@@ -2190,59 +2199,47 @@ sub process_ppp_frame(byref frame as string)
             cell_ppp_send(ack_frame)
             
         case 2: ' Configuration Acknowledge
-            ' Our IPCP request was acknowledged
-            ' Extract the IP address if provided
-            dim i as byte
-            for i = 1 to len(data) - 5
-                if asc(mid(data, i, 1)) = 3 then ' IP address option
-                    ' Extract the IP address (4 bytes)
-                    cell_ip_address = str(asc(mid(data, i+2, 1))) + "." + 
-                                     str(asc(mid(data, i+3, 1))) + "." + 
-                                     str(asc(mid(data, i+4, 1))) + "." + 
-                                     str(asc(mid(data, i+5, 1)))
-                    exit for
-                end if
-            next i
+            ' Our IPCP request was acknowledged: it carries the final IP and DNS values
+            cell_ipcp_take_options(data)
+            cell_ip_address = ddstr(cell_ipcp_ip)
+            cell_dns1 = ""
+            cell_dns2 = ""
+            if cell_ipcp_want_dns1 and cell_ipcp_dns1 <> chr(0)+chr(0)+chr(0)+chr(0) then
+                cell_dns1 = ddstr(cell_ipcp_dns1)
+            end if
+            if cell_ipcp_want_dns2 and cell_ipcp_dns2 <> chr(0)+chr(0)+chr(0)+chr(0) then
+                cell_dns2 = ddstr(cell_ipcp_dns2)
+            end if
+            cell_log(LOG_INFO, "IPCP: IP " + cell_ip_address + ", DNS " + cell_dns1 + " " + cell_dns2)
             
             ' Success - we're now connected
             cell_next_state(CELL_STATE_PPP_CONNECTED)
             
         case 3: ' Configuration Nak
-            ' They provided us with an IP address
-            dim i as byte
-            for i = 1 to len(data) - 5
-                if asc(mid(data, i, 1)) = 3 then ' IP address option
-                    ' Extract the IP address (4 bytes)
-                    cell_ip_address = str(asc(mid(data, i+2, 1))) + "." + 
-                                     str(asc(mid(data, i+3, 1))) + "." + 
-                                     str(asc(mid(data, i+4, 1))) + "." + 
-                                     str(asc(mid(data, i+5, 1)))
-                    
-                    ' Send a new request with the provided IP
-                    dim ipcp_data as string(64)
-                    ipcp_data = chr(3) + chr(6) + 
-                               chr(asc(mid(data, i+2, 1))) + 
-                               chr(asc(mid(data, i+3, 1))) + 
-                               chr(asc(mid(data, i+4, 1))) + 
-                               chr(asc(mid(data, i+5, 1)))
-                    
-                    dim ipcp_frame as string(64)
-                    ipcp_frame = ppp_create_frame(CELL_PPP_PROTOCOL_IPCP, 1, id, ipcp_data)
-                    cell_ppp_send(ipcp_frame)
-                    exit for
-                end if
-            next i
-            
+            ' The modem suggests values (our IP address, DNS servers): request them
+            cell_ipcp_take_options(data)
+            dim ipcp_frame as string(64)
+            ipcp_frame = ppp_create_frame(CELL_PPP_PROTOCOL_IPCP, PPP_PEER_CONFREQ, cell_ppp_current_id, cell_ipcp_request())
+            cell_ppp_current_id = cell_ppp_current_id + 1
+            cell_ppp_send(ipcp_frame)
             cell_timeout = sys.timercountms + 3000
             
         case 4: ' Configuration Reject
             if cell_retry_countdown > 0 then
-                ' Try again with simpler options
-                dim ipcp_data as string(64)
-                ipcp_data = chr(3) + chr(6) + chr(0) + chr(0) + chr(0) + chr(0)
-                
+                ' Drop the rejected options (some modems don't give out DNS servers)
+                dim i, option_type, option_length as byte
+                i = 1
+                while i + 1 <= len(data)
+                    option_type = asc(mid(data, i, 1))
+                    option_length = asc(mid(data, i+1, 1))
+                    if option_length < 2 then exit while
+                    if option_type = 129 then cell_ipcp_want_dns1 = false
+                    if option_type = 131 then cell_ipcp_want_dns2 = false
+                    i = i + option_length
+                wend
                 dim ipcp_frame as string(64)
-                ipcp_frame = ppp_create_frame(CELL_PPP_PROTOCOL_IPCP, 1, cell_retry_countdown, ipcp_data)
+                ipcp_frame = ppp_create_frame(CELL_PPP_PROTOCOL_IPCP, PPP_PEER_CONFREQ, cell_ppp_current_id, cell_ipcp_request())
+                cell_ppp_current_id = cell_ppp_current_id + 1
                 cell_ppp_send(ipcp_frame)
                 cell_timeout = sys.timercountms + 3000
             else
@@ -2334,7 +2331,57 @@ sub cell_lcp_reset()
     cell_lcp_our_acked = false
     cell_lcp_peer_acked = false
     cell_peer_wants_pap = false
+    ' new PPP session: start IPCP from scratch
+    cell_ipcp_ip = chr(0)+chr(0)+chr(0)+chr(0)
+    cell_ipcp_dns1 = chr(0)+chr(0)+chr(0)+chr(0)
+    cell_ipcp_dns2 = chr(0)+chr(0)+chr(0)+chr(0)
+    cell_ipcp_want_dns1 = true
+    cell_ipcp_want_dns2 = true
+    cell_ip_address = ""
+    cell_dns1 = ""
+    cell_dns2 = ""
 end sub
+
+' IPCP ConfReq options: IP address (3), primary DNS (129), secondary DNS (131)
+function cell_ipcp_request() as string
+    cell_ipcp_request = chr(3) + chr(6) + cell_ipcp_ip
+    if cell_ipcp_want_dns1 then
+        cell_ipcp_request = cell_ipcp_request + chr(129) + chr(6) + cell_ipcp_dns1
+    end if
+    if cell_ipcp_want_dns2 then
+        cell_ipcp_request = cell_ipcp_request + chr(131) + chr(6) + cell_ipcp_dns2
+    end if
+end function
+
+' Stores the IP / DNS values found in an IPCP Nak or Ack
+sub cell_ipcp_take_options(byref data as string)
+    dim i, option_type, option_length as byte
+    i = 1
+    while i + 1 <= len(data)
+        option_type = asc(mid(data, i, 1))
+        option_length = asc(mid(data, i+1, 1))
+        if option_length < 2 then exit while
+        if option_length = 6 then
+            select case option_type
+            case 3:
+                cell_ipcp_ip = mid(data, i+2, 4)
+            case 129:
+                cell_ipcp_dns1 = mid(data, i+2, 4)
+            case 131:
+                cell_ipcp_dns2 = mid(data, i+2, 4)
+            end select
+        end if
+        i = i + option_length
+    wend
+end sub
+
+' Network DNS server received during PPP setup: index 0 = primary, 1 = secondary.
+' Returns "" if the network did not provide one (or PPP is not connected).
+function cell_get_dns_server(index as byte) as string
+    cell_get_dns_server = ""
+    if index = 0 then cell_get_dns_server = cell_dns1
+    if index = 1 then cell_get_dns_server = cell_dns2
+end function
 
 ' LCP is open when both sides acknowledged each other's ConfReq (RFC 1661)
 sub cell_lcp_check_open()

@@ -7,14 +7,29 @@
 	#define DNS_DEBUG_PRINT 0
 #endif
 
+' Used when no server is given and the network provided none (and as the alternate
+' server for retries when the cellular network's DNS is used)
 #ifndef DNS_DEFAULT_SERVER
     #define DNS_DEFAULT_SERVER "8.8.8.8"
 #endif
+
+' Remember the last answer for its time-to-live (max DNS_CACHE_MAX_TTL seconds), so
+' reconnects don't need a lookup. When all servers fail, the last known address is used.
+#ifndef DNS_CACHE
+    #define DNS_CACHE 1
+#endif
+#ifndef DNS_CACHE_MAX_TTL
+    #define DNS_CACHE_MAX_TTL 3600
+#endif
+
+' DNS_USE_CELL_DNS: use the DNS servers the cellular network gives during PPP setup.
+' Default: on when the cellular library is used (CELL_SER_PORT defined). Define 0 to disable.
 
 #ifndef DNS_MAX_RETRIES
     #define DNS_MAX_RETRIES 3
 #endif
 
+' Time to wait for a reply before retrying, in half seconds
 #ifndef DNS_REPLY_TIMEOUT
 	#define DNS_REPLY_TIMEOUT 10
 #endif

@@ -3,14 +3,11 @@ include "global.tbh"
 const DNS_STAMP="DNS> "
 const DNS_CR_LF=chr(13)+chr(10)
 const DNS_INIT_SIGNATURE=&hABAE
-const DNS_QUERY_FLAG="0"		'message is a query
-const DNS_RESPONSE_FLAG="1"		'message is a response
-const DNS_OPCODE="0000"			'4-bits 0 statndard query, 1 inverse query, 2 server status request
-const DNS_AA="0"				'authoritative answer, the server is authoritative for the domain in the question 
-const DNS_TC="1"				'truncated, only keep first 512 bytes
-const DNS_RD="1"				'0 iterative query(doesn't resolve by itself),1 recursive query (resolve by itself)
-const DNS_RA="0"				'0 recursive not available, 1 recursive available (only matter in response )
 
+'query header flags: QR=0 (query), opcode 0 (standard query), AA=0, TC=0 (not truncated),
+'RD=1 (recursion desired), RA=0, Z=0, RCODE=0
+'(the old code set TC=1 in every query)
+const DNS_QUERY_FLAGS=&h0100
 const DNS_NUMBER_QUESTION=1
 const DNS_QUERY_TYPE=1			'1 for IP Address ,2 for Name Server, 5 for Canonical name, 12 for pointer record, 13 for host info, 15 for mail exchange
 const DNS_QUERY_CLASS=1			'1 for internet
@@ -19,13 +16,36 @@ const DNS_SERVER_PORT=53
 const DNS_TX_BUF_SIZE=1
 const DNS_RX_BUF_SIZE=2
 
+'Use the DNS servers the cellular network gave during PPP setup (cellular library).
+'Detected automatically: the cellular library requires CELL_SER_PORT.
+#ifndef DNS_USE_CELL_DNS
+	#ifdef CELL_SER_PORT
+		#define DNS_USE_CELL_DNS 1
+	#else
+		#define DNS_USE_CELL_DNS 0
+	#endif
+#endif
+
 dim dns_init_flag as word
-dim dns_sock, dns_name_len as byte
+dim dns_sock as byte
 dim dns_id as string(2)
 dim dns_rpl_tmr as byte=0
-dim dns_domain as string=""
+dim dns_domain as string=""					'domain of the current (or just finished) lookup
 dim dns_current_retries as byte=0
+dim dns_busy as boolean=false					'a lookup is in progress
+dim dns_server1 as string(15)=""				'server for the current lookup
+dim dns_server2 as string(15)=""				'server for every second retry ("" = none)
+dim dns_target_port as word=DNS_SERVER_PORT
+dim dns_cache_pending as boolean=false			'cached answer to deliver on the next timer tick
 
+#if DNS_CACHE
+dim dns_cache_domain as string=""
+dim dns_cache_ip as string(4)=""
+dim dns_cache_time as dword=0
+dim dns_cache_ttl_ms as dword=0
+#endif
+
+declare function dns_send_query() as boolean
 
 #if DNS_DEBUG_PRINT
 declare sub dns_debug_print_status(status as en_dns_status_codes)
@@ -41,7 +61,7 @@ function dns_start(dns_sock_num as byte) as en_dns_status_codes
 	#endif
 
 	dns_start=EN_STATUS_DNS_OK
-	
+
 	if dns_init_flag=DNS_INIT_SIGNATURE then
 		exit function
 	end if
@@ -54,14 +74,14 @@ function dns_start(dns_sock_num as byte) as en_dns_status_codes
 		callback_dns_failure(EN_STATUS_DNS_INVALID_SOCKET)
 		exit function
 	end if
-	
+
 	if sys.freebuffpages<DNS_RX_BUF_SIZE+DNS_TX_BUF_SIZE then
 		x=sys.freebuffpages-DNS_RX_BUF_SIZE-DNS_TX_BUF_SIZE
 		callback_dns_pre_buffrq(x)
 		if sys.freebuffpages<DNS_RX_BUF_SIZE+DNS_TX_BUF_SIZE then
 			#if DNS_DEBUG_PRINT
 				dns_debug_print_status(EN_STATUS_DNS_INSUFFICIENT_BUFFER_SPACE)
-			#endif		
+			#endif
 			dns_start=EN_STATUS_DNS_INSUFFICIENT_BUFFER_SPACE
 			callback_dns_failure(EN_STATUS_DNS_INSUFFICIENT_BUFFER_SPACE)
 			exit function
@@ -74,174 +94,273 @@ function dns_start(dns_sock_num as byte) as en_dns_status_codes
 	sock.rxbuffrq(DNS_RX_BUF_SIZE)
 	sys.buffalloc
 	sock.protocol=PL_SOCK_PROTOCOL_UDP
-	sock.inconmode=PL_SOCK_INCONMODE_ANY_IP_ANY_PORT
+	'accept datagrams only from the DNS server we asked (was: from anyone)
+	sock.inconmode=PL_SOCK_INCONMODE_SPECIFIC_IPPORT
 	sock.reconmode=PL_SOCK_RECONMODE_3
 	sock.allowedinterfaces = sock.availableinterfaces
+	dns_busy=false
+	dns_domain=""
 	dns_init_flag=DNS_INIT_SIGNATURE
 end function
 
 function dns_connect(interface as pl_sock_interfaces, byref dns_server_ip as string, dns_port as word) as en_dns_status_codes
-	
+	dim current_sock as byte=sock.num
+	dim interface_ok as boolean=false
+
 	if dns_init_flag<>DNS_INIT_SIGNATURE then
 		#if DNS_DEBUG_PRINT
 			dns_debug_print_status(EN_STATUS_DNS_NOT_STARTED)
-		#endif		
+		#endif
 		callback_dns_failure(EN_STATUS_DNS_NOT_STARTED)
 		dns_connect=EN_STATUS_DNS_NOT_STARTED
 		exit function
 	end if
-	
+
 	sock.num=dns_sock
-	sock.targetinterface = interface
-	
+
 	select case interface
 	case PL_SOCK_INTERFACE_NET:
-		if instr(1,sock.allowedinterfaces,"NET",1) then
-			goto l1
-		end if
+		if instr(1,sock.allowedinterfaces,"NET",1) then interface_ok=true
 	case PL_SOCK_INTERFACE_WLN:
-		if instr(1,sock.allowedinterfaces,"WLN",1) then
-			goto l1
-		end if	
+		if instr(1,sock.allowedinterfaces,"WLN",1) then interface_ok=true
 	case PL_SOCK_INTERFACE_PPP:
-		if instr(1,sock.allowedinterfaces,"PPP",1) then
-			goto l1
-		end if	
-	case else
+		if instr(1,sock.allowedinterfaces,"PPP",1) then interface_ok=true
 	end select
-	
-	#if DNS_DEBUG_PRINT
-		dns_debug_print_status(EN_STATUS_DNS_INVALID_INTERFACE)
-	#endif
-	
-	dns_connect=EN_STATUS_DNS_INVALID_INTERFACE
-	exit function 'invalid interface specified	
-l1:	
-	sock.targetinterface = interface
-	if dns_domain<>"" then
-		dns_connect=EN_STATUS_DNS_REQUEST_IN_PROGRESS
+
+	if interface_ok=false then
+		#if DNS_DEBUG_PRINT
+			dns_debug_print_status(EN_STATUS_DNS_INVALID_INTERFACE)
+		#endif
+		dns_connect=EN_STATUS_DNS_INVALID_INTERFACE
+		sock.num=current_sock
 		exit function
 	end if
-	
-    if dns_server_ip<>"" then
-        sock.targetip=dns_server_ip
-    else
-        sock.targetip=DNS_DEFAULT_SERVER
-    end if
-	
-	if dns_port=0 then
-		sock.targetport=DNS_SERVER_PORT
+
+	if dns_busy then
+		dns_connect=EN_STATUS_DNS_REQUEST_IN_PROGRESS
+		sock.num=current_sock
+		exit function
+	end if
+
+	sock.targetinterface = interface
+
+	'Choose the servers. A server given by the caller is used as is. Otherwise the
+	'network's DNS (PPP) comes first and DNS_DEFAULT_SERVER is the alternate.
+	dns_server2=""
+	if dns_server_ip<>"" then
+		dns_server1=dns_server_ip
 	else
-		sock.targetport=dns_port
-	end if	
-	
+		dns_server1=DNS_DEFAULT_SERVER
+#if DNS_USE_CELL_DNS
+		if interface=PL_SOCK_INTERFACE_PPP then
+			dim n1, n2 as string(15)
+			n1=cell_get_dns_server(0)
+			n2=cell_get_dns_server(1)
+			if n1<>"" then
+				dns_server1=n1
+				if n2<>"" then
+					dns_server2=n2
+				else
+					dns_server2=DNS_DEFAULT_SERVER
+				end if
+			end if
+		end if
+#endif
+	end if
+	if dns_server2=dns_server1 then dns_server2=""
+
+	if dns_port=0 then
+		dns_target_port=DNS_SERVER_PORT
+	else
+		dns_target_port=dns_port
+	end if
+	sock.targetip=dns_server1
+	sock.targetport=dns_target_port
+
 	#if DNS_DEBUG_PRINT
-		dim s as string
 		dns_debugprint("conn to "+sock.targetip+":"+str(sock.targetport))
 	#endif
 	dns_connect=EN_STATUS_DNS_OK
 	dns_current_retries=0
+	sock.num=current_sock
 end function
 
+sub dns_close_socket()
+	dim current_sock as byte=sock.num
+	sock.num=dns_sock
+	sock.txclear()
+	sock.rxclear()
+	sock.discard()	'UDP: no need to wait for a close (the old code could block ~1.5 s)
+	sock.num=current_sock
+end sub
+
 sub dns_disconnect()
-	dim i as word
 	if dns_init_flag<>DNS_INIT_SIGNATURE then
 		#if DNS_DEBUG_PRINT
 			dns_debug_print_status(EN_STATUS_DNS_NOT_STARTED)
-		#endif		
+		#endif
 		exit sub
 	end if
-	
-	sock.num=dns_sock
+
 	#if DNS_DEBUG_PRINT
-		dns_debugprint("disc from "+sock.targetip+":"+str(sock.targetport))
+		dns_debugprint("disc")
 	#endif
 	dns_rpl_tmr=0
+	dns_busy=false
+	dns_cache_pending=false
 	dns_domain=""
-	
-	sock.txclear()
-	sock.rxclear()
-	i=sys.timercount
-	sock.close()
-	while sock.statesimple<>PL_SSTS_CLOSED and sys.timercount-i<3 and sys.timercount>=i
-	wend
-	sock.discard()
-	
+	dns_close_socket()
+
+end sub
+
+sub dns_end_lookup()
+'The lookup is over: stop the reply timer and allow new lookups.
+'dns_domain stays readable for the callbacks (dns_current_domain()).
+	dns_rpl_tmr=0
+	dns_busy=false
+	dns_cache_pending=false
+end sub
+
+sub dns_close_if_idle()
+'After the callbacks: close, unless a callback has already started another lookup
+	if dns_busy=false then
+		dns_domain=""
+		dns_close_socket()
+	end if
+end sub
+
+sub dns_deliver(byref ip as string)
+'Success: hands the IP address to the application
+	dim answer as string(4)=ip
+	dns_end_lookup()
+	callback_dns_answer_acquired(EN_DNS_RET_IP,answer)
+	callback_dns_ok()
+	dns_close_if_idle()
+end sub
+
+sub dns_lookup_failed(status as en_dns_status_codes)
+#if DNS_CACHE
+	'No answer from any server: an expired cached address is better than nothing
+	if status=EN_STATUS_DNS_MAX_RETRIES_REACHED and dns_cache_domain=dns_domain and len(dns_cache_ip)=4 then
+		#if DNS_DEBUG_PRINT
+			dns_debugprint("No reply, using the last known address")
+		#endif
+		dns_deliver(dns_cache_ip)
+		exit sub
+	end if
+#endif
+	dns_end_lookup()
+	#if DNS_DEBUG_PRINT
+		dns_debug_print_status(status)
+	#endif
+	callback_dns_failure(status)
+	dns_close_if_idle()
 end sub
 
 sub dns_query(byref query_name as string)
-	dim dns_query_question as string
-	dim query_flag as word
-	dim pos1, pos2, l as byte
-	
+'Starts a lookup. The answer comes through callback_dns_answer_acquired() / callback_dns_ok(),
+'or callback_dns_failure().
+
 	if dns_init_flag<>DNS_INIT_SIGNATURE then
 		#if DNS_DEBUG_PRINT
 			dns_debug_print_status(EN_STATUS_DNS_NOT_STARTED)
-		#endif	
+		#endif
 		callback_dns_failure(EN_STATUS_DNS_NOT_STARTED)
 		exit sub
 	end if
-	
+
+	dns_domain=query_name
+	dns_busy=true
+	dns_current_retries=0
+	dns_rpl_tmr=0
+	dns_cache_pending=false
+
+#if DNS_CACHE
+	'still valid cached answer: deliver it on the next timer tick (not from inside this call)
+	if dns_cache_domain=query_name and len(dns_cache_ip)=4 and sys.timercountms-dns_cache_time<dns_cache_ttl_ms then
+		#if DNS_DEBUG_PRINT
+			dns_debugprint("Cached: "+ddstr(dns_cache_ip))
+		#endif
+		dns_cache_pending=true
+		exit sub
+	end if
+#endif
+
+	'one ID for the whole lookup, so a late reply to an earlier attempt is still accepted
+	dns_id=random(2)
+	dns_send_query()
+
+end sub
+
+function dns_send_query() as boolean
+'Sends (or resends) the query for dns_domain. Returns false when all retries are used up;
+'the caller then reports the failure. This function never calls a callback itself:
+'Tibbo BASIC does not allow recursion, and dns_query() is called from application code
+'that may itself be reached from a DNS callback.
+	dim dns_query_question as string
+	dim pos1, pos2, l as byte
+	dim target as string(15)
+	dim current_sock as byte=sock.num
+
+	dns_send_query=false
 	dns_current_retries=dns_current_retries+1
 	if dns_current_retries>DNS_MAX_RETRIES then
-		callback_dns_failure(EN_STATUS_DNS_MAX_RETRIES_REACHED)
-		dns_disconnect()
-		exit sub
+		exit function
 	end if
 	#if DNS_DEBUG_PRINT
 		if dns_current_retries > 1 then
 			dns_debugprint("Retrying")
 		end if
 	#endif
-	'generate an random id
-	dns_id=random(2)
-	
-	'construct the flag
-	query_flag=val("&b"+DNS_QUERY_FLAG+DNS_OPCODE+DNS_AA+DNS_TC+DNS_RD+DNS_RA+"0000000")
-	
+
+	'convert the name: "www.example.com" -> 3www7example3com0
 	dns_query_question=""
 	pos1=0
-	
-	'convert query name
-	do 
+	do
 		pos2=pos1
-		pos1=instr(pos1+1,query_name,".",1)
+		pos1=instr(pos1+1,dns_domain,".",1)
 		if pos1>0 then
 			l=pos1-pos2-1
 		else
-			l=len(query_name)-pos2
+			l=len(dns_domain)-pos2
 		end if
-		dns_query_question=dns_query_question+chr(l)+mid(query_name,pos2+1,l)		
+		if l>0 then
+			dns_query_question=dns_query_question+chr(l)+mid(dns_domain,pos2+1,l)
+		end if
 	loop while pos1>0
-    dns_domain=query_name
-	
-	'end with chr(0)
 	dns_query_question=dns_query_question+chr(0)
-	
-	'record the length of query name
-	dns_name_len=len(dns_query_question)
-	
-	'query structure id(2)+flag(2)+number of question(2)+number of answer RRs(2)+number of authority RRs(2)+number of additional RRs(2)+query name(?)+query type(2)+query class(2)
-	dns_query_question=dns_id+chr(query_flag/256)+chr(query_flag mod 256)+chr(DNS_NUMBER_QUESTION/256)+chr(DNS_NUMBER_QUESTION mod 256)+chr(0)+chr(0)+chr(0)+chr(0)+chr(0)+chr(0)+dns_query_question+chr(DNS_QUERY_TYPE/256)+chr(DNS_QUERY_TYPE mod 256)+chr(DNS_QUERY_CLASS/256)+chr(DNS_QUERY_CLASS mod 256)
 
-	dns_rpl_tmr=DNS_REPLY_TIMEOUT
+	'header: id(2) flags(2) questions(2) answers(2) authority(2) additional(2), then name, type(2), class(2)
+	dns_query_question=dns_id+chr(DNS_QUERY_FLAGS/256)+chr(DNS_QUERY_FLAGS mod 256)+chr(DNS_NUMBER_QUESTION/256)+chr(DNS_NUMBER_QUESTION mod 256)+chr(0)+chr(0)+chr(0)+chr(0)+chr(0)+chr(0)+dns_query_question+chr(DNS_QUERY_TYPE/256)+chr(DNS_QUERY_TYPE mod 256)+chr(DNS_QUERY_CLASS/256)+chr(DNS_QUERY_CLASS mod 256)
+
+	'every second attempt goes to the alternate server, if there is one
+	target=dns_server1
+	if dns_server2<>"" and (dns_current_retries mod 2)=0 then target=dns_server2
+
 	sock.num=dns_sock
+	if sock.targetip<>target then
+		sock.discard()
+		sock.targetip=target
+		sock.targetport=dns_target_port
+	end if
+	dns_rpl_tmr=DNS_REPLY_TIMEOUT
 	sock.connect
 	sock.setdata(dns_query_question)
 	sock.send
-	
-end sub
+	sock.num=current_sock
+	dns_send_query=true
+
+end function
 
 sub dns_stop()
-	#if DNS_DEBUG_PRINT
-		if dns_init_flag<>DNS_INIT_SIGNATURE then
-				dns_debug_print_status(EN_STATUS_DNS_NOT_STARTED)
-			
-			exit sub
-		end if
-	#endif	
+	if dns_init_flag<>DNS_INIT_SIGNATURE then
+		#if DNS_DEBUG_PRINT
+			dns_debug_print_status(EN_STATUS_DNS_NOT_STARTED)
+		#endif
+		exit sub
+	end if
 	dns_disconnect()
-	dns_init_flag=""
+	dns_init_flag=0
 	'release dns port
 	sock.num=dns_sock
 	sock.discard()
@@ -251,165 +370,199 @@ sub dns_stop()
 	callback_dns_buff_released()
 	#if DNS_DEBUG_PRINT
 		dns_debugprint("---STOP---")
-	#endif	
+	#endif
 end sub
+
+sub dns_skip_name()
+'Skips a domain name in the reply: labels ending with 0, or ending with a 2-byte pointer
+'(the old code read the label length with val() instead of asc(), misreading full names)
+	dim s as string
+	dim b as byte
+	dim n as word
+	do
+		s=sock.getdata(1)
+		if len(s)=0 then exit sub
+		b=asc(s)
+		if b=0 then exit sub
+		if b>=192 then
+			s=sock.getdata(1)	'compression pointer: 2 bytes in total, ends the name
+			exit sub
+		end if
+		n=b
+		s=sock.getdata(n)
+	loop while true
+end sub
+
+function dns_get_word() as word
+	dim s as string(2)=sock.getdata(2)
+	if len(s)<2 then
+		dns_get_word=0
+	else
+		dns_get_word=asc(left(s,1))*256+asc(right(s,1))
+	end if
+end function
 
 sub dns_proc_data()
 	dim s as string
-	dim i,j as word
-	dim number_answer as word
+	dim i, j as word
+	dim flags, rcode, number_question, number_answer, atype, rdlen as word
+	dim ttl as dword
 	dim answer_type as en_dns_return_type
+	dim ip as string(4)
+	dim got_ip as boolean
 
 	if sock.num<>dns_sock then exit sub
 
 	if dns_init_flag<>DNS_INIT_SIGNATURE then
 		#if DNS_DEBUG_PRINT
 			dns_debug_print_status(EN_STATUS_DNS_NOT_STARTED)
-		#endif	
+		#endif
 		callback_dns_failure(EN_STATUS_DNS_NOT_STARTED)
 		exit sub
 	end if
-		
-	'compare id
+
+	'nothing was asked, or the reply is for something else: ignore it, keep waiting
+	if dns_busy=false or dns_cache_pending=true then
+		sock.rxclear()
+		exit sub
+	end if
 	s=sock.getdata(2)
 	if s<>dns_id then
 		#if DNS_DEBUG_PRINT
-			dns_debug_print_status(EN_STATUS_DNS_BAD_ANSWER)
-		#endif	
-		callback_dns_failure(EN_STATUS_DNS_BAD_ANSWER)
+			dns_debugprint("Ignoring reply with unknown ID")
+		#endif
+		sock.rxclear()
 		exit sub
 	end if
-	
-	'analysis flag
-	s=sock.getdata(2)
-	i=asc(left(s,1))*256+asc(right(s,1))
-	s=bin(i)
-	i=len(s)-2
-	s=strgen(16-i,"0")+right(s,i)
-	
-	if left(s,1)<>DNS_RESPONSE_FLAG then
-		#if DNS_DEBUG_PRINT
-			dns_debug_print_status(EN_STATUS_DNS_BAD_ANSWER)
-		#endif		
-		callback_dns_failure(EN_STATUS_DNS_BAD_ANSWER)
-		exit sub		
-	end if
-	
-	if mid(s,9,1)=DNS_RA then
-		#if DNS_DEBUG_PRINT
-			dns_debug_print_status(EN_STATUS_DNS_RECURSIVE_UNAVALIABLE)
-		#endif		
-		callback_dns_failure(EN_STATUS_DNS_RECURSIVE_UNAVALIABLE)
-		exit sub		
-	end if
-	
-	s="&b"+right(s,4)
-	if val(s)=3 then
-		#if DNS_DEBUG_PRINT
-			dns_debug_print_status(EN_STATUS_DNS_NAME_ERROR)
-		#endif	
-		callback_dns_failure(EN_STATUS_DNS_NAME_ERROR)
+
+	flags=dns_get_word()
+	if (flags and &h8000)=0 then	'not a response
+		sock.rxclear()
 		exit sub
 	end if
-	
-	'number of questions
-	s=sock.getdata(2)
-	
-	'number of answers
-	s=sock.getdata(2)
-	number_answer=asc(left(s,1))*256+asc(right(s,1))
-	if number_answer=0 then
-		#if DNS_DEBUG_PRINT
-			dns_debug_print_status(EN_STATUS_DNS_NO_ANSWER)
-		#endif	
-		callback_dns_failure(EN_STATUS_DNS_NO_ANSWER)
+	if (flags and &h0080)=0 then	'RA=0: server won't resolve for us
+		sock.rxclear()
+		dns_lookup_failed(EN_STATUS_DNS_RECURSIVE_UNAVALIABLE)
 		exit sub
 	end if
-	
-	'numer of authority RRs
-	s=sock.getdata(2)
-	
-	'number of additional RRs
-	s=sock.getdata(2)
-	
-	'question
-	s=sock.getdata(dns_name_len)
-	
-	'query type for question
-	s=sock.getdata(2)
-	
-	'query class for question
-	s=sock.getdata(2)
-	
-	for j=1 to number_answer
-		'determin if compress scheme is used
-		s=sock.getdata(1)
-		i=asc(s)
-		if i<=63 then
-			do
-				s=sock.getdata(i)
-				i=val(sock.getdata(1))
-			loop while i>0
-		else
-			s=sock.getdata(1)
+	rcode=flags and &h000F
+	if rcode=3 then	'name does not exist
+		sock.rxclear()
+		dns_lookup_failed(EN_STATUS_DNS_NAME_ERROR)
+		exit sub
+	end if
+	if rcode<>0 then	'server failure / refused: temporary, try again (alternate server)
+		#if DNS_DEBUG_PRINT
+			dns_debugprint("Server error "+str(rcode))
+		#endif
+		sock.rxclear()
+		if dns_send_query()=false then
+			dns_lookup_failed(EN_STATUS_DNS_MAX_RETRIES_REACHED)
 		end if
+		exit sub
+	end if
 
-		'query type for answer
-		s=sock.getdata(2)
-		answer_type=asc(right(s,1))
-		
-		'query class for answer
-		s=sock.getdata(2)
+	number_question=dns_get_word()
+	number_answer=dns_get_word()
+	s=sock.getdata(4)	'authority and additional counts
+	if number_answer=0 then
+		sock.rxclear()
+		dns_lookup_failed(EN_STATUS_DNS_NO_ANSWER)
+		exit sub
+	end if
 
-		'time to live
-		s=sock.getdata(4)
-		
-		'resource data length
-		s=sock.getdata(2)
-		i=asc(left(s,1))*256+asc(right(s,1))
-		
-		'resource data
-		s=sock.getdata(i)
-		
+	'questions
+	for j=1 to number_question
+		dns_skip_name()
+		s=sock.getdata(4)	'type and class
+	next j
+
+	'answers: usually CNAME records followed by one or more A records
+	got_ip=false
+	for j=1 to number_answer
+		dns_skip_name()
+		atype=dns_get_word()
+		s=sock.getdata(2)	'class
+		s=sock.getdata(4)	'time to live
+		ttl=0
+		if len(s)=4 then
+			for i=1 to 4
+				ttl=ttl*256+asc(mid(s,i,1))
+			next i
+		end if
+		rdlen=dns_get_word()
+		if rdlen>255 then
+			s=sock.getdata(255)
+			s=sock.getdata(rdlen-255)	'(not expected for the records we ask for)
+		else
+			s=sock.getdata(rdlen)
+		end if
+		answer_type=atype
+
 		#if DNS_DEBUG_PRINT
 			dim s1 as string
-			select case answer_type
+			s1="type "+str(atype)
+			select case atype
 			case EN_DNS_RET_IP:
 				s1="IP: "+ddstr(s)
-			case EN_DNS_RET_NAME_SERVER:
-				s1="NS: "+s
 			case EN_DNS_RET_CANONICAL_NAME:
-				s1="CNAME: "+s
-			case EN_DNS_RET_POINTER_RECORD:
-				s1="PTR: "+s
-			case EN_DNS_RET_HOST_INFO:
-				s1="HINFO: "+s
-			case EN_DNS_RET_MAIL_EXCHANGE_SERVER:
-				s1="MX: "+s
+				s1="CNAME"
 			end select
 			dns_debugprint(s1)
 		#endif
-		
-		callback_dns_answer_acquired(answer_type,s)
+
+		if atype=EN_DNS_RET_IP and rdlen=4 then
+			'take the first address; the others are alternatives
+			if got_ip=false then
+				got_ip=true
+				ip=s
+#if DNS_CACHE
+				dns_cache_domain=dns_domain
+				dns_cache_ip=ip
+				dns_cache_time=sys.timercountms
+				if ttl>DNS_CACHE_MAX_TTL then ttl=DNS_CACHE_MAX_TTL
+				dns_cache_ttl_ms=ttl*1000
+#endif
+			end if
+		else if atype<>EN_DNS_RET_IP then
+			callback_dns_answer_acquired(answer_type,s)
+		end if
 	next j
-    
-	callback_dns_ok()
-	dns_disconnect()
+	sock.rxclear()
+
+	if got_ip then
+		dns_deliver(ip)
+	else
+		dns_lookup_failed(EN_STATUS_DNS_NO_ANSWER)
+	end if
 end sub
 
 public sub dns_proc_timer()
+	dim current_sock as byte
+
 	if dns_init_flag<>DNS_INIT_SIGNATURE then exit sub
-	sock.num=dns_sock
+
+	if dns_cache_pending then
+		dns_cache_pending=false
+		#if DNS_CACHE
+			dns_deliver(dns_cache_ip)
+		#endif
+		exit sub
+	end if
+
 	if dns_rpl_tmr>0 then
 		dns_rpl_tmr=dns_rpl_tmr-1
 		if dns_rpl_tmr=0 then
 			#if DNS_DEBUG_PRINT
 				dns_debug_print_status(EN_STATUS_DNS_REPLY_TIMEOUT)
 			#endif
-			dns_query(dns_domain)
-			exit sub
+			current_sock=sock.num	'(the old code changed sock.num on every tick)
+			if dns_send_query()=false then
+				dns_lookup_failed(EN_STATUS_DNS_MAX_RETRIES_REACHED)
+			end if
+			sock.num=current_sock
 		end if
-	end if	
+	end if
 end sub
 
 function dns_current_domain() as string
@@ -436,13 +589,17 @@ sub dns_debug_print_status(status as en_dns_status_codes)
 	case EN_STATUS_DNS_REPLY_TIMEOUT:
 		s="Cannot get reply from DNS server."
 	case EN_STATUS_DNS_RECURSIVE_UNAVALIABLE:
-		s="Recursive query is unavliable for the destinated DNS server."
+		s="Recursive query is unavailable on this DNS server."
 	case EN_STATUS_DNS_NAME_ERROR:
 		s="Invalid domain name."
 	case EN_STATUS_DNS_NO_ANSWER:
-		s="There is no anwser for the domain name."
+		s="There is no answer for the domain name."
 	case EN_STATUS_DNS_BAD_ANSWER:
-		s="Unable to resolve the the answer from DNS server."
+		s="Unable to resolve the answer from DNS server."
+	case EN_STATUS_DNS_REQUEST_IN_PROGRESS:
+		s="Another lookup is in progress."
+	case EN_STATUS_DNS_MAX_RETRIES_REACHED:
+		s="No reply after all retries."
 	end select
 	dns_debugprint("ERROR: "+s)
 end sub
@@ -451,7 +608,7 @@ end sub
 #if DNS_DEBUG_PRINT
 sub dns_debugprint(byref print_data as string)
 	dim s as string
-	
+
 	s = DNS_STAMP+print_data+DNS_CR_LF
 	callback_dns_debugprint(s)
 	#if DNS_DEBUG_PRINT = 2

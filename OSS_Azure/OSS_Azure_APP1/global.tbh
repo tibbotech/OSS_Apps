@@ -1,8 +1,8 @@
 'DEFINES-------------------------------------------------------------
 
 const OSS_APP_FW_VER="AZR2.10.03"
-const OSS_PIC_16LF18345_FW_VER = "039"
-const OSS_PIC_16LF18345_FW_FILE = "OSS_SUPR_PIC_FW_039.hex"
+const OSS_PIC_16LF18345_FW_VER = "038"
+const OSS_PIC_16LF18345_FW_FILE = "OSS_SUPR_PIC_FW_038.hex"
 
 const OSS_PIC_16LF18346_FW_VER = "044"
 const OSS_PIC_16LF18346_FW_FILE = "OSS_SUPR_PIC_FW_044.hex"
@@ -41,10 +41,6 @@ includepp "tables.xtxt"
 #define AWKE_TIME_FOR_CELL 4 'Maximum awake time when comm mode is in LTE (4 minutes)
 #define TBL_ADJUST_LIST_WHEN_FULL 0  'adjust table size as soon as record is deleted
 #define TBL_SECTOR_SIZE 512
-#define MQTT_CER_FILE "DigiCert.cer"
-#define HTTP_CER_FILE "DigiCert.cer"
-'#define MQTT_CER_FILE "ca.cer"
-'#define HTTP_CER_FILE "ca.cer"
 
 #define MQTT_LARGE_PACKETS 1
 #define HTTP_TX_BUFF 6
@@ -55,6 +51,9 @@ includepp "tables.xtxt"
 #define FILENUM_MAX_FILES 4
 #define MODBUS_TIMEOUT 10000
 
+
+const AZURE_CER_FILE = "DigiCert.cer"
+const DOCKER_CER_FILE = "ca.cer"
 
 const APP_FW_FILE="APP_FW"
 const PART_FILE="part"
