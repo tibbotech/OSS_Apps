@@ -155,11 +155,10 @@ sub callback_stg_pre_get(byref stg_name_or_num as string,index as byte,byref stg
 		case else:
 	end select
 
-	#if DEVICE_DEBUG_PRINT
-		if debug_string<>"" then
-			device_debug_print(debug_string)
-		end if
-	#endif
+	
+	if debug_string<>"" then
+		device_debug_print(debug_string)
+	end if
 
 end sub    
 
@@ -199,11 +198,9 @@ sub callback_stg_post_set(byref stg_name_or_num as string, index as byte,byref s
 		end if
     end select
 	
-	#if DEVICE_DEBUG_PRINT
-		if debug_string<>"" then
-			device_debug_print(debug_string)
-		end if
-	#endif	
+	if debug_string<>"" then
+		device_debug_print(debug_string)
+	end if
 end sub
         
 sub callback_stg_eeprom_set(byref stg_name_or_num as string, index as byte,byref stg_value as string)
@@ -688,12 +685,10 @@ sub device_sleep()
 	
 	next_boot_ts = next_sensor_read_ts - boot_up_delay
 	
-	#if DEVICE_DEBUG_PRINT
-		dim ts as string	
-		time_to_str(ts,daycounts,mincounts, seconds,YES)
-		device_debug_print("(Sleep) Now:" + ts)
-	#endif
-	
+	dim ts as string(64)	
+	time_to_str(ts,daycounts,mincounts, seconds,YES)
+	device_debug_print("(Sleep) Now:" + ts)
+
 'if current time is already exceed the time for next read, wake up in 1 cycle time from now
 	if next_boot_ts <=  current_ts then
 		next_boot_ts = current_ts + (sleep_time*60)
@@ -701,10 +696,8 @@ sub device_sleep()
 
 	device_serialized_to_time(next_boot_ts, daycounts, mincounts, seconds)
 	
-	#if DEVICE_DEBUG_PRINT
-		time_to_str(ts,daycounts,mincounts, seconds,YES)
-		device_debug_print("Sleep till:" + ts)
-	#endif
+	time_to_str(ts,daycounts,mincounts, seconds,YES)
+	device_debug_print("Sleep till:" + ts)
 	
 	if sys.runmode = PL_SYS_MODE_RELEASE then
 		sys.sleep(daycounts, mincounts, seconds)  
@@ -790,6 +783,25 @@ sub device_add_event(device_event as en_device_events, byref parameter as string
 	#endif
 	fd.filenum = f
 	azure_send_telemetry()
+end sub
+
+sub device_debugprint_to_event(byref event_msg as string)
+	dim daycounts, mincounts as word
+	dim seconds as byte
+	dim tbl_result as en_tbl_status_codes	
+	dim ts as string(36) 
+	dim f as byte
+	
+	rand_event_num = rand_event_num+1
+	f=fd.filenum
+	rtc.getdata(daycounts,mincounts,seconds)
+	time_to_str(ts,daycounts,mincounts,seconds,YES)
+	
+	ts=ts+"."+str(rand_event_num)+"Z"	
+	
+	tbl_result = add_telemetry("event",event_msg,ts)
+	
+	fd.filenum = f
 end sub
 
 function app_fw_copy_part_to_file() as ok_ng
@@ -1819,8 +1831,8 @@ sub delay_ms(ms as dword)
 
 end sub
 
-#if DEVICE_DEBUG_PRINT
 sub device_debug_print(byref data as string)
+#if DEVICE_DEBUG_PRINT
 	dim s as string	
 	s = "Device> "+data+CR_LF
 	alternate_debugprint("DEV", s)
@@ -1828,8 +1840,9 @@ sub device_debug_print(byref data as string)
 	#if DEVICE_DEBUG_PRINT = 2
 		sys.debugprint(s)
 	#endif
-end sub
 #endif
+end sub
+
 
 sub decimal_point_converter(byref value as string, decimal as byte)
 	dim negative as no_yes = NO

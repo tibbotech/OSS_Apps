@@ -17,13 +17,6 @@
 	#define MQTT_TX_BUFF 16
 #endif
 
-' RETAIN flag on published messages: 1 = the broker keeps the last message of each
-' topic and sends it to new subscribers (the library's original behavior), 0 = off.
-#ifndef MQTT_RETAIN
-	#define MQTT_RETAIN 1
-#endif
-
-' Ping interval in seconds. The CONNECT keep alive is set to twice this value.
 #ifndef MQTT_PING_TIMER
 	#define MQTT_PING_TIMER 30
 #endif
@@ -108,8 +101,8 @@ declare sub callback_mqtt_notif(byref topic as string,byref data as string, byre
 '<b>data</b> - Data received
 '<b>length</b> - Total number of bytes remaining to be received. When this value is 0, the entire packet has been sent.
 
-declare function callback_mqtt_open_romfile() as dword
 declare sub callback_mqtt_debugprint(byref debug_msg as string)
+declare function callback_mqtt_open_romfile() as dword
 
 #if MQTT_LARGE_PACKETS 
 

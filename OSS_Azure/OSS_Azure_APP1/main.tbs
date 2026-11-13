@@ -130,9 +130,7 @@ sub on_sys_dhcp_ok(renew as no_yes, interface as pl_sock_interfaces, ip as strin
 		sys.reboot
 	end if
 
-	#if DEVICE_DEBUG_PRINT
-		device_debug_print("WLN DHCP OK (IP:"+ip+", GI:"+gateway_ip+", NM:"+ netmask +")")
-	#endif
+	device_debug_print("WLN DHCP OK (IP:"+ip+", GI:"+gateway_ip+", NM:"+ netmask +")")
 		
 	if wln.ip<>ip then
 		sock.inconenabledmaster=NO

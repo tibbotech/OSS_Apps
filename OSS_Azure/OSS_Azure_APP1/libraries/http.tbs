@@ -21,7 +21,6 @@ dim http_content_length_seen as boolean = false
 dim http_body_until_close as boolean = false	'no length and not chunked: body ends when the server closes
 dim http_chunk_state as byte = HTTP_CHUNK_SIZE
 dim http_buffers_ready as boolean = false
-dim http_tls_buff_ready as boolean = false
 
 declare function http_proc_step() as boolean
 
@@ -58,7 +57,6 @@ sub http_stop()
 	http_start_called=false
 	'the next http_start() may get another socket
 	http_buffers_ready=false
-	http_tls_buff_ready=false
 
 end sub
 
@@ -531,12 +529,15 @@ sub http_init_request_socket()
 			sock.tlsdeinit()
 			sock.num=http_request_item.socket
 		end if
-#if PLATFORM_ID<>WM2000
-		if http_tls_buff_ready=false then
-			sock.tlsbuffrq(HTTP_TLS_BUFF_PAGES)
-			sys.buffalloc()
-			http_tls_buff_ready=true
+		'release this socket's own TLS session if a previous request left it
+		if sock.tlscurrentnum=http_request_item.socket then
+			sock.tlsdeinit()
 		end if
+#if PLATFORM_ID<>WM2000
+		'request the TLS buffer for every HTTPS request, as the original library did
+		'(tlsdeinit() releases it)
+		sock.tlsbuffrq(HTTP_TLS_BUFF_PAGES)
+		sys.buffalloc()
 #endif
 		dim b as pl_tls_result
 		b=sock.tlsinit(callback_http_open_romfile())

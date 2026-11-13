@@ -41,6 +41,7 @@ declare sub battery_init()
 declare sub modbus_power(power as EN_MODBUS_POWER)
 declare function add_telemetry(byref telemetry_name as string, byref telemetry_value as string, byref ts as string) as en_tbl_status_codes
 declare sub battery_log()
+declare sub device_debugprint_to_event(byref event_msg as string)
 
 declare modbus_device_id as byte
 declare command_issued as no_yes
@@ -103,9 +104,7 @@ sub boot()
     end if
 	
 	if stg_init_code<>EN_STG_STATUS_OK then
-		#if DEVICE_DEBUG_PRINT
-			device_debug_print("Setting init failed.")
-		#endif
+		device_debug_print("Setting init failed.")
 	end if
 
 	dim CELL__AT_APN as string(24) = "internet.iot"			'<-- CHANGE THIS AS NEEDED
@@ -123,14 +122,10 @@ sub boot()
 	'================================================================
 	select case mcp23017_init("TBT00_3_S5", YES, TBT00_3_S5_CLK, TBT00_3_S5_DATA, TBT00_3_S5_CHANNEL)
 	case MCP23017_SELF_TEST_FAIL:
-		#if DEVICE_DEBUG_PRINT
-			device_debug_print("mcp23017 self test failed!")
-		#endif
+		device_debug_print("mcp23017 self test failed!")
 		if sys.runmode = PL_SYS_MODE_DEBUG then sys.halt
 		pat.play("R-R-~",PL_PAT_CANINT)
-		#if DEVICE_DEBUG_PRINT
-			device_debug_print("mcp2307 init failed.")
-		#endif
+		device_debug_print("mcp2307 init failed.")
 	case MCP23017_NO_SSI_AVAILABLE:
 		sys.debugprint("SSI channel could not be allocated, using bit banging instead.\r\n")
 	end select		
@@ -395,7 +390,7 @@ end sub
 sub alternate_debugprint(byref source as string, byref msg as string)
 	
 	#if SYS_EVENT_DEBUGPRINT
-		device_add_event(EVENT_DEBUG_INFO, msg)
+		device_debugprint_to_event(msg)
 	#endif
 
 	select case SYS_SOCK_DEBUGPRINT
@@ -660,26 +655,21 @@ sub check_and_upgrade_sns_pic()
 	ver = ver + chr(si2c_read(true))
 	ver = ver + chr(si2c_read(true))
 	si2c_stop()
-	#if DEVICE_DEBUG_PRINT
-		device_debug_print("Current SNS version: " + ver)
-	#endif
+	device_debug_print("Current SNS version: " + ver)
 	
 	if (ver <> OSS_SNS_FW_VER) then
 		' FLASHING
 		pic_lvp_start(SENSOR_CLK_PIN, SENSOR_DAT_PIN, SENSOR_CONTROL_PIN)
 		if not pic_lvp_upload_firmware(OSS_SNS_PIC_FILE) then
-			#if DEVICE_DEBUG_PRINT
-				device_debug_print("SNS PIC FW upgraded failed!")
-			#endif
+			device_debug_print("SNS PIC FW upgraded failed!")
 			if ver = "\xFF\xFF\xFF" then
 				device_add_event(EVENT_SENSOR_NOT_FOUND, "")
 			else
 				device_add_event(EVENT_SENSOR_UPGRADE_FAIL, "")
 			end if
 		else
-			#if DEVICE_DEBUG_PRINT
-				device_debug_print("SNS PIC FW upgraded!")
-			#endif
+
+			device_debug_print("SNS PIC FW upgraded!")
 			sys.reboot()			
 		end if
 	end if	
@@ -692,9 +682,7 @@ sub check_and_upgrade_supr_pic()
 	dim latest_fw_ver as string(3)
 	dim pic_fw_file_name as string(32)
 	
-	#if DEVICE_DEBUG_PRINT
-		device_debug_print("Current PIC version: " + ver)
-	#endif
+	device_debug_print("Current PIC version: " + ver)
 	
 	'check if it is the old PIC
 	if val(ver) <= val(OSS_PIC_16LF18345_FW_VER) then
@@ -711,9 +699,7 @@ sub check_and_upgrade_supr_pic()
 	if low_voltage_detected = YES and stg_get("PSRC",0) = "3" then exit sub
 	
 	if ver <> latest_fw_ver then
-		#if DEVICE_DEBUG_PRINT
-			device_debug_print("Running PIC: "+ver+ "/ Current PIC: "+pic_fw_file_name)
-		#endif
+		device_debug_print("Running PIC: "+ver+ "/ Current PIC: "+pic_fw_file_name)
 		pic_write(&h30,"\x77")
 		enter_LVP_mode()
 		upgrade_success = pic_lvp_upload_firmware(pic_fw_file_name)

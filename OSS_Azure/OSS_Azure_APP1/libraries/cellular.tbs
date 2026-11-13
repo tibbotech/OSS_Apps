@@ -2481,9 +2481,10 @@ sub cell_log(level as byte, byref message as string)
     if level > CELL_LOG_LEVEL then
         exit sub
     end if
-	
-	callback_cell_debugprint("cell>" + message +"\x0d\x0a")
-	#if CELL_DEBUG_PRINT = 2
-		sys.debugprint("cell>" + message +"\x0d\x0a")
+	#if CELL_DEBUG_PRINT
+		callback_cell_debugprint("cell>" + message +"\x0d\x0a")
+		#if CELL_DEBUG_PRINT = 2
+			sys.debugprint("cell>" + message +"\x0d\x0a")
+		#endif
 	#endif
 end sub
