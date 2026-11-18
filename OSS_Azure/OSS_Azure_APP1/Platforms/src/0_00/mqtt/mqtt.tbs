@@ -102,14 +102,14 @@ sub mqtt_start(target_interface as pl_sock_interfaces, byref server as string, d
 
 	#if TLS_AVAILABLE=0
 		if encrypted=true then
-			#if MQTT_DEBUG_PRINT		'FIX 16: was unguarded -> compile error without debug print
+			#if MQTT_DEBUG_PRINT		'was unguarded -> compile error without debug print
 				mqtt_debugprint("Device does not support TLS")
 			#endif
 			exit sub
 		end if
 	#endif
 
-	'FIX 15: check resources BEFORE marking the library as initialized
+	'check resources BEFORE marking the library as initialized
 	mqtt_sock_num=sock_get("MQT")
 	if mqtt_sock_num=255 then
 		#if MQTT_DEBUG_PRINT
@@ -199,7 +199,7 @@ end if
 end function
 
 sub mqtt_send_login()
-	'FIX 12: keep-alive follows MQTT_PING_TIMER (we ping every MQTT_PING_TIMER seconds,
+	'keep-alive follows MQTT_PING_TIMER (we ping every MQTT_PING_TIMER seconds,
 	'keep-alive is twice that for margin; 60 s with the default of 30), the password is
 	'only sent when there is one, and clean session is selectable with MQTT_CLEAN_SESSION.
 	dim buf, client_id, user_id, password as string
@@ -238,14 +238,14 @@ end sub
 
 sub mqtt_connect_socket()
 
-	'FIX 4: make sure the socket is really closed before connecting again,
+	'make sure the socket is really closed before connecting again,
 	'otherwise sock.connect() is silently ignored on a still-open socket.
 	sock.num=mqtt_sock_num
 	if sock.statesimple<>PL_SSTS_CLOSED then
 		sock.discard()
 	end if
 
-	'FIX 3: start every connection with a clean parser and clean buffers,
+	'start every connection with a clean parser and clean buffers,
 	'so a half-received packet from the old session can't corrupt CONNACK.
 	proc_data_state=EN_MQTT_PD_STATES_READING_HEADER
 	sock.rxclear()
@@ -361,7 +361,7 @@ sub mqtt_sub(byref topic as string,qos as en_qos_choices)
 	dim buf as string
 	dim current_sock as byte = sock.num
 	
-	'FIX 8: reject packets that would not fit into a 255-byte string
+	'reject packets that would not fit into a 255-byte string
 	if len(topic)+5>MQTT_MAX_REMAINING then
 		#if MQTT_DEBUG_PRINT
 			mqtt_debugprint("ERROR: subscribe topic too long, not sent.")
@@ -394,7 +394,7 @@ sub mqtt_unsub(byref topic as string)
 	dim buf as string
 	dim current_sock as byte = sock.num
 	
-	'FIX 8: reject packets that would not fit into a 255-byte string
+	'reject packets that would not fit into a 255-byte string
 	if len(topic)+4>MQTT_MAX_REMAINING then
 		#if MQTT_DEBUG_PRINT
 			mqtt_debugprint("ERROR: unsubscribe topic too long, not sent.")
@@ -414,7 +414,7 @@ end sub
 
 sub mqtt_ping()
 	
-	'FIX 5: never decrement below 0 (word underflow -> ~9 h without ping),
+	'never decrement below 0 (word underflow -> ~9 h without ping),
 	'and always reload the counter when it expires.
 	if mqtt_ping_counter>0 then mqtt_ping_counter=mqtt_ping_counter-1
 	if mqtt_ping_counter>0 then exit sub
@@ -463,7 +463,7 @@ sub mqtt_proc_timer()
 				#if MQTT_DEBUG_PRINT
 					mqtt_debugprint("Unable to log in to server...")
 				#endif
-				'FIX 4: close the socket, not just change the state
+				'close the socket, not just change the state
 				mqtt_drop_connection()
 			end select
 		end if
@@ -479,7 +479,7 @@ sub mqtt_sock_event(newstate as enum pl_sock_state, newstatesimple as enum pl_so
 		exit sub 
 	end if 
 	
-	'FIX 20: react to ANY closed state (refused, reset, timeout, interface down...),
+	'react to ANY closed state (refused, reset, timeout, interface down...),
 	'except our own sock.discard(), which is already handled where it is called.
 	if newstatesimple=PL_SSTS_CLOSED then
 		if newstate<>PL_SST_CL_DISCARDED_CMD and mqtt_state<>EN_MQTT_STATES_IDLE and mqtt_state<>EN_MQTT_STATES_NOT_CONNECTED then
@@ -569,11 +569,11 @@ sub mqtt_proc_data()
 		mqtt_proc_data_variables.message_type=asc(left(buf,1))
 		mqtt_proc_data_variables.qos=(mqtt_proc_data_variables.message_type and &h06) shr 1
 		mqtt_proc_data_variables.message_type=(mqtt_proc_data_variables.message_type and &hF0)
-		mqtt_sock_getdata(mqtt_proc_data_variables.fixed_header_length)		'FIX 21: busy-wait removed		
+		mqtt_sock_getdata(mqtt_proc_data_variables.fixed_header_length)		'busy-wait removed		
 	end if
 
 	if mqtt_proc_data_variables.message_type<>PUBLISH then
-		'FIX 10: control packets are small; anything bigger than one string is unexpected.
+		'control packets are small; anything bigger than one string is unexpected.
 		'Wait until the WHOLE packet is in the buffer before consuming it.
 		if mqtt_proc_data_variables.remaining_length>MQTT_MAX_REMAINING then
 			#if MQTT_DEBUG_PRINT
@@ -593,7 +593,7 @@ sub mqtt_proc_data()
 	select case (mqtt_proc_data_variables.message_type)
 		
 		case CONNACK:	proc_data_state=EN_MQTT_PD_STATES_READING_HEADER
-						'FIX 11: byte 2 of CONNACK is the return code, 0 = accepted
+						'byte 2 of CONNACK is the return code, 0 = accepted
 						rc=255
 						if len(buf)>=2 then rc=asc(mid(buf,2,1))
 						if rc<>0 then
@@ -613,7 +613,7 @@ sub mqtt_proc_data()
 						callback_mqtt_connect_ok()
 		
 		case PUBLISH:	if proc_data_state=EN_MQTT_PD_STATES_READING_PAYLOAD then
-							'FIX 9: PEEK the variable header first and only consume it
+							'PEEK the variable header first and only consume it
 							'once topic (and packet id) are completely in the buffer.
 							if mqtt_sock_peeklen()<2 then exit sub
 							buf=mqtt_sock_peekdata(2)
@@ -685,7 +685,7 @@ sub mqtt_proc_data()
 						proc_data_state=EN_MQTT_PD_STATES_READING_HEADER
 		
 		case SUBACK:	proc_data_state=EN_MQTT_PD_STATES_READING_HEADER
-						'FIX 11: SUBACK = packet id (2 bytes) + one return code per topic, &h80 = failure
+						'SUBACK = packet id (2 bytes) + one return code per topic, &h80 = failure
 						rc=0
 						if len(buf)<3 then rc=&h80
 						for i=3 to len(buf)
@@ -754,7 +754,7 @@ sub mqtt_send_data(data as string)
 	dim tmr as dword
 	dim length as byte=len(data)
 	tmr=sys.timercountms
-	'FIX 1: tmr is only reset when bytes were actually written, so the
+	'tmr is only reset when bytes were actually written, so the
 	'MQTT_TIMEOUT now really ends the loop when the TX buffer stays full.
 	while length>0 and sys.timercountms-tmr<MQTT_TIMEOUT
 		if mqtt_encrypted=true then
@@ -771,7 +771,7 @@ sub mqtt_send_data(data as string)
 			dim b as byte=sock.tlssetdata(data)
 			if b>0 then
 				length=length-b
-				data=right(data,length)		'FIX 2: keep the UNSENT tail
+				data=right(data,length)		'keep the UNSENT tail
 				sock.send
 				tmr=sys.timercountms
 			end if
@@ -851,7 +851,7 @@ sub mqtt_publish(byref topic as string, byref data as string, qos as en_qos_choi
 	dim remaining_length as byte
 
 
-	'FIX 8: reject packets that would not fit into a 255-byte string
+	'reject packets that would not fit into a 255-byte string
 	'(otherwise the packet is truncated while its header announces the full length)
 	dim needed as word=len(topic)
 	needed=needed+len(data)+2
@@ -873,7 +873,7 @@ sub mqtt_publish(byref topic as string, byref data as string, qos as en_qos_choi
 		buf=chr(0)+chr(len(topic))+topic+mqtt_get_packet_identifier()+data
 	end if
 	
-	buf=chr(PUBLISH+(qos*2))+mqtt_build_remaining_length(len(buf)) + buf	'FIX 7: RETAIN flag removed
+	buf=chr(PUBLISH+(qos*2))+mqtt_build_remaining_length(len(buf)) + buf	'RETAIN flag removed
 
 	mqtt_send_data(buf)
 	mqtt_ping_counter=MQTT_PING_TIMER*2
@@ -897,7 +897,7 @@ sub mqtt_start_publish(byref topic as string, qos as en_qos_choices, length as d
 	end if
 	if mqtt_state<>EN_MQTT_STATES_LOGGED_IN then exit sub
 
-	'FIX 8: topic header must fit in one string, total must fit in a 2-byte remaining length
+	'topic header must fit in one string, total must fit in a 2-byte remaining length
 	dim needed as dword=len(topic)
 	needed=needed+2
 	if qos<>QOS_AT_MOST_ONCE then needed=needed+2
@@ -927,7 +927,7 @@ sub mqtt_start_publish(byref topic as string, qos as en_qos_choices, length as d
 	else
 		buf=chr(0)+chr(len(topic))+topic+mqtt_get_packet_identifier()
 	end if
-	buf=chr(PUBLISH+(qos*2))+mqtt_build_remaining_length(len(buf) + length) + buf	'FIX 7: RETAIN flag removed
+	buf=chr(PUBLISH+(qos*2))+mqtt_build_remaining_length(len(buf) + length) + buf	'RETAIN flag removed
 	mqtt_send_data(buf)	
 
 end sub

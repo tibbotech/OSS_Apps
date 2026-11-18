@@ -11,6 +11,8 @@ const AZURE_API_VERSION="?api-version=2019-03-31"
 const AZURE_MQTT_API_VERSION="?api-version=2021-04-12"
 const TOPIC_TIMESTAMP="iothub-creation-time-utc="
 const AZURE_CONNECTION_TOUT=150
+const AZURE_MQTT_MAX_REMAINING=252		'largest MQTT packet (topic+payload+2) mqtt_publish() sends in one piece
+const AZURE_CREATION_TS_RESERVE=26		'room kept for ,"creationTS":"<10 digits>" added after the records
 
 dim azure_state as en_azure_states=EN_AZURE_NOT_INITIALIZED
 dim azure_rid as dword=0
@@ -33,16 +35,21 @@ dim azure_assigned_status as boolean
 dim azure_timer as byte = 0
 dim azure_interface as pl_sock_interfaces
 dim azure_telemetry_ts as string(36) = ""
+dim azure_telemetry_count as word = 0
+dim azure_lookup_clock_valid as boolean = false	'was the clock set when the DPS lookup was signed?		'number of records included in the telemetry message in flight
 declare azure_current_url as string
 declare mqtt_sock_num as byte
 declare mqtt_state as en_mqtt_states
 
-declare function azure_generate_sas_token(byref resourceUri as string, byref signingKey as string, expiresInMins as word) as string
+declare function azure_generate_sas_token(byref resourceUri as string, byref signingKey as string, expiresInMins as dword) as string
 declare sub azure_debugprint(byref print_data as string)
 declare sub azure_dps_device_provisioning()
 declare sub azure_http_reset()
 declare sub azure_mqtt_start()
 declare sub azure_send_server_bound_msg(byref ts as string, byref json as string)
+declare sub azure_delete_sent_records()
+declare function azure_telemetry_budget(byref ts as string) as word
+declare function azure_encode_ts(byref ts as string) as string
 
 public sub azure_start(byref device_id as string, byref scope_id as string, byref dps_url as string, byref symmetricKey as string, interface as pl_sock_interfaces)
 '	azure_init_flag=AZURE_INIT_SIGNATURE
@@ -109,8 +116,16 @@ public sub azure_on_disconnected()
 		azure_debugprint("Disconnected from server.")
 	#endif
 	
-	azure_state=EN_AZURE_NOT_CONNECTED
+	'the MQTT library reconnects by itself. Don't go back to NOT_CONNECTED
+	'(that would call azure_mqtt_start() again); just wait for the reconnect, and
+	'let the normal connection timeout handle the case where it never comes back.
+	azure_state=EN_AZURE_DEVICE_LOOKUP
+	azure_timer=AZURE_CONNECTION_TOUT
+	#if AZURE_DEBUG_PRINT
+		if azure_telemetry_ts<>"" then azure_debugprint("TELEMETRY not confirmed before disconnect, will resend: ts="+azure_telemetry_ts)
+	#endif
 	azure_telemetry_ts=""
+	azure_telemetry_count=0
 	callback_azure_on_disconnected()
 end sub
 
@@ -126,16 +141,17 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string, byref
 	dim item_name as string
 	dim value as string
 	dim s as string
-	dim rid as string = 0
+	dim rid as string = "0"
 	dim c as byte=0
 	
 	'normal command
 	if instr(1,topic,AZURE_TOPIC_METHOD,1)>0 then
 		dim topic_len as byte=len(AZURE_TOPIC_METHOD)
 		pos1=instr(topic_len+1,topic,"/",1)
+		if pos1=0 then pos1=len(topic)+1		'no "/" after the method name
 		item_name=mid(topic,topic_len+1,pos1-topic_len-1)
 		pos1=instr(topic_len+1,topic,"$rid=",1)
-		rid=right(topic, len(topic)-pos1-4)
+		if pos1>0 then rid=right(topic, len(topic)-pos1-4)
 		callback_azure_command_triggered(item_name,data,rid)
 		#if AZURE_DEBUG_PRINT
 			azure_debugprint("Command: "+item_name+" Data: "+data)
@@ -147,7 +163,17 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string, byref
 	if instr(1,topic,device_bound_message_topic,1) then
 		dim topic_len as byte=len(topic)
 		pos1=instr(1,topic,"method-name",1)
+		'a cloud-to-device message without method-name is not a command
+		if pos1=0 then
+			#if AZURE_DEBUG_PRINT
+				azure_debugprint("C2D message without method-name ignored: "+topic)
+			#endif
+			exit sub
+		end if
 		item_name=right(topic,topic_len-pos1-len("method-name"))
+		'stop at the next property in the bag (&...)
+		pos2=instr(1,item_name,"&",1)
+		if pos2>0 then item_name=left(item_name,pos2-1)
 		callback_azure_command_triggered(item_name,data,rid)
 		#if AZURE_DEBUG_PRINT
 			azure_debugprint("Command: "+item_name+" Data: "+data)
@@ -179,14 +205,16 @@ public sub azure_proc_mqtt_msg(byref topic as string,byref data as string, byref
 			
 			do 
 				if remaining_byte > 0 then
+					'never read past the end of this MQTT packet, and count
+					'what was actually received, not what was asked for.
 					dim get_byte as byte = 255 - len(data)
-					
-					if get_byte > remaining_byte then
-						remaining_byte = 0
-					else
-						remaining_byte = remaining_byte - get_byte
+					if get_byte > remaining_byte then get_byte = remaining_byte
+					if get_byte > 0 then
+						sock.num=mqtt_sock_num		'make sure we read from the MQTT socket
+						dim chunk as string = sock.tlsgetdata(get_byte)
+						remaining_byte = remaining_byte - len(chunk)
+						data = data + chunk
 					end if
-					data = data + sock.tlsgetdata(get_byte)
 				end if
 
 				pos1 = instr(1,data,"\x22",1)
@@ -277,7 +305,7 @@ public sub azure_proc_timer()
 	case EN_AZURE_NOT_CONNECTED:
 		callback_azure_get_assigned_hub(azure_assigned_hub)
 		if azure_assigned_hub <> "" and get_timestamp(EN_TS_RTC_UPDATED) > 0 then
-			azure_mqtt_start()
+			azure_mqtt_start()		'resets azure_timer
 			azure_state = EN_AZURE_DEVICE_LOOKUP
 		else
 			azure_device_lookup()
@@ -306,17 +334,22 @@ public sub azure_proc_timer()
 end sub	
 
 public function azure_update_json(byref original as string, byref attribute as string, byref value as string) as string
-	if len(original) + len(attribute) + len(value) > 255 then
+	'too long -> return the original unchanged instead of "" (which lost all data)
+	if len(original) + len(attribute) + len(value) + 7 > 255 then
+		#if AZURE_DEBUG_PRINT
+			azure_debugprint("JSON too long, \x22"+attribute+"\x22 not added")
+		#endif
+		azure_update_json=original
 		exit function
 	end if
 	
+	'stop when the string is empty (the old loop never ended if there was no "}")
+	while original<>"" and right(original,1)<>"}"
+		original=left(original,len(original)-1)
+	wend
 	if original="" then
 		original="{}"
 	end if
-	
-	while right(original,1)<>"}"
-		original=left(original,len(original)-1)
-	wend
 		
 	if original="{}" then
 		if left(value,1)="{" and right(value,1)="}" then
@@ -370,33 +403,61 @@ public sub azure_send_telemetry()
 	end if
 	dim ts as string(36)
 	dim same_ts as boolean = true
-	dim json as string
+	dim json, new_json as string
 	dim rec_num as word=1
+	dim budget as word=0
+	dim count as word=0
 	
+	'only add records while the message still fits into one MQTT packet
+	'(topic + JSON + room for creationTS). Records that don't fit stay in the table
+	'and go out with the next message; only the records actually sent are deleted.
 	while same_ts = true
 		tbl_select("Azure","Azure")
 		if tbl_record_read_active(rec_num)=EN_TBL_STATUS_OK then
 			dim record_type, record_value as string(64)
 			tbl_field_sg("time",ts,EN_TBL_GET)
 			tbl_field_sg("type", record_type,EN_TBL_GET)
-			tbl_field_sg("value",record_value ,EN_TBL_GET)	
-			json = azure_update_json(json,record_type,record_value)
+			tbl_field_sg("value",record_value ,EN_TBL_GET)
+			if count=0 then budget=azure_telemetry_budget(ts)
+			new_json = azure_update_json(json,record_type,record_value)
 			
-			dim next_ts as string
-			rec_num=rec_num+1
-			if tbl_record_read_active(rec_num)=EN_TBL_STATUS_OK then
-				tbl_field_sg("time",next_ts,EN_TBL_GET)
-				if ts <> next_ts or (left(next_ts,4) = "2000" and record_type= "event") then
-					same_ts = false
+			if len(new_json)>budget or len(new_json)<=len(json) then
+				'this record does not fit
+				same_ts = false
+				if count=0 then
+					'a single record that can never fit: discard it so it doesn't block the queue
+					#if AZURE_DEBUG_PRINT
+						azure_debugprint("Telemetry record too large, discarded: "+record_type)
+					#endif
+					azure_telemetry_ts=ts
+					azure_telemetry_count=1
+					azure_delete_sent_records()
+					exit sub
 				end if
 			else
-				same_ts = false
+				json = new_json
+				count = count+1
+				
+				dim next_ts as string
+				rec_num=rec_num+1
+				if tbl_record_read_active(rec_num)=EN_TBL_STATUS_OK then
+					tbl_field_sg("time",next_ts,EN_TBL_GET)
+					if ts <> next_ts or (left(next_ts,4) = "2000" and record_type= "event") then
+						same_ts = false
+					end if
+				else
+					same_ts = false
+				end if
 			end if
 		else
 			exit sub
 		end if
 	wend
 	azure_telemetry_ts=ts
+	azure_telemetry_count=count
+	#if AZURE_DEBUG_PRINT
+		azure_debugprint("TELEMETRY send: ts="+ts+", records="+str(count)+", json="+json)
+	#endif
 	
 	dim day_count as word
 	dim min_count as word
@@ -420,11 +481,12 @@ end sub
 sub azure_send_server_bound_msg(byref ts as string, byref json as string)
 	dim pos as byte
 	if ts<>"" then
+		dim ets as string(64)=azure_encode_ts(ts)	'":" must be %3A in the topic property bag
 		pos=instr(1,server_bound_message_topic,TOPIC_TIMESTAMP,1)
 		if pos>0 then
-			server_bound_message_topic=left(server_bound_message_topic,pos-1)+TOPIC_TIMESTAMP+ts
+			server_bound_message_topic=left(server_bound_message_topic,pos-1)+TOPIC_TIMESTAMP+ets
 		else
-			server_bound_message_topic=server_bound_message_topic+TOPIC_TIMESTAMP+ts
+			server_bound_message_topic=server_bound_message_topic+TOPIC_TIMESTAMP+ets
 		end if
 	end if
 	
@@ -481,17 +543,65 @@ public sub azure_on_telemetry_sent()
 		exit sub
 	end if
 	
-	if mqtt_state=EN_MQTT_STATES_LOGGED_IN then
-		dim rec_num as word=1
-	    tbl_select("Azure","Azure")
-		while tbl_record_find(EN_TBL_RECORD_ACTIVE,azure_telemetry_ts,"time",rec_num,EN_TBL_SEARCH_DOWN,PL_FD_FIND_EQUAL) = EN_TBL_STATUS_OK
-			tbl_record_delete(rec_num)
-			rec_num=1
-		wend
-		azure_telemetry_ts=""
+	'only act when a telemetry message is actually in flight
+	if mqtt_state=EN_MQTT_STATES_LOGGED_IN and azure_telemetry_ts<>"" then
+		azure_delete_sent_records()
 		callback_azure_on_telemetry_sent()	
+	else
+		#if AZURE_DEBUG_PRINT
+			azure_debugprint("TELEMETRY sent-event ignored: mqtt_state="+str(mqtt_state)+", pending ts="+azure_telemetry_ts)
+		#endif
 	end if
 end sub
+
+sub azure_delete_sent_records()
+'Deletes the records that went out in the last telemetry message (the first
+'azure_telemetry_count records with time azure_telemetry_ts), then clears the in-flight marker.
+	dim rec_num as word=1
+	dim deleted as word=0
+	dim wanted as word=azure_telemetry_count
+	tbl_select("Azure","Azure")
+	while azure_telemetry_count>0 and tbl_record_find(EN_TBL_RECORD_ACTIVE,azure_telemetry_ts,"time",rec_num,EN_TBL_SEARCH_DOWN,PL_FD_FIND_EQUAL) = EN_TBL_STATUS_OK
+		tbl_record_delete(rec_num)
+		azure_telemetry_count=azure_telemetry_count-1
+		deleted=deleted+1
+		rec_num=1
+	wend
+	#if AZURE_DEBUG_PRINT
+		azure_debugprint("TELEMETRY delete: ts="+azure_telemetry_ts+", deleted "+str(deleted)+" of "+str(wanted))
+	#endif
+	azure_telemetry_ts=""
+	azure_telemetry_count=0
+end sub
+
+function azure_encode_ts(byref ts as string) as string
+'URL-encodes a timestamp for use in a topic property bag (only ":" needs encoding).
+	dim i as byte
+	dim ch as string(1)
+	azure_encode_ts=""
+	for i=1 to len(ts)
+		ch=mid(ts,i,1)
+		if ch=":" then
+			azure_encode_ts=azure_encode_ts+"%3A"
+		else
+			azure_encode_ts=azure_encode_ts+ch
+		end if
+	next i
+end function
+
+function azure_telemetry_budget(byref ts as string) as word
+'Largest JSON (before creationTS is added) that still fits into one MQTT packet
+'together with the telemetry topic for this timestamp.
+	dim topic_len as word=len(server_bound_message_topic)
+	dim pos as byte=instr(1,server_bound_message_topic,TOPIC_TIMESTAMP,1)
+	if pos>0 then topic_len=pos-1
+	if ts<>"" then topic_len=topic_len+len(TOPIC_TIMESTAMP)+len(azure_encode_ts(ts))	'encoded length
+	if topic_len+2+AZURE_CREATION_TS_RESERVE>=AZURE_MQTT_MAX_REMAINING then
+		azure_telemetry_budget=0
+	else
+		azure_telemetry_budget=AZURE_MQTT_MAX_REMAINING-2-topic_len-AZURE_CREATION_TS_RESERVE
+	end if
+end function
 
 sub azure_device_lookup()
 	if azure_init_flag<>AZURE_INIT_SIGNATURE then
@@ -501,18 +611,25 @@ sub azure_device_lookup()
 		exit sub
 	end if
 
+	'before the clock is set, this request is signed with a year-2000 expiry and
+	'will get 401. Its Date header sets the clock; remember that, so the 401 isn't
+	'mistaken for "device not registered".
+	azure_lookup_clock_valid = false
+	if get_timestamp(EN_TS_RTC_UPDATED) > 0 then azure_lookup_clock_valid = true
 	azure_dps_authorization=azure_generate_sas_token(azure_current_scope_id+"%2Fregistrations%2F"+azure_current_device_id, azure_current_primary_key, 525600)
 	azure_current_url = "https://" + azure_current_dps_server  + "/" + azure_current_scope_id + "/registrations/"+azure_current_device_id+AZURE_API_VERSION
 	azure_http_reset()
 	
 	http_request(HTTP_POST, azure_current_url, azure_interface,"{\x22registrationId\x22: \x22"+azure_current_device_id+"\x22}")
 	azure_state=EN_AZURE_DEVICE_LOOKUP	
+	azure_timer=AZURE_CONNECTION_TOUT		'full timeout for the lookup
 
 end sub
 
 sub azure_dps_device_provisioning()
 	if azure_state<>EN_AZURE_PROVISIONING then
 		azure_state=EN_AZURE_PROVISIONING
+		azure_timer=AZURE_CONNECTION_TOUT		'full timeout for provisioning
 		azure_dps_authorization=azure_generate_sas_token(azure_current_scope_id+"%2Fregistrations%2F"+azure_current_device_id, azure_current_primary_key, 525600)		
 		
 		azure_current_url = "https://" + azure_current_dps_server + "/" + azure_current_scope_id +"/registrations/"+azure_current_device_id+"/register"+AZURE_API_VERSION
@@ -529,6 +646,7 @@ sub iot_send_headers()
 end sub
 
 sub azure_mqtt_start()
+	azure_timer=AZURE_CONNECTION_TOUT		'full timeout for the MQTT connection
 	dim user_name as string=azure_assigned_hub+"/"+azure_current_device_id+"/"+AZURE_MQTT_API_VERSION	
 	dim resourceUri as string= azure_assigned_hub+"%2Fdevices%2F"+azure_current_device_id
 	azure_sas_token="SharedAccessSignature sr="+azure_assigned_hub+"%2Fdevices%2F"+azure_current_device_id+"&sig="+azure_generate_sas_token(resourceUri, azure_current_primary_key, 525600)
@@ -627,6 +745,16 @@ sub azure_http_request_complete()
 	if http_request_item.url = azure_current_url then
 		select case azure_state		
 		case EN_AZURE_DEVICE_LOOKUP: 
+			'lookup failed only because it was signed before the clock was set,
+			'and this response has now set the clock -> retry (or use the stored hub)
+			'instead of registering the device again.
+			if azure_assigned_status=false and azure_lookup_clock_valid=false and get_timestamp(EN_TS_RTC_UPDATED) > 0 then
+				#if AZURE_DEBUG_PRINT
+					azure_debugprint("Clock was not set for DPS lookup, clock now set - retrying.")
+				#endif
+				azure_state=EN_AZURE_NOT_CONNECTED
+				exit sub
+			end if
 			if azure_assigned_status=false then
 				azure_state=EN_AZURE_NOT_PROVISIONED
 			end if
@@ -656,7 +784,7 @@ sub azure_http_reset()
 	azure_assigned_status = false
 end sub
 
-function azure_generate_sas_token(byref resourceUri as string, byref signingKey as string, expiresInMins as word) as string
+function azure_generate_sas_token(byref resourceUri as string, byref signingKey as string, expiresInMins as dword) as string
 
 	dim key as string="key"
 	dim message as string
@@ -670,7 +798,12 @@ function azure_generate_sas_token(byref resourceUri as string, byref signingKey 
 	
 	rtc.getdata(daycounts,mincounts,seconds) 'rtc.getdata returns the elapse time since 2000, we need the elapse time since 1970
 
-	expires=daycounts*24*60+mincounts+16302369+expiresInMins
+	'real 1970->2000 offset (10957 days = 15778080 min), all in dword.
+	'The old code used 16302369, which only worked because expiresInMins (a word)
+	'wrapped 525600 to 1312 and the wrong constant happened to cancel that out.
+	expires=daycounts
+	expires=expires*1440+mincounts
+	expires=expires+15778080+expiresInMins
 	expires=expires*60+seconds
 	
 	message=resourceUri+"\x0A"+lstr(expires)
